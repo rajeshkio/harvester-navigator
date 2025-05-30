@@ -3,6 +3,7 @@ package display
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"text/tabwriter"
 
@@ -152,9 +153,9 @@ func printReplicaTable(replicas []types.ReplicaInfo) {
 	fmt.Println("---------")
 
 	// Define column widths
-	nameWidth := 15
-	stateWidth := 10
-	nodeWidth := 12
+	nameWidth := 11
+	stateWidth := 9
+	nodeWidth := 20
 	ownerWidth := 45
 	startedWidth := 12
 	engineWidth := 45
@@ -196,24 +197,19 @@ func printReplicaTable(replicas []types.ReplicaInfo) {
 			padToVisualWidth(activeFormatted, activeWidth))
 	}
 }
+
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
 func padToVisualWidth(s string, width int) string {
-	// Calculate the number of invisible characters (ANSI escape codes)
-	invisibleChars := 0
-	if strings.Contains(s, "\033[") {
-		// Each color code sequence is typically something like "\033[32m" and "\033[0m"
-		invisibleChars = strings.Count(s, "\033[") * 4
-		// Add 1 for each "m" character
-		invisibleChars += strings.Count(s, "m")
+	// Strip ANSI escape codes to get visible length
+	visible := ansiRegex.ReplaceAllString(s, "")
+	visibleLen := len(visible)
+
+	if visibleLen >= width {
+		return s // already wide enough
 	}
 
-	totalWidth := width + invisibleChars
-	actualLen := len(s)
-	padding := ""
-
-	if actualLen < totalWidth {
-		padding = strings.Repeat(" ", totalWidth-actualLen)
-	}
-
+	padding := strings.Repeat(" ", width-visibleLen)
 	return s + padding
 }
 
