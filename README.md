@@ -89,59 +89,6 @@ Harvester Navigator connects to your Kubernetes cluster and:
 
 ## Sample
 
-================================================================================
-VIRTUAL MACHINE DETAILS: ubuntu-server
-================================================================================
-
-VIRTUAL MACHINE INFO:
-------------------------
-Name:              ubuntu-server
-Image ID:          default/image-45gxd
-Storage Class:     longhorn-image-45gxd
-Status:            True
-Status Reason:     
-Printable Status:  Running
-
-POD INFORMATION:
-------------------------
-Pod Name:   virt-launcher-ubuntu-server-zc5fp
-Node Name:  rajesh-harvester
-Pod State:  Running
-
-VMI INFORMATION:
-------------------------
-VMIName:    ubuntu-server
-NodeName:   rajesh-harvester
-Phase:      Running
-POD UUID:   9d4facf6-351c-4f76-98c3-e052d92de3da
-Node Name:  rajesh-harvester
-Guest OS:   Ubuntu 24.04 LTS
-  MAC Address: a2:8d:57:1e:8b:a8
-  IP Address:  192.168.90.5
-
-  MAC Address: 02:42:dc:a4:ec:4c
-  IP Address:  172.17.0.1
-
-  MAC Address: 02:42:6f:12:ec:f5
-  IP Address:  192.168.48.1
-
-
-STORAGE INFO:
--------------
-PVC Claim Names:  ubuntu-server-disk-0-slszy
-Volume Name:      pvc-6af44b93-8967-42f5-8d11-4e5280c07063
-PVC Status:       Bound
-
-ENGINE INFORMATION:
------------------
-
-REPLICAS:
----------
-NAME            STATE      NODE         OWNER                                         STARTED      ENGINE                                        ACTIVE      
-----            -----      ----         -----                                         -------      ------                                        ------      
-r-17a269c3      RUNNING     rajesh-harvester pvc-6af44b93-8967-42f5-8d11-4e5280c07063      YES ✓       pvc-6af44b93-8967-42f5-8d11-4e5280c07063-e-0  YES ✓      
-
-================================================================================
 
 ## Contributing
 
