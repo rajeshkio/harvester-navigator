@@ -89,6 +89,7 @@ Harvester Navigator connects to your Kubernetes cluster and:
 
 ## Sample
 
+https://github.com/rajeshkio/harvester-navigator/blob/43c8d1f31adf7f465d67343faefbd7301113bd2e/sample.png
 
 ## Contributing
 
