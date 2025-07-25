@@ -5,306 +5,182 @@ import (
 	"encoding/json"
 	"fmt"
 
-	types "github.com/rk280392/harvesterNavigator/internal/models"
+	models "github.com/rk280392/harvesterNavigator/internal/models"
 	"k8s.io/client-go/kubernetes"
 )
 
-// FetchVMData retrieves virtual machine data from the Kubernetes API.
-// It takes a client, VM name, absolute path, namespace, and resource type.
-// Returns the VM data as a map and any error encountered.
-func FetchVMData(client *kubernetes.Clientset, name, absPath, namespace, resource string) (map[string]interface{}, error) {
-	vmRaw, err := client.RESTClient().Get().
-		AbsPath(absPath).
-		Namespace(namespace).
-		Name(name).
-		Resource(resource).
-		Do(context.Background()).Raw()
+// Helper function for safe string extraction from map[string]interface{}
+func getString(data map[string]interface{}, key string) string {
+	if val, ok := data[key].(string); ok {
+		return val
+	}
+	return ""
+}
 
+// Helper function for safe float64 extraction from map[string]interface{}
+func getFloat64(data map[string]interface{}, key string) float64 {
+	if val, ok := data[key].(float64); ok {
+		return val
+	}
+	return 0
+}
+
+// FetchAllVMData retrieves all virtual machine objects from the cluster.
+func FetchAllVMData(client *kubernetes.Clientset, absPath, namespace, resource string) ([]map[string]interface{}, error) {
+	vmListRaw, err := client.RESTClient().Get().AbsPath(absPath).Namespace(namespace).Resource(resource).Do(context.Background()).Raw()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get VM data: %w", err)
+		return nil, fmt.Errorf("failed to get VM list: %w", err)
 	}
-
-	var vmData map[string]interface{}
-	if err := json.Unmarshal(vmRaw, &vmData); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal VM data: %w", err)
+	var vmList map[string]interface{}
+	if err := json.Unmarshal(vmListRaw, &vmList); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal VM list: %w", err)
 	}
-
-	return vmData, nil
+	items, ok := vmList["items"].([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid items field in VM list response")
+	}
+	result := make([]map[string]interface{}, len(items))
+	for i, item := range items {
+		result[i], _ = item.(map[string]interface{})
+	}
+	return result, nil
 }
 
-// ToVMStatus converts a string to a VMStatus type
-func ToVMStatus(s string) types.VMStatus {
-	return types.VMStatus(s)
-}
-
-// ParseVMMetaData extracts relevant information from VM data and populates the VMInfo struct.
-// It processes metadata, status, and volume claim templates to populate the VMInfo object.
-func ParseVMMetaData(vmData map[string]interface{}, vmInfo *types.VMInfo) error {
-	if vmData == nil {
-		return fmt.Errorf("VM data is nil")
-	}
-
-	// Extract metadata
-	metadata, err := extractMetadata(vmData)
+// FetchAllLonghornNodes retrieves all nodes.longhorn.io objects from the cluster.
+func FetchAllLonghornNodes(client *kubernetes.Clientset) ([]interface{}, error) {
+	nodesRaw, err := client.RESTClient().Get().AbsPath("/apis/longhorn.io/v1beta2/namespaces/longhorn-system/nodes").Do(context.Background()).Raw()
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	// Extract status information
-	extractStatus(vmData, vmInfo)
-
-	// Extract volume claim templates from annotations
-	return extractVolumeClaimTemplates(metadata, vmInfo)
+	var nodeData map[string]interface{}
+	if err := json.Unmarshal(nodesRaw, &nodeData); err != nil {
+		return nil, err
+	}
+	items, ok := nodeData["items"].([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("items field not found in Longhorn node response")
+	}
+	return items, nil
 }
 
-// extractMetadata extracts and validates the metadata section from VM data
-func extractMetadata(vmData map[string]interface{}) (map[string]interface{}, error) {
-	metadataRaw, ok := vmData["metadata"]
-	if !ok {
-		return nil, fmt.Errorf("metadata field missing")
+// formatBytes converts bytes to a human-readable string (GB or TB).
+func formatBytes(bytes float64) string {
+	const (
+		GB = 1024 * 1024 * 1024
+		TB = GB * 1024
+	)
+	if bytes >= TB {
+		return fmt.Sprintf("%.2f TB", bytes/TB)
 	}
-
-	metadata, ok := metadataRaw.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("metadata field is not an object")
-	}
-
-	return metadata, nil
+	return fmt.Sprintf("%.2f GB", bytes/GB)
 }
 
-// extractStatus extracts status information from VM data and updates the VMInfo struct
-func extractStatus(vmData map[string]interface{}, vmInfo *types.VMInfo) {
-	statusRaw, ok := vmData["status"]
-	if !ok {
-		return
-	}
-
-	status, ok := statusRaw.(map[string]interface{})
-	if !ok {
-		return
-	}
-
-	// Extract printable status if available
-	extractPrintableStatus(status, vmInfo)
-
-	// Extract conditions if available
-	extractConditions(status, vmInfo)
-}
-
-// extractPrintableStatus extracts the printable status from VM status
-func extractPrintableStatus(status map[string]interface{}, vmInfo *types.VMInfo) {
-	printableStatusRaw, ok := status["printableStatus"]
-	if !ok || printableStatusRaw == nil {
-		return
-	}
-
-	printableStatus, ok := printableStatusRaw.(string)
-	if ok {
-		vmInfo.PrintableStatus = printableStatus
-	}
-}
-
-// extractConditions extracts conditions information from VM status
-func extractConditions(status map[string]interface{}, vmInfo *types.VMInfo) {
-	conditionsRaw, ok := status["conditions"]
-	if !ok || conditionsRaw == nil {
-		return
-	}
-
-	conditionsArray, ok := conditionsRaw.([]interface{})
-	if !ok {
-		return
-	}
-
-	for _, conditionRaw := range conditionsArray {
-		condition, ok := conditionRaw.(map[string]interface{})
+// ParseLonghornNodeData parses the raw data from nodes.longhorn.io resources safely.
+func ParseLonghornNodeData(nodes []interface{}) ([]models.NodeInfo, error) {
+	var results []models.NodeInfo
+	for _, nodeItem := range nodes {
+		nodeMap, ok := nodeItem.(map[string]interface{})
 		if !ok {
-			continue // Skip invalid entries
+			continue
 		}
 
-		// Extract reason
-		if reasonRaw, ok := condition["reason"]; ok && reasonRaw != nil {
-			if reason, ok := reasonRaw.(string); ok {
-				vmInfo.VMStatusReason = reason
+		metadata, _ := nodeMap["metadata"].(map[string]interface{})
+		nodeName := getString(metadata, "name")
+
+		status, _ := nodeMap["status"].(map[string]interface{})
+
+		var conditions []models.NodeCondition
+		if conds, ok := status["conditions"].([]interface{}); ok {
+			for _, c := range conds {
+				if cond, ok := c.(map[string]interface{}); ok {
+					conditions = append(conditions, models.NodeCondition{
+						Type:    getString(cond, "type"),
+						Status:  getString(cond, "status"),
+						Message: getString(cond, "message"),
+					})
+				}
 			}
 		}
 
-		// Extract status
-		if statusRaw, ok := condition["status"]; ok && statusRaw != nil {
-			if statusStr, ok := statusRaw.(string); ok {
-				vmInfo.VMStatus = ToVMStatus(statusStr)
+		var disks []models.DiskInfo
+		if diskStatus, ok := status["diskStatus"].(map[string]interface{}); ok {
+			for _, d := range diskStatus {
+				if disk, ok := d.(map[string]interface{}); ok {
+					isSchedulable := false
+					if diskConditions, ok := disk["conditions"].([]interface{}); ok {
+						for _, dc := range diskConditions {
+							if diskCond, ok := dc.(map[string]interface{}); ok {
+								if getString(diskCond, "type") == "Schedulable" && getString(diskCond, "status") == "True" {
+									isSchedulable = true
+									break
+								}
+							}
+						}
+					}
+
+					replicas := make(map[string]int64)
+					if schedReplicas, ok := disk["scheduledReplica"].(map[string]interface{}); ok {
+						for name, size := range schedReplicas {
+							if s, ok := size.(float64); ok {
+								replicas[name] = int64(s)
+							}
+						}
+					}
+
+					disks = append(disks, models.DiskInfo{
+						Name:              getString(disk, "diskName"),
+						Path:              getString(disk, "diskPath"),
+						IsSchedulable:     isSchedulable,
+						StorageAvailable:  formatBytes(getFloat64(disk, "storageAvailable")),
+						StorageMaximum:    formatBytes(getFloat64(disk, "storageMaximum")),
+						StorageScheduled:  formatBytes(getFloat64(disk, "storageScheduled")),
+						ScheduledReplicas: replicas,
+					})
+				}
 			}
 		}
+
+		results = append(results, models.NodeInfo{
+			Name:       nodeName,
+			Conditions: conditions,
+			Disks:      disks,
+		})
 	}
+	return results, nil
 }
 
-// extractVolumeClaimTemplates extracts volume claim templates from metadata annotations
-func extractVolumeClaimTemplates(metadata map[string]interface{}, vmInfo *types.VMInfo) error {
-	// Extract annotations
-	annotations, err := extractAnnotations(metadata)
-	if err != nil {
-		return err
-	}
-
-	// Extract volume claim templates string
-	volumeClaimTemplateStr, err := extractVolumeClaimTemplatesString(annotations)
-	if err != nil {
-		return err
-	}
-
-	// Parse volume claim templates
-	volumeClaimTemplates, err := parseVolumeClaimTemplates(volumeClaimTemplateStr)
-	if err != nil {
-		return err
-	}
-
-	if len(volumeClaimTemplates) == 0 {
-		return fmt.Errorf("no volume claim templates found")
-	}
-
-	// Process the first template
-	return processVolumeClaimTemplate(volumeClaimTemplates[0], vmInfo)
-}
-
-// extractAnnotations extracts annotations from metadata
-func extractAnnotations(metadata map[string]interface{}) (map[string]interface{}, error) {
-	annotationsRaw, ok := metadata["annotations"]
+// ParseVMMetaData extracts metadata and status from a VM object.
+func ParseVMMetaData(vmData map[string]interface{}, vmInfo *models.VMInfo) error {
+	metadata, ok := vmData["metadata"].(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("annotations field missing")
+		return fmt.Errorf("metadata field missing")
 	}
 
-	annotations, ok := annotationsRaw.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("annotations is not an object")
+	annotations, _ := metadata["annotations"].(map[string]interface{})
+	if templateStr, ok := annotations["harvesterhci.io/volumeClaimTemplates"].(string); ok {
+		var templates []map[string]interface{}
+		if json.Unmarshal([]byte(templateStr), &templates) == nil && len(templates) > 0 {
+			tmplMeta, _ := templates[0]["metadata"].(map[string]interface{})
+			vmInfo.ClaimNames, _ = tmplMeta["name"].(string)
+
+			tmplAnns, _ := tmplMeta["annotations"].(map[string]interface{})
+			vmInfo.ImageId, _ = tmplAnns["harvesterhci.io/imageId"].(string)
+
+			tmplSpec, _ := templates[0]["spec"].(map[string]interface{})
+			vmInfo.StorageClass, _ = tmplSpec["storageClassName"].(string)
+		}
 	}
 
-	return annotations, nil
-}
-
-// extractVolumeClaimTemplatesString extracts the volume claim templates string from annotations
-func extractVolumeClaimTemplatesString(annotations map[string]interface{}) (string, error) {
-	volumeClaimTemplateRaw, ok := annotations["harvesterhci.io/volumeClaimTemplates"]
-	if !ok {
-		return "", fmt.Errorf("volumeClaimTemplates annotation missing")
+	status, _ := vmData["status"].(map[string]interface{})
+	vmInfo.PrintableStatus, _ = status["printableStatus"].(string)
+	if conditions, ok := status["conditions"].([]interface{}); ok && len(conditions) > 0 {
+		if latestCond, ok := conditions[len(conditions)-1].(map[string]interface{}); ok {
+			if statusStr, ok := latestCond["status"].(string); ok {
+				vmInfo.VMStatus = models.VMStatus(statusStr)
+			}
+			vmInfo.VMStatusReason, _ = latestCond["reason"].(string)
+		}
 	}
 
-	volumeClaimTemplateStr, ok := volumeClaimTemplateRaw.(string)
-	if !ok {
-		return "", fmt.Errorf("volumeClaimTemplates is not a string")
-	}
-
-	return volumeClaimTemplateStr, nil
-}
-
-// parseVolumeClaimTemplates parses the volume claim templates string into a slice of maps
-func parseVolumeClaimTemplates(volumeClaimTemplateStr string) ([]map[string]interface{}, error) {
-	var volumeClaimTemplates []map[string]interface{}
-	err := json.Unmarshal([]byte(volumeClaimTemplateStr), &volumeClaimTemplates)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal volume claim templates: %w", err)
-	}
-
-	return volumeClaimTemplates, nil
-}
-
-// processVolumeClaimTemplate processes a single volume claim template and updates the VMInfo struct
-func processVolumeClaimTemplate(template map[string]interface{}, vmInfo *types.VMInfo) error {
-	// Extract template metadata
-	templateMetadata, err := extractTemplateMetadata(template)
-	if err != nil {
-		return err
-	}
-
-	// Extract PVC claim name
-	err = extractPVCClaimName(templateMetadata, vmInfo)
-	if err != nil {
-		return err
-	}
-
-	// Extract image ID from template metadata annotations
-	extractImageID(templateMetadata, vmInfo)
-
-	// Extract storage class from template spec
-	return extractStorageClass(template, vmInfo)
-}
-
-// extractTemplateMetadata extracts metadata from a template
-func extractTemplateMetadata(template map[string]interface{}) (map[string]interface{}, error) {
-	templateMetadataRaw, ok := template["metadata"]
-	if !ok {
-		return nil, fmt.Errorf("template metadata missing")
-	}
-
-	templateMetadata, ok := templateMetadataRaw.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("template metadata is not an object")
-	}
-
-	return templateMetadata, nil
-}
-
-// extractPVCClaimName extracts the PVC claim name from template metadata
-func extractPVCClaimName(templateMetadata map[string]interface{}, vmInfo *types.VMInfo) error {
-	nameRaw, ok := templateMetadata["name"]
-	if !ok || nameRaw == nil {
-		return fmt.Errorf("PVC claim name missing")
-	}
-
-	name, ok := nameRaw.(string)
-	if !ok {
-		return fmt.Errorf("PVC claim name is not a string")
-	}
-
-	vmInfo.ClaimNames = name
-	return nil
-}
-
-// extractImageID extracts the image ID from template metadata annotations
-func extractImageID(templateMetadata map[string]interface{}, vmInfo *types.VMInfo) {
-	// This is optional, so we don't return errors
-	templateMetaAnnotationRaw, ok := templateMetadata["annotations"]
-	if !ok || templateMetaAnnotationRaw == nil {
-		return
-	}
-
-	templateMetaAnnotation, ok := templateMetaAnnotationRaw.(map[string]interface{})
-	if !ok {
-		return
-	}
-
-	imageIDRaw, ok := templateMetaAnnotation["harvesterhci.io/imageId"]
-	if !ok || imageIDRaw == nil {
-		return
-	}
-
-	imageID, ok := imageIDRaw.(string)
-	if ok {
-		vmInfo.ImageId = imageID
-	}
-}
-
-// extractStorageClass extracts the storage class from template spec
-func extractStorageClass(template map[string]interface{}, vmInfo *types.VMInfo) error {
-	templateSpecRaw, ok := template["spec"]
-	if !ok {
-		return fmt.Errorf("template spec missing")
-	}
-
-	templateSpec, ok := templateSpecRaw.(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("template spec is not an object")
-	}
-
-	storageClassRaw, ok := templateSpec["storageClassName"]
-	if !ok || storageClassRaw == nil {
-		return fmt.Errorf("storageClassName missing")
-	}
-
-	storageClass, ok := storageClassRaw.(string)
-	if !ok {
-		return fmt.Errorf("storageClassName is not a string")
-	}
-
-	vmInfo.StorageClass = storageClass
 	return nil
 }

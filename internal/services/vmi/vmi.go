@@ -35,7 +35,7 @@ func FetchVMIDetails(client *kubernetes.Clientset, name, absPath, namespace, res
 }
 
 // ParseVMIData extracts relevant information from VMI data and returns it as VMIInfo objects.
-// It processes metadata, status, guest OS info, and network interfaces.
+// It processes metadata, status, guest OS info, memory info, and network interfaces.
 func ParseVMIData(vmiData map[string]interface{}) ([]types.VMIInfo, error) {
 	var vmiInfos []types.VMIInfo
 
@@ -64,6 +64,7 @@ func ParseVMIData(vmiData map[string]interface{}) ([]types.VMIInfo, error) {
 		ActivePods:  make(map[string]string),
 		GuestOSInfo: &types.GuestOSInfo{},
 		Interfaces:  []types.Interface{},
+		MemoryInfo:  &types.MemoryInfo{},
 	}
 
 	// Extract active pods
@@ -71,6 +72,9 @@ func ParseVMIData(vmiData map[string]interface{}) ([]types.VMIInfo, error) {
 
 	// Extract guest OS information
 	extractGuestOSInfo(vmiStatus, &vmiInfo)
+
+	// Extract memory information
+	extractMemoryInfo(vmiStatus, &vmiInfo)
 
 	// Extract network interfaces
 	extractNetworkInterfaces(vmiStatus, &vmiInfo)
@@ -225,6 +229,38 @@ func extractGuestOSInfo(vmiStatus map[string]interface{}, vmiInfo *types.VMIInfo
 	}
 }
 
+// extractMemoryInfo extracts memory information from VMI status
+func extractMemoryInfo(vmiStatus map[string]interface{}, vmiInfo *types.VMIInfo) {
+	memoryRaw, ok := vmiStatus["memory"]
+	if !ok {
+		return // No memory info
+	}
+
+	memory, ok := memoryRaw.(map[string]interface{})
+	if !ok {
+		return // Invalid format
+	}
+
+	// Extract guest memory info
+	if guestAtBootRaw, ok := memory["guestAtBoot"]; ok {
+		if guestAtBoot, ok := guestAtBootRaw.(string); ok {
+			vmiInfo.MemoryInfo.GuestAtBoot = guestAtBoot
+		}
+	}
+
+	if guestCurrentRaw, ok := memory["guestCurrent"]; ok {
+		if guestCurrent, ok := guestCurrentRaw.(string); ok {
+			vmiInfo.MemoryInfo.GuestCurrent = guestCurrent
+		}
+	}
+
+	if guestRequestedRaw, ok := memory["guestRequested"]; ok {
+		if guestRequested, ok := guestRequestedRaw.(string); ok {
+			vmiInfo.MemoryInfo.GuestRequested = guestRequested
+		}
+	}
+}
+
 // extractNetworkInterfaces extracts network interfaces information from VMI status
 func extractNetworkInterfaces(vmiStatus map[string]interface{}, vmiInfo *types.VMIInfo) {
 	interfacesRaw, ok := vmiStatus["interfaces"]
@@ -247,10 +283,36 @@ func extractNetworkInterfaces(vmiStatus map[string]interface{}, vmiInfo *types.V
 
 		iface := types.Interface{}
 
-		// Extract IP address
+		// Extract interface name and other details
+		if nameRaw, ok := ifaceMap["name"]; ok {
+			if name, ok := nameRaw.(string); ok {
+				iface.Name = name
+			}
+		}
+
+		if interfaceNameRaw, ok := ifaceMap["interfaceName"]; ok {
+			if interfaceName, ok := interfaceNameRaw.(string); ok {
+				iface.InterfaceName = interfaceName
+			}
+		}
+
+		// Extract IP address - try ipAddress first, then ipAddresses array
 		if ipAddressRaw, ok := ifaceMap["ipAddress"]; ok {
-			if ipAddress, ok := ipAddressRaw.(string); ok {
+			if ipAddress, ok := ipAddressRaw.(string); ok && ipAddress != "" {
 				iface.IpAddress = ipAddress
+			}
+		} else if ipAddressesRaw, ok := ifaceMap["ipAddresses"]; ok {
+			if ipAddresses, ok := ipAddressesRaw.([]interface{}); ok && len(ipAddresses) > 0 {
+				// Get the first IPv4 address (skip IPv6)
+				for _, ipRaw := range ipAddresses {
+					if ip, ok := ipRaw.(string); ok && ip != "" {
+						// Simple check for IPv4 vs IPv6
+						if len(ip) <= 15 && !containsColon(ip) { // Basic IPv4 check
+							iface.IpAddress = ip
+							break
+						}
+					}
+				}
 			}
 		}
 
@@ -261,9 +323,19 @@ func extractNetworkInterfaces(vmiStatus map[string]interface{}, vmiInfo *types.V
 			}
 		}
 
-		// Add interface only if it has IP or MAC address
-		if iface.IpAddress != "" || iface.Mac != "" {
+		// Only add interface if it has meaningful information
+		if iface.Name != "" || iface.IpAddress != "" || iface.Mac != "" {
 			vmiInfo.Interfaces = append(vmiInfo.Interfaces, iface)
 		}
 	}
+}
+
+// Helper function to check if string contains colon (simple IPv6 detection)
+func containsColon(s string) bool {
+	for _, c := range s {
+		if c == ':' {
+			return true
+		}
+	}
+	return false
 }
