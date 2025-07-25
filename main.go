@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,13 +30,90 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-func getKubeconfigPath() string {
-	home, _ := os.UserHomeDir()
+func determineKubeconfigPath() (string, string, error) {
+	if kubeconfigEnv := os.Getenv("KUBECONFIG"); kubeconfigEnv != "" {
+		// KUBECONFIG can contain multiple paths separated by : (Linux/macOS) or ; (Windows)
+		// We'll use the first valid one
+		separator := ":"
+		if os.PathSeparator == '\\' { // Windows
+			separator = ";"
+		}
+
+		paths := strings.Split(kubeconfigEnv, separator)
+		for i, path := range paths {
+			// Clean up any whitespace
+			path = strings.TrimSpace(path)
+			if path == "" {
+				continue
+			}
+
+			// Expand ~ to home directory if needed
+			if strings.HasPrefix(path, "~/") {
+				if home, err := os.UserHomeDir(); err == nil {
+					path = filepath.Join(home, path[2:])
+				}
+			}
+
+			if _, err := os.Stat(path); err == nil {
+				source := fmt.Sprintf("KUBECONFIG environment variable (path %d of %d)", i+1, len(paths))
+				return path, source, nil
+			}
+		}
+
+		// If KUBECONFIG is set but no valid files found, that's worth noting
+		log.Printf("Warning: KUBECONFIG environment variable is set to '%s' but no valid files found", kubeconfigEnv)
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", "", fmt.Errorf("could not determine home directory: %w", err)
+	}
+
 	simPath := filepath.Join(home, ".sim", "admin.kubeconfig")
 	if _, err := os.Stat(simPath); err == nil {
-		return simPath
+		return simPath, "Harvester simulator location (~/.sim/admin.kubeconfig)", nil
 	}
-	return filepath.Join(home, ".kube", "config")
+
+	// Priority 4: Check current directory for common kubeconfig names
+	currentDir, _ := os.Getwd()
+	commonNames := []string{"kubeconfig", "admin.kubeconfig", "config"}
+
+	for _, name := range commonNames {
+		path := filepath.Join(currentDir, name)
+		if _, err := os.Stat(path); err == nil {
+			return path, fmt.Sprintf("current directory (./%s)", name), nil
+		}
+	}
+
+	return "", "", fmt.Errorf("no kubeconfig file found. Searched locations:\n"+
+		"  1. KUBECONFIG environment variable\n"+
+		"  2. %s\n"+
+		"  3. Current directory (kubeconfig, admin.kubeconfig, config)", simPath)
+}
+
+// validateKubeconfig performs basic validation on the kubeconfig file
+func validateKubeconfig(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("cannot access kubeconfig file: %w", err)
+	}
+
+	if info.IsDir() {
+		return fmt.Errorf("kubeconfig path points to a directory, not a file")
+	}
+
+	if info.Size() == 0 {
+		return fmt.Errorf("kubeconfig file is empty")
+	}
+
+	// Check if file is readable
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("cannot read kubeconfig file: %w", err)
+	}
+	file.Close()
+
+	return nil
 }
 
 func fetchAndBuildVMInfo(clientset *kubernetes.Clientset, vmData map[string]interface{}) (*models.VMInfo, error) {
@@ -307,16 +385,27 @@ func getDefaultResourcePaths(namespace string) models.ResourcePaths {
 
 func main() {
 	log.Println("Starting Harvester Navigator Backend...")
-	kubeconfigPath := getKubeconfigPath()
-	if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
-		log.Fatalf("Error: Kubeconfig not found at %s.", kubeconfigPath)
+	kubeconfigPath, source, err := determineKubeconfigPath()
+	if err != nil {
+		log.Fatalf("Error: %v", err)
 	}
-	log.Printf("Using kubeconfig: %s", kubeconfigPath)
+	if err := validateKubeconfig(kubeconfigPath); err != nil {
+		log.Fatalf("Error: Invalid kubeconfig file at %s: %v", kubeconfigPath, err)
+	}
+	log.Printf("✅ Using kubeconfig: %s", kubeconfigPath)
+	log.Printf("📍 Source: %s", source)
+
 	clientset, err := kubeclient.NewClient(kubeconfigPath)
 	if err != nil {
 		log.Fatalf("Error creating Kubernetes client: %v", err)
 	}
 	log.Println("✅ Kubernetes client initialized.")
+	serverVersion, err := clientset.Discovery().ServerVersion()
+	if err != nil {
+		log.Printf("Warning: Could not retrieve server version (connectivity issue?): %v", err)
+	} else {
+		log.Printf("✅ Connected to Kubernetes cluster (version: %s)", serverVersion.String())
+	}
 	fs := http.FileServer(http.Dir("."))
 	http.Handle("/", fs)
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
