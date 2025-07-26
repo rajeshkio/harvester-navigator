@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Harvester Navigator</title>
+    <title>Harvester Navigator - Advanced Troubleshooting</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background-color: #0f172a; color: #cbd5e1; font-family: 'Inter', sans-serif; }
@@ -28,6 +28,22 @@
         }
         .data-value { @apply font-mono text-slate-200 text-sm; }
         .data-label { @apply text-slate-400 text-sm; }
+
+        /* Issue Detection Styles */
+        .issue-critical { border-left: 4px solid #ef4444; background: linear-gradient(to right, rgba(239, 68, 68, 0.1), transparent); }
+        .issue-high { border-left: 4px solid #f97316; background: linear-gradient(to right, rgba(249, 115, 22, 0.1), transparent); }
+        .issue-medium { border-left: 4px solid #f59e0b; background: linear-gradient(to right, rgba(245, 158, 11, 0.1), transparent); }
+        .issue-low { border-left: 4px solid #0ea5e9; background: linear-gradient(to right, rgba(14, 165, 233, 0.1), transparent); }
+
+        .verification-step { border-left: 4px solid #64748b; background-color: rgba(30, 41, 59, 0.5); }
+        .verification-step.completed { border-left-color: #22c55e; background-color: rgba(34, 197, 94, 0.05); }
+        .verification-step.failed { border-left-color: #ef4444; background-color: rgba(239, 68, 68, 0.05); }
+        
+        .pulse-red { animation: pulse-red 2s infinite; }
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
     </style>
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
 </head>
@@ -41,28 +57,76 @@
         </header>
 
         <main id="dashboard" class="space-y-6">
-            <div id="node-dashboard-container" class="card p-4 fade-in">
-                 <h2 class="text-xl font-bold mb-3 text-slate-200">Node Dashboard</h2>
-                 <div id="node-dashboard" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                 </div>
+            <!-- Issues Overview (Only show if issues exist) -->
+            <div id="issues-overview" class="card p-4 fade-in hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-slate-200 flex items-center gap-2">
+                        🚨 Detected Issues
+                        <span id="issue-count" class="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">0</span>
+                    </h2>
+                    <button onclick="showAllIssues()" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors text-sm">
+                        View All Issues
+                    </button>
+                </div>
+                <div id="critical-issues-preview" class="space-y-2">
+                    <!-- Critical issues preview will be populated here -->
+                </div>
             </div>
+
+            <!-- Node Dashboard -->
+            <div id="node-dashboard-container" class="card p-4 fade-in">
+                <h2 class="text-xl font-bold mb-3 text-slate-200">Node Dashboard</h2>
+                <div id="node-dashboard" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- Nodes will be populated here -->
+                </div>
+            </div>
+
+            <!-- VM List -->
             <div id="vm-list-container" class="card p-4 fade-in">
                 <h2 class="text-xl font-bold mb-3 text-slate-200">Virtual Machines</h2>
                 <div id="vm-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- VMs will be populated here -->
                 </div>
             </div>
-            <!-- Detail View for Nodes and VMs -->
-            <div id="detail-view-container" class="hidden">
-                <button id="back-button" class="mb-4 bg-blue-600 text-white font-medium py-2 px-4 rounded-md hover:bg-blue-700 transition-colors text-sm">
-                    ← Back to Dashboard
-                </button>
-                <div id="detail-view" class="space-y-4">
+
+            <!-- All Issues View -->
+            <div id="all-issues-container" class="card p-4 fade-in hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-slate-200">All Detected Issues</h2>
+                    <button onclick="hideAllIssues()" class="bg-slate-600 text-white px-4 py-2 rounded-md hover:bg-slate-700 transition-colors text-sm">
+                        Back to Dashboard
+                    </button>
+                </div>
+                <div id="all-issues-list" class="space-y-3">
+                    <!-- All issues will be populated here -->
                 </div>
             </div>
         </main>
+
+        <!-- Detail View for Nodes and VMs - MOVED OUTSIDE MAIN -->
+        <div id="detail-view-container" class="hidden space-y-4">
+            <button id="back-button" class="mb-4 bg-blue-600 text-white font-medium py-2 px-4 rounded-md hover:bg-blue-700 transition-colors text-sm">
+                ← Back to Dashboard
+            </button>
+            <div id="detail-view" class="space-y-4">
+            </div>
+        </div>
+
+        <!-- Issue Detail View - MOVED OUTSIDE MAIN -->
+        <div id="issue-detail-container" class="hidden">
+            <button id="back-from-issue" class="mb-4 bg-blue-600 text-white font-medium py-2 px-4 rounded-md hover:bg-blue-700 transition-colors text-sm">
+                ← Back to Issues
+            </button>
+            <div id="issue-detail-view" class="space-y-4">
+            </div>
+        </div>
     </div>
 
     <script>
+        // --- Global State ---
+        let fullData = {};
+        let detectedIssues = [];
+
         // --- DOM Elements ---
         const upgradeStatusEl = document.getElementById('upgrade-status');
         const nodeDashboard = document.getElementById('node-dashboard');
@@ -72,7 +136,492 @@
         const vmListContainer = document.getElementById('vm-list-container');
         const nodeContainer = document.getElementById('node-dashboard-container');
         const backButton = document.getElementById('back-button');
-        let fullData = {};
+        const issuesOverview = document.getElementById('issues-overview');
+        const allIssuesContainer = document.getElementById('all-issues-container');
+        const issueDetailContainer = document.getElementById('issue-detail-container');
+        const issueDetailView = document.getElementById('issue-detail-view');
+        const backFromIssueButton = document.getElementById('back-from-issue');
+
+        // Debug: Verify all elements are found
+        console.log('DOM Elements Check:');
+        console.log('detailViewContainer:', detailViewContainer);
+        console.log('detailView:', detailView);
+        console.log('dashboard:', document.getElementById('dashboard'));
+        console.log('allIssuesContainer:', allIssuesContainer);
+        console.log('issueDetailContainer:', issueDetailContainer);
+
+        function countRealIssues(errors) {
+            if (!errors || errors.length === 0) return 0;
+            return errors.filter(error => 
+                error.severity !== 'info' && error.severity !== 'information'
+            ).length;
+        }
+                // --- Mock Issue Detection (Replace with real implementation) ---
+                // Add these new functions anywhere in your script section
+        function countRealIssues(errors) {
+            if (!errors || errors.length === 0) return 0;
+            return errors.filter(error => 
+                error.severity !== 'info' && error.severity !== 'information'
+            ).length;
+        }
+        function getAllRealIssues() {
+    if (!fullData.vms) return [];
+    
+    let allIssues = [];
+    fullData.vms.forEach(vm => {
+        if (vm.errors && vm.errors.length > 0) {
+            const realIssues = vm.errors.filter(error => 
+                error.severity !== 'info' && error.severity !== 'information'
+            );
+            console.log(`VM ${vm.name}: severity values:`, vm.errors.map(e => e.severity));
+            console.log(`VM ${vm.name}: ${vm.errors.length} total, ${realIssues.length} real`);
+            realIssues.forEach(issue => {
+                allIssues.push({
+                    ...issue,
+                    vmName: vm.name,
+                    namespace: vm.namespace
+                });
+            });
+        }
+    });
+    console.log('Final allIssues array:', allIssues);
+    return allIssues;
+}
+
+        function getStorageBackendDisplayName(driver) {
+            const driverNames = {
+                'csi.trident.netapp.io': 'NetApp Trident',
+                'driver.longhorn.io': 'Longhorn',
+                'kubernetes.io/aws-ebs': 'AWS EBS',
+                'kubernetes.io/gce-pd': 'Google Persistent Disk',
+                'kubernetes.io/azure-disk': 'Azure Disk',
+                'csi.vsphere.vmware.com': 'vSphere CSI'
+            };
+            return driverNames[driver] || driver;
+        }
+
+        function updateGlobalIssuesCounter(count) {
+            // Find or create the global issues section
+            let issuesSection = document.getElementById('global-issues-section');
+            if (!issuesSection) {
+                // Create the global issues section if it doesn't exist
+                const header = document.querySelector('header');
+                issuesSection = document.createElement('div');
+                issuesSection.id = 'global-issues-section';
+                issuesSection.className = 'mt-4';
+                header.appendChild(issuesSection);
+            }
+            
+            if (count > 0) {
+                issuesSection.innerHTML = `
+                    <div class="bg-red-900/20 border border-red-500/30 rounded-lg p-3 max-w-md mx-auto">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="text-red-400 text-lg">🚨</span>
+                                <span class="text-red-400 font-semibold">Detected Issues</span>
+                                <span class="bg-red-500 text-white text-xs px-2 py-1 rounded-full">${count}</span>
+                            </div>
+                            <button id="view-all-issues" class="bg-blue-600 text-white text-sm px-3 py-1 rounded hover:bg-blue-700 transition-colors">
+                                View All Issues
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                // Add click handler for "View All Issues" button
+                document.getElementById('view-all-issues').onclick = showAllIssuesView;
+            } else {
+                issuesSection.innerHTML = '';
+            }
+        }
+
+        function createStorageBackendSection(errors) {
+            if (!errors || errors.length === 0) return '';
+            
+            const storageInfo = errors.find(error => 
+                error.severity === 'info' && error.type === 'info'
+            );
+            
+            if (!storageInfo) return '';
+            
+            const backendName = getStorageBackendDisplayName(storageInfo.resource);
+            const isLonghorn = storageInfo.resource === 'driver.longhorn.io';
+            
+            return `
+                <div class="mb-4">
+                    <div class="bg-blue-900/20 border border-blue-500/30 p-4 rounded-md">
+                        <div class="flex items-start gap-3">
+                            <span class="text-2xl">📦</span>
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="text-blue-400 font-semibold text-lg">Storage Backend</span>
+                                    <span class="bg-blue-500/20 text-blue-300 text-xs px-2 py-1 rounded-full font-mono">${storageInfo.resource}</span>
+                                </div>
+                                <h5 class="text-slate-200 font-medium text-base mb-2">${backendName}</h5>
+                                <p class="text-slate-300 text-sm mb-3">${storageInfo.message}</p>
+                                
+                                ${!isLonghorn ? `
+                                    <div class="bg-slate-800/50 p-3 rounded border-l-4 border-yellow-400">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <span class="text-yellow-400">ℹ️</span>
+                                            <span class="text-yellow-400 font-medium text-sm">Limited Diagnostics</span>
+                                        </div>
+                                        <p class="text-slate-400 text-xs">
+                                            Replica status, engine details, and advanced storage diagnostics are only available for Longhorn-managed volumes.
+                                            This volume is managed by ${backendName} and provides basic volume information only.
+                                        </p>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        function debugIssues() {
+    console.log('=== DEBUG: All VM data ===');
+    if (!fullData.vms) {
+        console.log('No VM data available');
+        return;
+    }
+    
+    fullData.vms.forEach(vm => {
+        console.log(`VM: ${vm.name}`);
+        if (vm.errors && vm.errors.length > 0) {
+            console.log('  All errors:', vm.errors);
+            const realIssues = vm.errors.filter(error => 
+                error.severity !== 'info' && error.severity !== 'information'
+            );
+            console.log('  Real issues:', realIssues);
+            console.log('  Real issue count:', realIssues.length);
+        } else {
+            console.log('  No errors');
+        }
+    });
+    
+    const allRealIssues = getAllRealIssues();
+    console.log('Total real issues across all VMs:', allRealIssues.length);
+}
+        function showAllIssuesView() {
+            const allRealIssues = getAllRealIssues();
+            
+            if (allRealIssues.length === 0) {
+                return;
+            }
+            
+            const issuesHTML = allRealIssues.map(issue => {
+                let severityColor = 'text-slate-400';
+                let severityIcon = '⚠️';
+                
+                switch (issue.severity) {
+                    case 'error':
+                        severityColor = 'text-red-400';
+                        severityIcon = '❌';
+                        break;
+                    case 'warning':
+                        severityColor = 'text-yellow-400';
+                        severityIcon = '⚠️';
+                        break;
+                    case 'critical':
+                        severityColor = 'text-red-500';
+                        severityIcon = '🚨';
+                        break;
+                }
+                
+                return `
+                    <div class="bg-slate-800/50 p-4 rounded-md mb-3 cursor-pointer hover:bg-slate-700/50 transition-colors" onclick="showDetailView('${issue.vmName}')">
+                        <div class="flex items-start gap-3">
+                            <span class="text-lg">${severityIcon}</span>
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="text-slate-200 font-semibold">${issue.vmName}</span>
+                                    <span class="text-slate-400 text-sm">in ${issue.namespace}</span>
+                                    <span class="${severityColor} font-semibold text-xs uppercase px-2 py-1 bg-slate-700/50 rounded">${issue.severity}</span>
+                                </div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-slate-300 text-sm font-medium">${issue.type.toUpperCase()}</span>
+                                    <span class="text-slate-400 text-sm">•</span>
+                                    <span class="text-slate-400 text-xs font-mono">${issue.resource}</span>
+                                </div>
+                                <p class="text-slate-300 text-sm">${issue.message}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            const allIssuesHTML = `
+                <div class="card p-4 fade-in">
+                    <h3 class="font-bold text-xl mb-4 text-slate-100 flex items-center gap-2">
+                        <span class="text-red-400">🚨</span>
+                        All Detected Issues (${allRealIssues.length})
+                    </h3>
+                    <p class="text-slate-400 text-sm mb-4">Click on any issue to view the VM details</p>
+                    ${issuesHTML}
+                </div>
+            `;
+            
+            detailView.innerHTML = allIssuesHTML;
+            switchToDetailView();
+        }
+        function detectIssues() {
+            detectedIssues = [];
+            
+            if (!fullData.vms) return;
+
+            fullData.vms.forEach(vm => {
+                // Process only REAL errors from backend (not info messages)
+                if (vm.errors && vm.errors.length > 0) {
+                    const realErrors = vm.errors.filter(error => 
+                        error.severity !== 'info' && error.severity !== 'information'
+                    );
+                    
+                    realErrors.forEach(error => {
+                        detectedIssues.push({
+                            id: `vm-error-${vm.name}-${error.type}`,
+                            title: `${error.type.toUpperCase()} Issue`,
+                            severity: error.severity || 'warning',
+                            category: 'VM Resource',
+                            description: error.message,
+                            affectedResource: `VM: ${vm.name}`,
+                            resourceType: error.type,
+                            resourceName: error.resource,
+                            detectionTime: new Date().toISOString(),
+                            verificationSteps: getVerificationSteps(error.type, vm.name, error.resource),
+                            remediationSteps: getRemediationSteps(error.type, vm.name, error.resource)
+                        });
+                    });
+                }
+
+                // Additional issue detection based on VM state
+                if (vm.printableStatus === 'Pending' && vm.claimNames) {
+                    detectedIssues.push({
+                        id: `vm-pending-${vm.name}`,
+                        title: 'VM Stuck in Pending State',
+                        severity: 'high',
+                        category: 'Scheduling',
+                        description: `VM ${vm.name} is stuck in Pending state, likely due to scheduling or storage issues.`,
+                        affectedResource: `VM: ${vm.name}`,
+                        resourceType: 'vm',
+                        resourceName: vm.name,
+                        detectionTime: new Date().toISOString(),
+                        verificationSteps: getVerificationSteps('vm-pending', vm.name, vm.claimNames),
+                        remediationSteps: getRemediationSteps('vm-pending', vm.name, vm.claimNames)
+                    });
+                }
+
+                // Check for replica issues (only for Longhorn volumes)
+                if (vm.replicaInfo && vm.replicaInfo.length > 0) {
+                    const faultedReplicas = vm.replicaInfo.filter(r => r.currentState === 'error' || !r.started);
+                    if (faultedReplicas.length > 0) {
+                        detectedIssues.push({
+                            id: `replica-issues-${vm.name}`,
+                            title: 'Storage Replica Issues',
+                            severity: faultedReplicas.length === vm.replicaInfo.length ? 'critical' : 'high',
+                            category: 'Storage',
+                            description: `${faultedReplicas.length} out of ${vm.replicaInfo.length} replicas are faulted for volume ${vm.volumeName}.`,
+                            affectedResource: `Volume: ${vm.volumeName}`,
+                            resourceType: 'replica',
+                            resourceName: vm.volumeName,
+                            detectionTime: new Date().toISOString(),
+                            verificationSteps: getVerificationSteps('replica-faulted', vm.name, vm.volumeName),
+                            remediationSteps: getRemediationSteps('replica-faulted', vm.name, vm.volumeName)
+                        });
+                    }
+                }
+            });
+
+            // Check node issues
+            if (fullData.nodes) {
+                fullData.nodes.forEach(node => {
+                    const readyCondition = (node.conditions || []).find(c => c.type === 'Ready');
+                    if (!readyCondition || readyCondition.status !== 'True') {
+                        detectedIssues.push({
+                            id: `node-not-ready-${node.name}`,
+                            title: 'Node Not Ready',
+                            severity: 'critical',
+                            category: 'Node Health',
+                            description: `Node ${node.name} is not in Ready state. This affects VM scheduling and storage operations.`,
+                            affectedResource: `Node: ${node.name}`,
+                            resourceType: 'node',
+                            resourceName: node.name,
+                            detectionTime: new Date().toISOString(),
+                            verificationSteps: getVerificationSteps('node-not-ready', node.name, ''),
+                            remediationSteps: getRemediationSteps('node-not-ready', node.name, '')
+                        });
+                    }
+
+                    // Check for disk pressure
+                    if (node.disks) {
+                        node.disks.forEach(disk => {
+                            const available = parseFloat(disk.storageAvailable.replace(/[^\d.]/g, ''));
+                            const maximum = parseFloat(disk.storageMaximum.replace(/[^\d.]/g, ''));
+                            if (maximum > 0) {
+                                const usagePercent = ((maximum - available) / maximum) * 100;
+                                if (usagePercent > 90) {
+                                    detectedIssues.push({
+                                        id: `disk-pressure-${node.name}-${disk.name}`,
+                                        title: 'Disk Space Exhausted',
+                                        severity: usagePercent > 95 ? 'critical' : 'high',
+                                        category: 'Storage',
+                                        description: `Disk ${disk.name} on node ${node.name} is ${Math.round(usagePercent)}% full. This may prevent new volume scheduling.`,
+                                        affectedResource: `Disk: ${disk.name} on ${node.name}`,
+                                        resourceType: 'disk',
+                                        resourceName: disk.name,
+                                        detectionTime: new Date().toISOString(),
+                                        verificationSteps: getVerificationSteps('disk-space', node.name, disk.name),
+                                        remediationSteps: getRemediationSteps('disk-space', node.name, disk.name)
+                                    });
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+        }
+
+        function getVerificationSteps(issueType, resourceName, additionalResource) {
+            const steps = {
+                'vm-pending': [
+                    {
+                        id: 'check-vm-status',
+                        title: 'Check VM Status',
+                        command: `kubectl get vm ${resourceName} -n harvester-system -o yaml`,
+                        expectedOutput: 'VM should show current status and conditions',
+                        description: 'Check the VM status and any error conditions'
+                    },
+                    {
+                        id: 'check-pvc-status',
+                        title: 'Check PVC Status',
+                        command: `kubectl get pvc ${additionalResource} -n harvester-system`,
+                        expectedOutput: 'PVC should show Bound status',
+                        description: 'Verify that the storage claim is bound'
+                    },
+                    {
+                        id: 'check-vm-events',
+                        title: 'Check VM Events',
+                        command: `kubectl describe vm ${resourceName} -n harvester-system`,
+                        expectedOutput: 'Look for scheduling or resource allocation errors',
+                        description: 'Review events for scheduling failures'
+                    }
+                ],
+                'replica-faulted': [
+                    {
+                        id: 'check-volume-status',
+                        title: 'Check Longhorn Volume Status',
+                        command: `kubectl get volumes.longhorn.io ${additionalResource} -n longhorn-system -o yaml`,
+                        expectedOutput: 'Volume should show current state and replica information',
+                        description: 'Check the Longhorn volume state and replica count'
+                    },
+                    {
+                        id: 'check-replica-status',
+                        title: 'List Volume Replicas',
+                        command: `kubectl get replicas.longhorn.io -n longhorn-system | grep ${additionalResource}`,
+                        expectedOutput: 'Should show all replicas and their current state',
+                        description: 'Verify which replicas are healthy vs faulted'
+                    }
+                ],
+                'node-not-ready': [
+                    {
+                        id: 'check-node-status',
+                        title: 'Check Node Status',
+                        command: `kubectl get node ${resourceName} -o wide`,
+                        expectedOutput: 'Node should show Ready status',
+                        description: 'Check basic node status and availability'
+                    },
+                    {
+                        id: 'check-node-conditions',
+                        title: 'Check Node Conditions',
+                        command: `kubectl describe node ${resourceName}`,
+                        expectedOutput: 'All conditions should be healthy',
+                        description: 'Review node conditions for specific issues'
+                    }
+                ],
+                'disk-space': [
+                    {
+                        id: 'check-disk-usage',
+                        title: 'Check Disk Usage',
+                        command: `kubectl get nodes.longhorn.io ${resourceName} -n longhorn-system -o yaml`,
+                        expectedOutput: 'Should show current disk usage and capacity',
+                        description: 'Verify current disk space utilization'
+                    },
+                    {
+                        id: 'check-scheduled-replicas',
+                        title: 'List Scheduled Replicas',
+                        command: `kubectl get replicas.longhorn.io -n longhorn-system --field-selector spec.nodeID=${resourceName}`,
+                        expectedOutput: 'Shows all replicas scheduled on this node',
+                        description: 'Identify which replicas are consuming space'
+                    }
+                ]
+            };
+            return steps[issueType] || [];
+        }
+
+        function getRemediationSteps(issueType, resourceName, additionalResource) {
+            const steps = {
+                'vm-pending': [
+                    {
+                        id: 'free-resources',
+                        title: 'Free Up Resources',
+                        command: `kubectl delete vm <unused-vm-name> -n harvester-system`,
+                        description: 'Delete unused VMs to free up resources',
+                        warning: 'Ensure VM is not needed before deletion'
+                    },
+                    {
+                        id: 'check-node-capacity',
+                        title: 'Add Node Capacity',
+                        command: '# Add more nodes to the cluster or increase node resources',
+                        description: 'Scale the cluster if resource constraints are the issue'
+                    }
+                ],
+                'replica-faulted': [
+                    {
+                        id: 'salvage-replicas',
+                        title: 'Attempt Replica Salvage',
+                        command: '# Use Longhorn UI to salvage failed replicas',
+                        description: 'Try to recover data from faulted replicas using Longhorn UI',
+                        warning: 'This may result in data loss'
+                    },
+                    {
+                        id: 'restore-backup',
+                        title: 'Restore from Backup',
+                        command: '# Restore volume from backup if available',
+                        description: 'Restore the volume from the most recent backup'
+                    }
+                ],
+                'node-not-ready': [
+                    {
+                        id: 'restart-kubelet',
+                        title: 'Restart Node Services',
+                        command: `# SSH to node and run: sudo systemctl restart kubelet`,
+                        description: 'Restart kubelet service on the affected node',
+                        warning: 'This will temporarily disrupt workloads on the node'
+                    },
+                    {
+                        id: 'check-node-resources',
+                        title: 'Check Node Resources',
+                        command: `# SSH to node and run: df -h && free -h`,
+                        description: 'Verify node has sufficient disk and memory'
+                    }
+                ],
+                'disk-space': [
+                    {
+                        id: 'clean-unused-volumes',
+                        title: 'Clean Unused Volumes',
+                        command: `kubectl get pv | grep Released | awk '{print $1}' | xargs kubectl delete pv`,
+                        description: 'Remove released persistent volumes',
+                        warning: 'Ensure volumes are truly unused'
+                    },
+                    {
+                        id: 'add-storage',
+                        title: 'Add Storage Capacity',
+                        command: '# Add additional disks to the node or migrate replicas',
+                        description: 'Increase storage capacity or redistribute replicas'
+                    }
+                ]
+            };
+            return steps[issueType] || [];
+        }
 
         // --- WebSocket Connection ---
         function connectWebSocket() {
@@ -87,6 +636,8 @@
             socket.onmessage = (event) => {
                 try {
                     fullData = JSON.parse(event.data);
+                    console.log('Received data:', fullData); // Debug log
+                    
                     if (fullData.error) {
                         updateUpgradeStatus('error', `Error: ${fullData.error}`);
                         return;
@@ -99,8 +650,17 @@
                         updateUpgradeStatus('info', 'No upgrade information available');
                     }
                     
+                    // Debug logs
+                    console.log('Nodes data:', fullData.nodes);
+                    console.log('VMs data:', fullData.vms);
+                    debugIssues();
+                    detectIssues();
+                    // Render components
                     renderNodeDashboard(fullData.nodes || []);
                     renderVMList(fullData.vms || []);
+                    renderIssuesOverview();
+                    
+                    console.log('Rendering complete'); // Debug log
                 } catch (e) {
                     console.error('Error parsing data:', e);
                     updateUpgradeStatus('error', 'Error parsing data from backend');
@@ -109,10 +669,8 @@
             
             socket.onclose = () => {
                 console.log('WebSocket connection closed');
-                // Don't immediately show error - data might still be displayed
                 if (!fullData.upgradeInfo) {
                     updateUpgradeStatus('info', 'Connection closed - attempting to reconnect...');
-                    // Try to reconnect after a delay
                     setTimeout(connectWebSocket, 3000);
                 }
             };
@@ -121,60 +679,364 @@
                 console.error('WebSocket Error:', error);
                 updateUpgradeStatus('error', 'Connection failed. Retrying...');
                 socket.close();
-                // Try to reconnect after a delay
                 setTimeout(connectWebSocket, 5000);
             };
         }
-        
-        // --- Dashboard Rendering ---
+
+        // --- Dashboard Rendering (Restored Original Functions) ---
         function renderNodeDashboard(nodes) {
+            console.log('renderNodeDashboard called with:', nodes); // Debug log
             nodeDashboard.innerHTML = '';
+            
             if (!nodes || nodes.length === 0) {
                 nodeDashboard.innerHTML = `<p class="text-slate-400 col-span-full text-center py-4">No Longhorn node information found.</p>`;
+                console.log('No nodes to display'); // Debug log
                 return;
             }
-            nodes.forEach(node => {
+            
+            console.log(`Rendering ${nodes.length} nodes`); // Debug log
+            
+            nodes.forEach((node, index) => {
+                console.log(`Processing node ${index}:`, node); // Debug log
+                
                 const nodeCard = document.createElement('div');
                 const readyCondition = (node.conditions || []).find(c => c.type === 'Ready');
                 const isReady = readyCondition && readyCondition.status === 'True';
 
-                nodeCard.className = 'bg-slate-800/50 p-3 rounded-md cursor-pointer hover:bg-slate-700/50 transition-colors fade-in';
+                // Check if this node has any issues
+                const nodeIssues = detectedIssues.filter(issue => 
+                    issue.resourceType === 'node' && issue.resourceName === node.name ||
+                    issue.resourceType === 'disk' && issue.affectedResource.includes(node.name)
+                );
+                const hasIssues = nodeIssues.length > 0;
+                const criticalIssues = nodeIssues.filter(i => i.severity === 'critical').length;
+
+                nodeCard.className = `bg-slate-800/50 p-3 rounded-md cursor-pointer hover:bg-slate-700/50 transition-colors fade-in ${hasIssues ? 'border-l-4 border-red-500' : ''}`;
                 nodeCard.innerHTML = `
-                    <h3 class="font-bold text-base text-slate-200 mb-1">${node.name}</h3>
+                    <div class="flex justify-between items-center mb-1">
+                        <h3 class="font-bold text-base text-slate-200">${node.name}</h3>
+                        ${hasIssues ? `<span class="text-red-400 text-xs font-semibold">⚠️ ${nodeIssues.length} issue${nodeIssues.length !== 1 ? 's' : ''}</span>` : ''}
+                    </div>
                     <div class="text-sm">
                         <span class="text-slate-400">Status:</span> 
                         <span class="${isReady ? 'text-green-400' : 'text-red-400'} font-medium">${isReady ? 'Ready' : 'Not Ready'}</span>
                     </div>
+                    ${hasIssues ? `<div class="text-xs text-red-300 mt-1">${criticalIssues > 0 ? `${criticalIssues} critical` : 'Issues detected'}</div>` : ''}
                 `;
-                nodeCard.onclick = () => showNodeDetailView(node.name);
+                
+                nodeCard.addEventListener('click', () => {
+                    console.log('Node clicked:', node.name); // Debug log
+                    showNodeDetailView(node.name);
+                });
+                
                 nodeDashboard.appendChild(nodeCard);
+                console.log(`Node card ${index} added to DOM`); // Debug log
             });
+            
+            console.log('All node cards rendered'); // Debug log
         }
         
         function renderVMList(vms) {
             vmList.innerHTML = '';
-             if (!vms || vms.length === 0) {
+            if (!vms || vms.length === 0) {
                 vmList.innerHTML = '<p class="text-slate-400 col-span-full text-center py-4">No virtual machines found.</p>';
                 return;
             }
+            
+            // Update global issues counter
+            const allRealIssues = getAllRealIssues();
+            console.log('=== getAllRealIssues DEBUG ===');
+console.log('allRealIssues.length:', allRealIssues.length);
+console.log('allRealIssues content:', allRealIssues);
+            updateGlobalIssuesCounter(allRealIssues.length);
+            
             vms.forEach(vm => {
                 const vmCard = document.createElement('div');
                 const status = vm.printableStatus || 'Unknown';
+                const realIssueCount = countRealIssues(vm.errors);
+                
+                // Determine storage backend info
+                let storageInfo = '';
+                if (vm.errors && vm.errors.length > 0) {
+                    const storageBackend = vm.errors.find(error => 
+                        error.severity === 'info' && error.type === 'info'
+                    );
+                    if (storageBackend && storageBackend.resource !== 'driver.longhorn.io') {
+                        storageInfo = `<div class="text-xs text-blue-300 mb-1">📦 ${getStorageBackendDisplayName(storageBackend.resource)}</div>`;
+                    }
+                }
+                
                 vmCard.className = `bg-slate-800/50 p-3 rounded-md cursor-pointer hover:bg-slate-700/50 transition-colors fade-in status-${status.toLowerCase()}`;
                 vmCard.innerHTML = `
                     <h3 class="font-bold text-base text-slate-200 truncate mb-1">${vm.name}</h3>
                     <div class="text-xs text-slate-400 mb-2">${vm.namespace}</div>
-                    <div class="text-sm">
+                    ${storageInfo}
+                    <div class="text-sm mb-2">
                         <span class="text-slate-400">Status:</span> 
                         <span class="${getStatusColorClass(status)} font-medium">${status}</span>
                     </div>
+                    ${realIssueCount > 0 ? `<div class="text-xs text-red-400">⚠️ ${realIssueCount} issue${realIssueCount > 1 ? 's' : ''} detected</div>` : ''}
                 `;
                 vmCard.onclick = () => showDetailView(vm.name);
                 vmList.appendChild(vmCard);
             });
         }
-        
-        // --- Detail View Rendering ---
+
+        // --- Issues Rendering ---
+        function renderIssuesOverview() {
+            const realIssuesCount = detectedIssues.filter(issue => 
+                issue.severity !== 'info' && issue.severity !== 'information'
+            ).length;
+            
+            if (realIssuesCount === 0) {
+                issuesOverview.classList.add('hidden');
+                return;
+            }
+    
+            issuesOverview.classList.remove('hidden');
+            document.getElementById('issue-count').textContent = realIssuesCount;
+
+            const criticalIssues = detectedIssues.filter(issue => 
+                (issue.severity === 'critical' || issue.severity === 'high') &&
+                issue.severity !== 'info' && issue.severity !== 'information'
+            );
+            const previewContainer = document.getElementById('critical-issues-preview');
+            
+            previewContainer.innerHTML = '';
+            criticalIssues.slice(0, 3).forEach(issue => {
+                const issueCard = createIssuePreviewCard(issue);
+                previewContainer.appendChild(issueCard);
+            });
+
+            if (criticalIssues.length > 3) {
+                const moreCard = document.createElement('div');
+                moreCard.className = 'text-sm text-slate-400 p-2 text-center';
+                moreCard.innerHTML = `+${criticalIssues.length - 3} more critical issues...`;
+                previewContainer.appendChild(moreCard);
+            }
+        }
+
+        function createIssuePreviewCard(issue) {
+            const card = document.createElement('div');
+            const severityClass = `issue-${issue.severity}`;
+            const severityIcon = getSeverityIcon(issue.severity);
+            
+            card.className = `${severityClass} bg-slate-800/30 p-3 rounded-lg cursor-pointer hover:bg-slate-700/30 transition-colors`;
+            card.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg">${severityIcon}</span>
+                        <div>
+                            <h4 class="font-semibold text-slate-200 text-sm">${issue.title}</h4>
+                            <p class="text-slate-400 text-xs">${issue.affectedResource}</p>
+                        </div>
+                    </div>
+                    <span class="text-xs px-2 py-1 rounded ${getSeverityBadgeClass(issue.severity)}">${issue.severity.toUpperCase()}</span>
+                </div>
+            `;
+            
+            card.onclick = () => showIssueDetail(issue.id);
+            return card;
+        }
+
+        function showAllIssues() {
+            // Hide main dashboard
+            document.getElementById('dashboard').classList.add('hidden');
+            allIssuesContainer.classList.remove('hidden');
+            
+            const allIssuesList = document.getElementById('all-issues-list');
+            allIssuesList.innerHTML = '';
+            
+            if (detectedIssues.length === 0) {
+                allIssuesList.innerHTML = '<p class="text-slate-400 text-center py-8">No issues detected! Your cluster is healthy.</p>';
+                return;
+            }
+
+            // Group issues by severity
+            const groupedIssues = {
+                critical: detectedIssues.filter(i => i.severity === 'critical'),
+                high: detectedIssues.filter(i => i.severity === 'high'),
+                medium: detectedIssues.filter(i => i.severity === 'medium'),
+                low: detectedIssues.filter(i => i.severity === 'low')
+            };
+
+            Object.entries(groupedIssues).forEach(([severity, issues]) => {
+                if (issues.length === 0) return;
+                
+                const sectionHeader = document.createElement('div');
+                sectionHeader.className = 'mb-4';
+                sectionHeader.innerHTML = `<h3 class="text-lg font-bold text-slate-200 mb-3">${severity.toUpperCase()} Issues (${issues.length})</h3>`;
+                allIssuesList.appendChild(sectionHeader);
+                
+                issues.forEach(issue => {
+                    const issueCard = createDetailedIssueCard(issue);
+                    allIssuesList.appendChild(issueCard);
+                });
+            });
+        }
+
+        function createDetailedIssueCard(issue) {
+            const card = document.createElement('div');
+            const severityClass = `issue-${issue.severity}`;
+            const severityIcon = getSeverityIcon(issue.severity);
+            
+            card.className = `${severityClass} bg-slate-800/30 p-4 rounded-lg cursor-pointer hover:bg-slate-700/30 transition-colors mb-3`;
+            card.innerHTML = `
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex items-center gap-3">
+                        <span class="text-2xl">${severityIcon}</span>
+                        <div>
+                            <h3 class="font-bold text-lg text-slate-200">${issue.title}</h3>
+                            <p class="text-slate-400 text-sm">${issue.affectedResource} • ${issue.category}</p>
+                        </div>
+                    </div>
+                    <span class="text-xs px-2 py-1 rounded ${getSeverityBadgeClass(issue.severity)}">${issue.severity.toUpperCase()}</span>
+                </div>
+                <p class="text-slate-300 text-sm mb-3">${issue.description}</p>
+                <div class="flex justify-between items-center text-xs text-slate-500">
+                    <span>Detected: ${new Date(issue.detectionTime).toLocaleString()}</span>
+                    <span>Click to troubleshoot →</span>
+                </div>
+            `;
+            
+            card.onclick = () => showIssueDetail(issue.id);
+            return card;
+        }
+
+        function hideAllIssues() {
+            allIssuesContainer.classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+        }
+
+        function showIssueDetail(issueId) {
+            const issue = detectedIssues.find(i => i.id === issueId);
+            if (!issue) return;
+
+            // Hide all other views
+            document.getElementById('dashboard').classList.add('hidden');
+            allIssuesContainer.classList.add('hidden');
+            detailViewContainer.classList.add('hidden');
+            issueDetailContainer.classList.remove('hidden');
+
+            const detailHTML = `
+                <div class="card p-6 fade-in">
+                    <div class="flex justify-between items-start mb-6">
+                        <div>
+                            <div class="flex items-center gap-3 mb-3">
+                                <span class="text-3xl">${getSeverityIcon(issue.severity)}</span>
+                                <div>
+                                    <h3 class="text-2xl font-bold text-slate-100">${issue.title}</h3>
+                                    <span class="text-xs px-2 py-1 rounded ${getSeverityBadgeClass(issue.severity)}">${issue.severity.toUpperCase()}</span>
+                                </div>
+                            </div>
+                            <p class="text-slate-300 max-w-3xl">${issue.description}</p>
+                        </div>
+                        <div class="text-right text-sm text-slate-400">
+                            <div>Detected: ${new Date(issue.detectionTime).toLocaleString()}</div>
+                            <div class="font-mono text-xs mt-1">ID: ${issue.id}</div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <!-- Verification Steps -->
+                        <div>
+                            <h4 class="text-xl font-bold text-white mb-4 flex items-center gap-2">🔍 Verification Steps</h4>
+                            <div class="space-y-4">
+                                ${issue.verificationSteps.map((step, index) => `
+                                    <div class="verification-step border-l-4 border-slate-600 bg-slate-850 p-4 rounded-r-lg" id="step-${step.id}">
+                                        <div class="flex justify-between items-center mb-2">
+                                            <h5 class="font-semibold text-slate-200">${index + 1}. ${step.title}</h5>
+                                            <button onclick="runVerificationStep('${step.id}')" class="bg-blue-600 text-white px-3 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors">
+                                                ▶️ Run
+                                            </button>
+                                        </div>
+                                        <p class="text-sm text-slate-400 mb-3">${step.description}</p>
+                                        <div class="bg-slate-950 p-3 rounded font-mono text-sm text-green-300 mb-2 relative group">
+                                            <span class="text-cyan-400">$</span> ${step.command}
+                                            <button onclick="copyCommand('${step.command}')" class="absolute top-2 right-2 bg-slate-700 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                                📋
+                                            </button>
+                                        </div>
+                                        <div class="text-xs text-slate-500">Expected: ${step.expectedOutput}</div>
+                                        <div id="result-${step.id}" class="mt-2 hidden">
+                                            <div class="bg-slate-900 p-2 rounded text-xs">
+                                                <div class="text-green-400">✅ Command ready to execute</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <!-- Remediation Steps -->
+                        <div>
+                            <h4 class="text-xl font-bold text-white mb-4 flex items-center gap-2">🛠️ Remediation Steps</h4>
+                            <div class="space-y-4">
+                                ${issue.remediationSteps.map((step, index) => `
+                                    <div class="verification-step border-l-4 border-slate-600 bg-slate-850 p-4 rounded-r-lg">
+                                        <div class="flex justify-between items-center mb-2">
+                                            <h5 class="font-semibold text-slate-200">${index + 1}. ${step.title}</h5>
+                                            <button onclick="copyCommand('${step.command}')" class="bg-green-600 text-white px-3 py-1 rounded text-xs font-medium hover:bg-green-700 transition-colors">
+                                                📋 Copy
+                                            </button>
+                                        </div>
+                                        <p class="text-sm text-slate-400 mb-3">${step.description}</p>
+                                        ${step.command.startsWith('#') ? 
+                                            `<div class="bg-slate-950 p-3 rounded font-mono text-sm text-slate-500 italic">${step.command}</div>` : 
+                                            `<div class="bg-slate-950 p-3 rounded font-mono text-sm text-green-300">
+                                                <span class="text-cyan-400">$</span> ${step.command}
+                                            </div>`
+                                        }
+                                        ${step.warning ? `<div class="mt-2 text-xs text-yellow-400 bg-yellow-500/10 p-2 rounded flex items-center gap-2">⚠️ ${step.warning}</div>` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Affected Resources -->
+                    <div class="mt-6 bg-slate-800/30 p-4 rounded-lg">
+                        <h4 class="font-bold text-slate-200 mb-2">Affected Resources</h4>
+                        <div class="flex gap-2 flex-wrap">
+                            <span class="bg-slate-700 px-2 py-1 rounded text-xs">${issue.affectedResource}</span>
+                            <span class="bg-slate-700 px-2 py-1 rounded text-xs">Category: ${issue.category}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            issueDetailView.innerHTML = detailHTML;
+        }
+
+        function runVerificationStep(stepId) {
+            const resultDiv = document.getElementById(`result-${stepId}`);
+            const stepDiv = document.getElementById(`step-${stepId}`);
+            
+            resultDiv.innerHTML = `
+                <div class="bg-slate-900 p-2 rounded text-xs">
+                    <div class="text-yellow-400">🔄 Ready to execute...</div>
+                    <div class="text-slate-300 mt-1">Copy the command above and run it in your terminal</div>
+                </div>
+            `;
+            resultDiv.classList.remove('hidden');
+            stepDiv.classList.add('completed');
+        }
+
+        function copyCommand(command) {
+            navigator.clipboard.writeText(command).then(() => {
+                // Show temporary success message
+                const notification = document.createElement('div');
+                notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded shadow-lg z-50';
+                notification.textContent = 'Command copied to clipboard!';
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 2000);
+            });
+        }
+
+        // --- Detail View Rendering (Original Functions Restored) ---
         function showNodeDetailView(nodeName) {
             const nodeData = fullData.nodes.find(n => n.name === nodeName);
             if (!nodeData) return;
@@ -183,9 +1045,9 @@
             const isReady = readyCondition && readyCondition.status === 'True';
 
             let conditionsHTML = (nodeData.conditions || []).map(c => {
-                 const conditionType = c.type ? c.type.replace(/([A-Z])/g, ' $1').trim() : 'Unknown';
-                 const statusIcon = c.status === 'True' ? '🟢' : c.status === 'False' ? '🔴' : '⚪️';
-                 return `<div class="flex items-center text-sm py-1" title="${c.message || ''}"><span class="w-4 mr-2">${statusIcon}</span><span class="text-slate-300">${conditionType}</span></div>`;
+                const conditionType = c.type ? c.type.replace(/([A-Z])/g, ' $1').trim() : 'Unknown';
+                const statusIcon = c.status === 'True' ? '🟢' : c.status === 'False' ? '🔴' : '⚪️';
+                return `<div class="flex items-center text-sm py-1" title="${c.message || ''}"><span class="w-4 mr-2">${statusIcon}</span><span class="text-slate-300">${conditionType}</span></div>`;
             }).join('');
 
             let disksHTML = (nodeData.disks || []).map(disk => {
@@ -200,27 +1062,27 @@
                         <div class="text-xs text-slate-400 mb-1">Path: <span class="font-mono text-slate-300">${disk.path}</span></div>
                         <div class="text-xs text-slate-400 mb-2">Storage: <span class="font-mono text-slate-300">${disk.storageScheduled} / ${disk.storageMaximum} (${disk.storageAvailable} free)</span></div>
                         <div class="">
-                             <div class="text-xs font-semibold text-slate-400 mb-1">Replicas</div>
-                             <div class="max-h-32 overflow-y-auto">${replicasHTML}</div>
+                            <div class="text-xs font-semibold text-slate-400 mb-1">Replicas</div>
+                            <div class="max-h-32 overflow-y-auto">${replicasHTML}</div>
                         </div>
                     </div>`;
             }).join('');
 
-             const detailHTML = `
+            const detailHTML = `
                 <div class="card p-4 fade-in">
-                     <h3 class="font-bold text-xl mb-4 text-slate-100">${nodeData.name} <span class="text-base font-medium ${isReady ? 'text-green-400' : 'text-red-400'}">${isReady ? 'Ready' : 'Not Ready'}</span></h3>
-                     <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                    <h3 class="font-bold text-xl mb-4 text-slate-100">${nodeData.name} <span class="text-base font-medium ${isReady ? 'text-green-400' : 'text-red-400'}">${isReady ? 'Ready' : 'Not Ready'}</span></h3>
+                    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
                         <div class="lg:col-span-1">
-                           <div class="bg-slate-800/30 p-3 rounded-md">
+                            <div class="bg-slate-800/30 p-3 rounded-md">
                                 <h4 class="font-bold text-base text-slate-200 mb-2">Conditions</h4>
                                 ${conditionsHTML}
-                           </div>
+                            </div>
                         </div>
-                         <div class="lg:col-span-3">
+                        <div class="lg:col-span-3">
                             <h4 class="font-bold text-base text-slate-200 mb-2">Storage Disks</h4>
-                           ${disksHTML}
+                            ${disksHTML}
                         </div>
-                     </div>
+                    </div>
                 </div>
             `;
             
@@ -232,12 +1094,14 @@
             const vmData = fullData.vms.find(vm => vm.name === vmName);
             if (!vmData) return;
             
-            // Create a comprehensive overview in a grid layout
             const detailHTML = `
                 <div class="card p-4 fade-in">
                     <h3 class="font-bold text-xl mb-4 text-slate-100">${vmData.name} <span class="text-base ${getStatusColorClass(vmData.printableStatus)} font-medium">(${vmData.printableStatus})</span></h3>
                     
-                    <!-- Show errors if any exist -->
+                    <!-- Show storage backend info -->
+                    ${vmData.errors && vmData.errors.length > 0 ? createStorageBackendSection(vmData.errors) : ''}
+                    
+                    <!-- Show errors if any exist (excluding info messages) -->
                     ${vmData.errors && vmData.errors.length > 0 ? createErrorSection(vmData.errors) : ''}
                     
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -271,8 +1135,8 @@
                         </div>
                     </div>
 
-                    <!-- Replicas Section (if exists) -->
-                    ${vmData.volumeName && vmData.replicaInfo ? createCompactReplicaSection(vmData.replicaInfo) : ''}
+                    <!-- Replicas Section (only for Longhorn volumes) -->
+                    ${vmData.volumeName && vmData.replicaInfo && vmData.replicaInfo.length > 0 ? createCompactReplicaSection(vmData.replicaInfo) : ''}
                 </div>
             `;
 
@@ -280,11 +1144,18 @@
             switchToDetailView();
         }
 
-        // --- Helper & Utility Functions ---
-        function createErrorSection(errors) {
+        // --- Helper & Utility Functions (Original Functions Restored) ---
+       function createErrorSection(errors) {
             if (!errors || errors.length === 0) return '';
             
-            const errorRows = errors.map(error => {
+            // Filter out informational messages - only show warnings, errors, and critical issues
+            const actualIssues = errors.filter(error => 
+                error.severity !== 'info' && error.severity !== 'information'
+            );
+            
+            if (actualIssues.length === 0) return ''; // No real issues to show
+            
+            const errorRows = actualIssues.map(error => {
                 let severityColor = 'text-slate-400';
                 let severityIcon = '⚠️';
                 
@@ -326,7 +1197,7 @@
                 <div class="mb-4">
                     <h4 class="text-base font-bold text-red-400 mb-3 flex items-center gap-2">
                         <span>🚨</span>
-                        Issues Found (${errors.length})
+                        Issues Found (${actualIssues.length})
                     </h4>
                     ${errorRows}
                 </div>
@@ -343,17 +1214,14 @@
                     <div class="compact-row"><span class="data-label">Phase:</span><span class="data-value ${getStatusColorClass(vmiInfo.phase)}">${vmiInfo.phase || 'N/A'}</span></div>
             `;
 
-            // Guest OS - compact display
             if (vmiInfo.guestOSInfo && vmiInfo.guestOSInfo.prettyName) {
                 content += `<div class="compact-row"><span class="data-label">OS:</span><span class="data-value">${vmiInfo.guestOSInfo.prettyName}</span></div>`;
             }
 
-            // Memory - compact display
             if (vmiInfo.memoryInfo && vmiInfo.memoryInfo.guestCurrent) {
                 content += `<div class="compact-row"><span class="data-label">Memory:</span><span class="data-value">${vmiInfo.memoryInfo.guestCurrent}</span></div>`;
             }
 
-            // Network - show primary interface only
             if (vmiInfo.interfaces && vmiInfo.interfaces.length > 0) {
                 const primaryInterface = vmiInfo.interfaces.find(iface => 
                     iface.ipAddress && 
@@ -443,7 +1311,6 @@
             const upgradeTime = upgradeInfo.upgradeTime || 'Unknown';
             const state = upgradeInfo.state || 'Unknown';
             
-            // Format the upgrade time
             let timeDisplay = 'Unknown';
             if (upgradeTime !== 'Unknown') {
                 try {
@@ -454,7 +1321,6 @@
                 }
             }
 
-            // Color code based on state
             let stateColor = 'text-slate-300';
             let stateIcon = '📋';
             
@@ -474,7 +1340,7 @@
             }
 
             const upgradeHtml = `
-                <div class="flex flex-col sm:flex-row items-center justify-center gap-2 text-sm">
+                                    <div class="flex flex-col sm:flex-row items-center justify-center gap-2 text-sm">
                     <div class="flex items-center gap-2">
                         <span class="${stateColor}">${stateIcon}</span>
                         <span class="text-slate-400">Version:</span>
@@ -511,43 +1377,115 @@
             upgradeStatusEl.innerHTML = `<span class="${colorMap[type]}">${iconMap[type]} ${message}</span>`;
         }
 
-        function updateStatus(color, message) {
-            // Legacy function - keeping for compatibility but not used
-            console.log(`Status: ${color} - ${message}`);
-        }
-
         function getStatusColorClass(status) {
-             if (!status) return 'text-slate-400';
-             switch(status.toLowerCase()) {
+            if (!status) return 'text-slate-400';
+            switch(status.toLowerCase()) {
                 case 'running': return 'text-green-400';
                 case 'bound': return 'text-green-400';
                 case 'pending': case 'containercreating': return 'text-amber-400';
                 default: return 'text-red-400';
-             }
+            }
         }
         
         function getHealthColorClass(status) {
-             if (!status) return 'text-slate-400';
-             switch(status.toLowerCase()) {
+            if (!status) return 'text-slate-400';
+            switch(status.toLowerCase()) {
                 case 'running': return 'text-green-400';
                 case 'degraded': case 'rebuilding': return 'text-amber-400';
                 default: return 'text-red-400';
-             }
+            }
+        }
+
+        function getSeverityIcon(severity) {
+            switch(severity) {
+                case 'critical': return '🚨';
+                case 'high': return '❌';
+                case 'medium': return '⚠️';
+                case 'low': return '📋';
+                default: return '❓';
+            }
+        }
+
+        function getSeverityBadgeClass(severity) {
+            switch(severity) {
+                case 'critical': return 'bg-red-900/80 text-red-200 border border-red-600/50';
+                case 'high': return 'bg-orange-900/80 text-orange-200 border border-orange-600/50';
+                case 'medium': return 'bg-yellow-900/80 text-yellow-200 border border-yellow-600/50';
+                case 'low': return 'bg-blue-900/80 text-blue-200 border border-blue-600/50';
+                default: return 'bg-slate-700 text-slate-300';
+            }
         }
         
         function switchToDetailView() {
-            vmListContainer.classList.add('hidden');
-            nodeContainer.classList.add('hidden');
-            detailViewContainer.classList.remove('hidden');
+            console.log('switchToDetailView called'); // Debug log
+            
+            // Debug: Check if elements exist
+            const dashboardEl = document.getElementById('dashboard');
+            const detailViewEl = detailViewContainer;
+            
+            console.log('Dashboard element:', dashboardEl); // Debug log
+            console.log('Detail view container element:', detailViewEl); // Debug log
+            console.log('Detail view element:', detailView); // Debug log
+            
+            if (!dashboardEl) {
+                console.error('Dashboard element not found!');
+                return;
+            }
+            if (!detailViewEl) {
+                console.error('Detail view container not found!');
+                return;
+            }
+            
+            // Hide all other views
+            console.log('Hiding dashboard'); // Debug log
+            dashboardEl.classList.add('hidden');
+            console.log('Dashboard classes after hiding:', dashboardEl.className); // Debug log
+            
+            console.log('Hiding all issues container'); // Debug log
+            allIssuesContainer.classList.add('hidden');
+            
+            console.log('Hiding issue detail container'); // Debug log
+            issueDetailContainer.classList.add('hidden');
+            
+            // Show detail view
+            console.log('Showing detail view container'); // Debug log
+            detailViewEl.classList.remove('hidden');
+            console.log('Detail view container classes after showing:', detailViewEl.className); // Debug log
+            
+            // Verify the detail view content
+            console.log('Detail view innerHTML length:', detailView.innerHTML.length); // Debug log
+            
+            // Force scroll to top and ensure visibility
+            window.scrollTo(0, 0);
+            
+            console.log('Detail view computed style:', window.getComputedStyle(detailViewEl).display); // Debug log
+            console.log('Detail view offsetHeight:', detailViewEl.offsetHeight); // Debug log
+            console.log('Detail view offsetWidth:', detailViewEl.offsetWidth); // Debug log
+            
+            console.log('switchToDetailView complete'); // Debug log
         }
 
         function switchToDashboardView() {
+            // Hide all detail views
             detailViewContainer.classList.add('hidden');
-            vmListContainer.classList.remove('hidden');
-            nodeContainer.classList.remove('hidden');
+            allIssuesContainer.classList.add('hidden');
+            issueDetailContainer.classList.add('hidden');
+            // Show main dashboard
+            document.getElementById('dashboard').classList.remove('hidden');
         }
 
+        // Event Listeners
         backButton.onclick = switchToDashboardView;
+        backFromIssueButton.onclick = () => {
+            issueDetailContainer.classList.add('hidden');
+            if (detectedIssues.length > 0) {
+                allIssuesContainer.classList.remove('hidden');
+            } else {
+                switchToDashboardView();
+            }
+        };
+
+        // Initialize
         connectWebSocket();
     </script>
 </body>

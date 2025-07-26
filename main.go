@@ -145,6 +145,22 @@ func fetchAndBuildVMInfo(clientset *kubernetes.Clientset, vmData map[string]inte
 		return vmInfo, nil
 	}
 
+	volumeDetails, err := volume.FetchVolumeDetailsEnhanced(clientset, vmInfo.ClaimNames, vmInfo.Namespace)
+	if err != nil {
+		vmInfo.Errors = append(vmInfo.Errors, models.VMError{
+			Type:     "volume",
+			Resource: vmInfo.ClaimNames,
+			Message:  fmt.Sprintf("Could not fetch volume details: %v", err),
+			Severity: "warning",
+		})
+		log.Printf("Warning: could not fetch volume details for PVC %s: %v", vmInfo.ClaimNames, err)
+		return vmInfo, nil
+	}
+
+	vmInfo.VolumeName = volumeDetails.VolumeHandle
+	vmInfo.PVCStatus = models.PVCStatus(volumeDetails.Status)
+	vmInfo.StorageClass = volumeDetails.StorageClass
+
 	pvcData, err := pvc.FetchPVCData(clientset, vmInfo.ClaimNames, paths.PVCPath, vmInfo.Namespace, "persistentvolumeclaims")
 	if err != nil {
 		vmInfo.Errors = append(vmInfo.Errors, models.VMError{
@@ -167,22 +183,17 @@ func fetchAndBuildVMInfo(clientset *kubernetes.Clientset, vmData map[string]inte
 		return vmInfo, nil
 	}
 
-	volumeDetails, err := volume.FetchVolumeDetails(clientset, volumeName, paths.VolumePath, paths.VolumeNamespace, "volumes")
+	podName, err := volume.GetPodFromVolumeEnhanced(clientset, volumeDetails)
 	if err != nil {
 		vmInfo.Errors = append(vmInfo.Errors, models.VMError{
-			Type:     "volume",
-			Resource: volumeName,
-			Message:  fmt.Sprintf("Volume not found in Longhorn system: %v", err),
-			Severity: "error",
+			Type:     "pod",
+			Resource: vmInfo.ClaimNames,
+			Message:  fmt.Sprintf("Could not find pod using this volume: %v", err),
+			Severity: "info",
 		})
-		log.Printf("Warning: could not fetch Volume %s for VM %s: %v", volumeName, vmInfo.Name, err)
-		return vmInfo, nil // Return successfully with partial data
-	}
-
-	podName, _ := volume.GetPodFromVolume(volumeDetails)
-	vmInfo.PodName = podName
-
-	if podName != "" {
+		log.Printf("Info: could not find pod for PVC %s: %v", vmInfo.ClaimNames, err)
+	} else {
+		vmInfo.PodName = podName
 		podData, err := pod.FetchPodDetails(clientset, podName, paths.PodPath, vmInfo.Namespace, "pods")
 		if err != nil {
 			vmInfo.Errors = append(vmInfo.Errors, models.VMError{
@@ -210,31 +221,82 @@ func fetchAndBuildVMInfo(clientset *kubernetes.Clientset, vmData map[string]inte
 		vmInfo.VMIInfo = vmiStatus
 	}
 
-	relatedReplicas, err := replicas.FindReplicaDetails(clientset, volumeName, paths.ReplicaPath, paths.ReplicaNamespace, "replicas")
-	if err != nil {
-		vmInfo.Errors = append(vmInfo.Errors, models.VMError{
-			Type:     "replicas",
-			Resource: volumeName,
-			Message:  fmt.Sprintf("Could not fetch replica details: %v", err),
-			Severity: "warning",
-		})
-	} else {
-		vmInfo.ReplicaInfo = relatedReplicas
-	}
+	if volumeDetails.IsLonghornCSI && volumeDetails.VolumeHandle != "" {
+		log.Printf("Volume %s uses Longhorn CSI, fetching Longhorn-specific details", volumeDetails.VolumeHandle)
 
-	engineInfos, err := engine.FindEngineDetails(clientset, volumeName, paths.EnginePath, paths.EngineNamespace, "engines")
-	if err != nil {
-		vmInfo.Errors = append(vmInfo.Errors, models.VMError{
-			Type:     "engine",
-			Resource: volumeName,
-			Message:  fmt.Sprintf("Could not fetch engine details: %v", err),
-			Severity: "warning",
-		})
+		// Get replica details
+		relatedReplicas, err := replicas.FindReplicaDetails(clientset, volumeDetails.VolumeHandle, paths.ReplicaPath, paths.ReplicaNamespace, "replicas")
+		if err != nil {
+			vmInfo.Errors = append(vmInfo.Errors, models.VMError{
+				Type:     "replicas",
+				Resource: volumeDetails.VolumeHandle,
+				Message:  fmt.Sprintf("Could not fetch replica details: %v", err),
+				Severity: "warning",
+			})
+		} else {
+			vmInfo.ReplicaInfo = relatedReplicas
+		}
+		// Get engine details
+		engineInfos, err := engine.FindEngineDetails(clientset, volumeDetails.VolumeHandle, paths.EnginePath, paths.EngineNamespace, "engines")
+		if err != nil {
+			vmInfo.Errors = append(vmInfo.Errors, models.VMError{
+				Type:     "engine",
+				Resource: volumeDetails.VolumeHandle,
+				Message:  fmt.Sprintf("Could not fetch engine details: %v", err),
+				Severity: "warning",
+			})
+		} else {
+			vmInfo.EngineInfo = engineInfos
+		}
 	} else {
-		vmInfo.EngineInfo = engineInfos
+		log.Printf("Volume %s uses CSI driver %s (not Longhorn), skipping Longhorn-specific details",
+			volumeDetails.PVName, volumeDetails.CSIDriver)
+
+		// Add informational message about non-Longhorn storage with better context
+		var backendName string
+		switch volumeDetails.CSIDriver {
+		case "csi.trident.netapp.io":
+			backendName = "NetApp Trident"
+		case "kubernetes.io/aws-ebs":
+			backendName = "AWS EBS"
+		case "kubernetes.io/gce-pd":
+			backendName = "Google Persistent Disk"
+		case "kubernetes.io/azure-disk":
+			backendName = "Azure Disk"
+		case "csi.vsphere.vmware.com":
+			backendName = "vSphere CSI"
+		default:
+			backendName = volumeDetails.CSIDriver
+		}
+
+		vmInfo.Errors = append(vmInfo.Errors, models.VMError{
+			Type:     "info",
+			Resource: volumeDetails.CSIDriver,
+			Message:  fmt.Sprintf("This VM uses %s for storage. Volume is managed outside of Longhorn, so replica and engine diagnostics are not available. Storage is provided by the %s CSI driver.", backendName, backendName),
+			Severity: "info",
+		})
 	}
 
 	return vmInfo, nil
+}
+
+func logStorageBackends(clientset *kubernetes.Clientset) {
+	backends, err := volume.DiscoverStorageBackends(clientset)
+	if err != nil {
+		log.Printf("Warning: Could not discover storage backends: %v", err)
+		return
+	}
+
+	log.Println("=== Discovered Storage Backends ===")
+	for _, backend := range backends {
+		defaultStr := ""
+		if backend.IsDefault {
+			defaultStr = " (default)"
+		}
+		log.Printf("  %s: %s%s (%d storage classes)",
+			backend.CSIDriver, backend.Name, defaultStr, backend.VolumeCount)
+	}
+	log.Println("=====================================")
 }
 
 // fetchFullClusterData now fetches data sequentially to avoid race conditions.
@@ -406,6 +468,7 @@ func main() {
 	} else {
 		log.Printf("✅ Connected to Kubernetes cluster (version: %s)", serverVersion.String())
 	}
+	logStorageBackends(clientset)
 	fs := http.FileServer(http.Dir("."))
 	http.Handle("/", fs)
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
