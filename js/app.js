@@ -11,23 +11,34 @@ class HarvesterDashboardApp {
     }
     
     bindEvents() {
-        document.getElementById('back-button').onclick = () => ViewManager.showDashboard();
-        document.getElementById('back-from-issue').onclick = () => {
-            if (AppState.issues.length > 0) {
-                ViewManager.showAllIssuesView();
-            } else {
-                ViewManager.showDashboard();
-            }
-        };
-        document.getElementById('back-from-all-issues').onclick = () => ViewManager.showDashboard();
-        document.getElementById('view-all-issues-btn').onclick = () => ViewManager.showAllIssuesView();
+        const container = document.querySelector('.container.mx-auto');
+        if (!container) return; // Safety check
 
-        document.addEventListener('click', (e) => {
-        if (e.target && e.target.id === 'view-all-issues-global') {
-            ViewManager.showAllIssuesView();
-        }
-    });
-}
+        container.addEventListener('click', (event) => {
+            // Find the closest button if a click happens on an element inside a button
+            const button = event.target.closest('button');
+            if (!button) return; // Exit if the click wasn't on or inside a button
+
+            switch (button.id) {
+                case 'back-button':
+                    ViewManager.showDashboard();
+                    break;
+                case 'back-from-all-issues':
+                    ViewManager.showDashboard();
+                    break;
+                case 'view-all-issues-btn':
+                    ViewManager.showAllIssuesView();
+                    break;
+                case 'back-from-issue':
+                    if (AppState.getAllRealIssues().length > 0) {
+                        ViewManager.showAllIssuesView();
+                    } else {
+                        ViewManager.showDashboard();
+                    }
+                    break;
+            }
+        });
+    }
     
     subscribeToStateChanges() {
         AppState.subscribe((data, issues) => {

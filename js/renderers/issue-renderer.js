@@ -34,7 +34,6 @@ const IssueRenderer = {
     },
     
     renderIssuesState(container, issues, realIssuesCount) {
-        // Restore the original HTML structure for issues state
         container.innerHTML = `
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-xl font-bold text-slate-200 flex items-center gap-2">
@@ -48,9 +47,6 @@ const IssueRenderer = {
             <div id="critical-issues-preview" class="space-y-2"></div>
         `;
         
-        // Re-bind the button event
-        document.getElementById('view-all-issues-btn').onclick = () => ViewManager.showAllIssuesView();
-
         const criticalIssues = issues.filter(issue => 
             (issue.severity === 'critical' || issue.severity === 'high') &&
             issue.severity !== 'info' && issue.severity !== 'information'

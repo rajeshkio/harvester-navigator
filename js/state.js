@@ -10,27 +10,16 @@ const AppState = {
     observers: [],
     
     getAllRealIssues() {
-        if (!this.data.vms) return [];
-        
-        let allIssues = [];
-        this.data.vms.forEach(vm => {
-            if (vm.errors && vm.errors.length > 0) {
-                const realIssues = vm.errors.filter(error => 
-                    error.severity !== 'info' && error.severity !== 'information'
-                );
-                realIssues.forEach(issue => {
-                    allIssues.push({
-                        ...issue,
-                        vmName: vm.name,
-                        namespace: vm.namespace
-                    });
-                });
-            }
-        });
-        return allIssues;
+        if (!this.issues || this.issues.length === 0) {
+            return [];
+        }
+
+        return this.issues.filter(issue => 
+            issue.severity !== 'info' && issue.severity !== 'information'
+        );
     },
-    
-    countRealIssues(errors) {
+        
+        countRealIssues(errors) {
         if (!errors || errors.length === 0) return 0;
         return errors.filter(error => 
             error.severity !== 'info' && error.severity !== 'information'
@@ -49,5 +38,9 @@ const AppState = {
     
     notifyStateChange() {
         this.observers.forEach(callback => callback(this.data, this.issues));
-    }
+    },
+
+    setIssues(detectedIssues) {
+        this.issues = detectedIssues;
+    },
 };

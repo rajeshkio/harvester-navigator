@@ -2,6 +2,11 @@
 const ViewManager = {
     currentView: 'dashboard',
     
+    issueFilters: {
+        searchText: '',
+        severity: 'all'
+    },
+    issueSort: 'time-desc',
     showDashboard() {
         this.hideAllViews();
         document.getElementById('dashboard').classList.remove('hidden');
@@ -33,70 +38,133 @@ const ViewManager = {
     },
     
     showAllIssuesView() {
-        const allRealIssues = AppState.getAllRealIssues();
+    this.hideAllViews();
+        document.getElementById('all-issues-container').classList.remove('hidden');
+        const searchInput = document.getElementById('issue-search-input');
+        const severityFilter = document.getElementById('issue-severity-filter');
+        const sortFilter = document.getElementById('issue-sort-filter');
+
+        // Set controls to match current state
+        searchInput.value = this.issueFilters.searchText;
+        severityFilter.value = this.issueFilters.severity;
+        sortFilter.value = this.issueSort;
         
-        if (allRealIssues.length === 0) {
-            return;
-        }
-        
-        const issuesHTML = allRealIssues.map(issue => {
-            let severityColor = 'text-slate-400';
-            let severityIcon = '⚠️';
-            
-            switch (issue.severity) {
-                case 'error':
-                    severityColor = 'text-red-400';
-                    severityIcon = '❌';
-                    break;
-                case 'warning':
-                    severityColor = 'text-yellow-400';
-                    severityIcon = '⚠️';
-                    break;
-                case 'critical':
-                    severityColor = 'text-red-500';
-                    severityIcon = '🚨';
-                    break;
-            }
-            
-            return `
-                <div class="bg-slate-800/50 p-4 rounded-md mb-3 cursor-pointer hover:bg-slate-700/50 transition-colors" onclick="ViewManager.showVMDetail('${issue.vmName}')">
-                    <div class="flex items-start gap-3">
-                        <span class="text-lg">${severityIcon}</span>
-                        <div class="flex-1">
-                            <div class="flex items-center gap-2 mb-2">
-                                <span class="text-slate-200 font-semibold">${issue.vmName}</span>
-                                <span class="text-slate-400 text-sm">in ${issue.namespace}</span>
-                                <span class="${severityColor} font-semibold text-xs uppercase px-2 py-1 bg-slate-700/50 rounded">${issue.severity}</span>
-                            </div>
-                            <div class="flex items-center gap-2 mb-1">
-                                <span class="text-slate-300 text-sm font-medium">${issue.type.toUpperCase()}</span>
-                                <span class="text-slate-400 text-sm">•</span>
-                                <span class="text-slate-400 text-xs font-mono">${issue.resource}</span>
-                            </div>
-                            <p class="text-slate-300 text-sm">${issue.message}</p>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-        
-        const allIssuesHTML = `
-            <div class="card p-4 fade-in">
-                <h3 class="font-bold text-xl mb-4 text-slate-100 flex items-center gap-2">
-                    <span class="text-red-400">🚨</span>
-                    All Detected Issues (${allRealIssues.length})
-                </h3>
-                <p class="text-slate-400 text-sm mb-4">Click on any issue to view the VM details</p>
-                ${issuesHTML}
-            </div>
-        `;
-        
-        document.getElementById('detail-view').innerHTML = allIssuesHTML;
-        this.hideAllViews();
-        document.getElementById('detail-view-container').classList.remove('hidden');
-        this.currentView = 'all-issues';
+        searchInput.oninput = (e) => {
+            this.issueFilters.searchText = e.target.value;
+            this.renderAllIssuesList();
+        };
+        severityFilter.onchange = (e) => {
+            this.issueFilters.severity = e.target.value;
+            this.renderAllIssuesList();
+        };
+        sortFilter.onchange = (e) => {
+            this.issueSort = e.target.value;
+            this.renderAllIssuesList();
+        };
+
+        this.renderAllIssuesList(); // Initial render
     },
     
+    renderAllIssuesList() {
+        let issues = AppState.getAllRealIssues();
+
+        // 1. Apply Filters
+        if (this.issueFilters.severity !== 'all') {
+            issues = issues.filter(issue => issue.severity === this.issueFilters.severity);
+        }
+        if (this.issueFilters.searchText) {
+            const searchLower = this.issueFilters.searchText.toLowerCase();
+            issues = issues.filter(issue => 
+                issue.title.toLowerCase().includes(searchLower) ||
+                issue.description.toLowerCase().includes(searchLower) ||
+                issue.affectedResource.toLowerCase().includes(searchLower)
+            );
+        }
+
+        // 2. Apply Sorting
+        const severityOrder = { critical: 4, high: 3, medium: 2, low: 1 };
+        issues.sort((a, b) => {
+            switch (this.issueSort) {
+                case 'time-asc':
+                    return new Date(a.detectionTime) - new Date(b.detectionTime);
+                case 'severity-desc':
+                    return (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0);
+                case 'time-desc':
+                default:
+                    return new Date(b.detectionTime) - new Date(a.detectionTime);
+            }
+        });
+        
+        // Update header count
+        const headerTitle = document.querySelector('#all-issues-container h2');
+        if (headerTitle) {
+            headerTitle.textContent = `All Detected Issues (${issues.length})`;
+        }
+        
+        // 3. Group by Severity and Render
+        const groupedIssues = issues.reduce((acc, issue) => {
+            const severity = issue.severity;
+            if (!acc[severity]) {
+                acc[severity] = [];
+            }
+            acc[severity].push(issue);
+            return acc;
+        }, {});
+
+        const issuesListContainer = document.getElementById('all-issues-list');
+        issuesListContainer.innerHTML = ''; // Clear previous list
+
+        if (issues.length === 0) {
+            issuesListContainer.innerHTML = `<p class="text-slate-400 text-center py-8">No issues match the current filters.</p>`;
+            return;
+        }
+
+        const sortedSeverities = ['critical', 'high', 'medium', 'low'];
+        
+        sortedSeverities.forEach(severity => {
+            if (groupedIssues[severity] && groupedIssues[severity].length > 0) {
+                const groupContainer = document.createElement('div');
+                
+                const groupHeader = `
+                    <h3 class="text-base font-bold text-white uppercase tracking-wider mt-4 mb-3 pb-2 border-b-2 border-slate-700">
+                        ${severity} Issues (${groupedIssues[severity].length})
+                    </h3>
+                `;
+                
+                const issuesHTML = groupedIssues[severity].map(issue => {
+                    return this.createDetailedIssueCard(issue);
+                }).join('');
+
+                groupContainer.innerHTML = groupHeader + issuesHTML;
+                issuesListContainer.appendChild(groupContainer);
+            }
+        });
+    },
+    
+    createDetailedIssueCard(issue) {
+        // This function generates the HTML for a single issue card.
+        // It's the same logic you had before for rendering a single issue.
+        const severityIcon = Utils.getSeverityIcon(issue.severity);
+        return `
+            <div class="bg-slate-800/50 p-4 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors mb-3" onclick="ViewManager.showIssueDetail('${issue.id}')">
+                 <div class="flex justify-between items-start mb-2">
+                    <div class="flex items-center gap-3">
+                        <span class="text-2xl">${severityIcon}</span>
+                        <div>
+                            <h3 class="font-bold text-lg text-slate-200">${issue.title}</h3>
+                            <p class="text-slate-400 text-sm">${issue.affectedResource} • ${issue.category}</p>
+                        </div>
+                    </div>
+                    <span class="text-xs px-2 py-1 rounded ${Utils.getSeverityBadgeClass(issue.severity)}">${issue.severity.toUpperCase()}</span>
+                </div>
+                <p class="text-slate-300 text-sm mb-3">${issue.description}</p>
+                <div class="flex justify-between items-center text-xs text-slate-500">
+                    <span>Detected: ${Utils.formatTimestamp(issue.detectionTime)}</span>
+                    <span>Click to troubleshoot →</span>
+                </div>
+            </div>
+        `;
+    },
     showIssueDetail(issueId) {
         const issue = AppState.issues.find(i => i.id === issueId);
         if (!issue) return;
