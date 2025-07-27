@@ -21,7 +21,13 @@ class HarvesterDashboardApp {
         };
         document.getElementById('back-from-all-issues').onclick = () => ViewManager.showDashboard();
         document.getElementById('view-all-issues-btn').onclick = () => ViewManager.showAllIssuesView();
-    }
+
+        document.addEventListener('click', (e) => {
+        if (e.target && e.target.id === 'view-all-issues-global') {
+            ViewManager.showAllIssuesView();
+        }
+    });
+}
     
     subscribeToStateChanges() {
         AppState.subscribe((data, issues) => {

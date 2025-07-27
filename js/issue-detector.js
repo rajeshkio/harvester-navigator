@@ -10,6 +10,9 @@ const IssueDetector = {
         if (data.nodes) {
             data.nodes.forEach(node => this.checkNodeIssues(node, issues));
         }
+        if (data.healthChecks && data.healthChecks.results) {
+            this.processHealthCheckResults(data.healthChecks.results, issues);
+        }
         
         return issues;
     },
@@ -82,7 +85,69 @@ const IssueDetector = {
             }));
         }
     },
-    
+    processHealthCheckResults(healthChecks, issues) {
+    healthChecks.forEach(check => {
+        if (check.status === 'failed') {
+            issues.push({
+                id: `health-${check.checkName}`,
+                title: `Health Check Failed: ${this.formatCheckName(check.checkName)}`,
+                severity: this.getCheckSeverity(check.checkName),
+                category: 'Cluster Health',
+                description: check.error || check.message,
+                affectedResource: `Health Check: ${check.checkName}`,
+                resourceType: 'health-check',
+                resourceName: check.checkName,
+                detectionTime: check.timestamp,
+                verificationSteps: this.getHealthCheckSteps(check.checkName),
+                remediationSteps: this.getHealthCheckRemediation(check.checkName)
+            });
+        }
+    });
+},
+
+    formatCheckName(name) {
+        return name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    },
+
+    getCheckSeverity(checkName) {
+        const severityMap = {
+            'nodes': 'critical',
+            'error_pods': 'high',
+            'volumes': 'high',
+            'bundles': 'medium',
+            'cluster': 'critical',
+            'machines': 'medium',
+            'free_space': 'medium'
+        };
+        return severityMap[checkName] || 'medium';
+    },
+
+    getHealthCheckSteps(checkName) {
+        const steps = {
+            'nodes': [
+                {
+                    id: 'check-node-status',
+                    title: 'Check Node Status',
+                    command: 'kubectl get nodes -o wide',
+                    expectedOutput: 'All nodes should be Ready',
+                    description: 'Verify node readiness and scheduling status'
+                }
+            ],
+            'error_pods': [
+                {
+                    id: 'check-pod-status',
+                    title: 'Check Pod Status',
+                    command: 'kubectl get pods --all-namespaces | grep -v Running | grep -v Completed',
+                    expectedOutput: 'No error pods should be listed',
+                    description: 'Find pods that are not running or completed'
+                }
+            ]
+        };
+        return steps[checkName] || [];
+    },
+
+ 
+
     createIssue(baseIssue) {
         return {
             ...baseIssue,
@@ -124,6 +189,27 @@ const IssueDetector = {
         };
         return steps[issueType] || [];
     },
+    getHealthCheckRemediation(checkName) {
+    const steps = {
+        'nodes': [
+            {
+                id: 'uncordon-nodes',
+                title: 'Uncordon Nodes',
+                command: 'kubectl uncordon <node-name>',
+                description: 'Make nodes schedulable again'
+            }
+        ],
+        'error_pods': [
+            {
+                id: 'restart-pods',
+                title: 'Restart Failed Pods',
+                command: 'kubectl delete pod <pod-name> -n <namespace>',
+                description: 'Restart failed pods to recover'
+            }
+        ]
+    };
+    return steps[checkName] || [];
+},
     
     getRemediationSteps(issueType, resourceName) {
         const steps = {

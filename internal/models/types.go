@@ -4,9 +4,10 @@ import "time"
 
 // FullClusterData is the top-level struct that holds all data sent to the frontend.
 type FullClusterData struct {
-	VMs         []VMInfo     `json:"vms"`
-	Nodes       []NodeInfo   `json:"nodes"`
-	UpgradeInfo *UpgradeInfo `json:"upgradeInfo,omitempty"`
+	VMs          []VMInfo            `json:"vms"`
+	Nodes        []NodeInfo          `json:"nodes"`
+	UpgradeInfo  *UpgradeInfo        `json:"upgradeInfo,omitempty"`
+	HealthChecks *HealthCheckSummary `json:"healthChecks,omitempty"`
 }
 
 type UpgradeInfo struct {
@@ -192,4 +193,23 @@ type VMIInfo struct {
 	GuestOSInfo *GuestOSInfo      `json:"guestOSInfo"`
 	MemoryInfo  *MemoryInfo       `json:"memoryInfo"` // New field
 	Interfaces  []Interface       `json:"interfaces"`
+}
+
+type HealthCheckResult struct {
+	CheckName string    `json:"checkName"`
+	Status    string    `json:"status"` // "passed", "failed", "warning"
+	Message   string    `json:"message,omitempty"`
+	Error     string    `json:"error,omitempty"`
+	Details   []string  `json:"details,omitempty"`
+	Timestamp time.Time `json:"timestamp"`
+	Duration  string    `json:"duration,omitempty"`
+}
+
+type HealthCheckSummary struct {
+	TotalChecks   int                 `json:"totalChecks"`
+	PassedChecks  int                 `json:"passedChecks"`
+	FailedChecks  int                 `json:"failedChecks"`
+	WarningChecks int                 `json:"warningChecks"`
+	LastRun       time.Time           `json:"lastRun"`
+	Results       []HealthCheckResult `json:"results"`
 }

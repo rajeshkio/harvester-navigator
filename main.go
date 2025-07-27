@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	kubeclient "github.com/rk280392/harvesterNavigator/internal/client"
 	models "github.com/rk280392/harvesterNavigator/internal/models"
 	"github.com/rk280392/harvesterNavigator/internal/services/engine"
+	"github.com/rk280392/harvesterNavigator/internal/services/health"
 	"github.com/rk280392/harvesterNavigator/internal/services/pod"
 	"github.com/rk280392/harvesterNavigator/internal/services/pvc"
 	"github.com/rk280392/harvesterNavigator/internal/services/replicas"
@@ -302,6 +304,14 @@ func logStorageBackends(clientset *kubernetes.Clientset) {
 // fetchFullClusterData now fetches data sequentially to avoid race conditions.
 func fetchFullClusterData(clientset *kubernetes.Clientset) (models.FullClusterData, error) {
 	var allData models.FullClusterData
+
+	// -- Step 0: Running health checks
+	log.Println("Running health checks...")
+	healthChecker := health.NewHealthChecker(clientset)
+	healthSummary := healthChecker.RunAllChecks(context.Background())
+	allData.HealthChecks = healthSummary
+	log.Printf("Health checks completed: %d passed, %d failed, %d warnings",
+		healthSummary.PassedChecks, healthSummary.FailedChecks, healthSummary.WarningChecks)
 
 	// --- Step 1: Fetch Node Data ---
 	log.Println("Fetching Longhorn node data...")
