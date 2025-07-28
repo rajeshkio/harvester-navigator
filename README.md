@@ -1,6 +1,6 @@
 v# Harvester Troubleshooting via UI
 
-![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/rk280392/harvesterNavigator)
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/rajeshkio/harvester-navigator)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 **Harvester Troubleshooting via UI** is a comprehensive web-based dashboard designed to work with the Harvester support bundle simulator, providing real-time insights into Harvester-based Kubernetes virtual machines and their associated resources. The tool can also be used directly with live Harvester clusters for real-time monitoring and troubleshooting.
@@ -51,8 +51,8 @@ This tool is designed to provide a **holistic view of Harvester clusters** and e
 support-bundle-kit simulator --reset
 
 # Clone and build the troubleshooting UI
-git clone https://github.com/rk280392/harvesterNavigator.git
-cd harvesterNavigator
+git clone https://github.com/rajeshkio/harvester-navigator.git
+cd harvester-navigator
 go build -o harvester-troubleshoot
 
 # Start the web server (it will automatically connect to the simulator)
