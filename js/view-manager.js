@@ -14,8 +14,25 @@ const ViewManager = {
     },
     
     showNodeDetail(nodeName) {
-        const nodeData = AppState.data.nodes.find(n => n.name === nodeName);
-        if (!nodeData) return;
+        console.log('ViewManager.showNodeDetail called with:', nodeName);
+        console.log('Available nodes:', AppState.data.nodes);
+        
+        // Find the node data using the nested structure
+        const nodeData = AppState.data.nodes.find(n => {
+            const name = n.longhornInfo ? n.longhornInfo.name : (n.name || '');
+            console.log('Checking node:', name, 'against:', nodeName);
+            return name === nodeName;
+        });
+        
+        if (!nodeData) {
+            console.error('Node not found:', nodeName);
+            console.error('Available node names:', AppState.data.nodes.map(n => 
+                n.longhornInfo ? n.longhornInfo.name : (n.name || 'unnamed')
+            ));
+            return;
+        }
+        
+        console.log('Found node data:', nodeData);
         
         const detailHTML = DetailRenderer.renderNodeDetail(nodeData, AppState.issues);
         document.getElementById('detail-view').innerHTML = detailHTML;
@@ -23,6 +40,8 @@ const ViewManager = {
         this.hideAllViews();
         document.getElementById('detail-view-container').classList.remove('hidden');
         this.currentView = 'node-detail';
+        
+        console.log('Node detail view should now be visible');
     },
     
     showVMDetail(vmName) {

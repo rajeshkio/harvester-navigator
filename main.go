@@ -16,6 +16,7 @@ import (
 	models "github.com/rk280392/harvesterNavigator/internal/models"
 	"github.com/rk280392/harvesterNavigator/internal/services/engine"
 	"github.com/rk280392/harvesterNavigator/internal/services/health"
+	"github.com/rk280392/harvesterNavigator/internal/services/node"
 	"github.com/rk280392/harvesterNavigator/internal/services/pod"
 	"github.com/rk280392/harvesterNavigator/internal/services/pvc"
 	"github.com/rk280392/harvesterNavigator/internal/services/replicas"
@@ -321,12 +322,78 @@ func fetchFullClusterData(clientset *kubernetes.Clientset) (models.FullClusterDa
 	}
 	log.Printf("Successfully fetched %d Longhorn node resources from API.", len(longhornNodes))
 
-	parsedNodes, err := vm.ParseLonghornNodeData(longhornNodes)
+	parsedLonghornNodes, err := vm.ParseLonghornNodeData(longhornNodes)
 	if err != nil {
 		return allData, fmt.Errorf("could not parse longhorn node data: %w", err)
 	}
-	log.Printf("Successfully parsed %d nodes for the dashboard.", len(parsedNodes))
-	allData.Nodes = parsedNodes
+	log.Printf("Successfully parsed %d Longhorn nodes for the dashboard.", len(parsedLonghornNodes))
+
+	// Fetch Kubernetes node data
+	log.Println("Fetching Kubernetes node data...")
+	kubernetesNodes, err := node.FetchAllKubernetesNodes(clientset)
+	if err != nil {
+		log.Printf("Warning: Could not fetch Kubernetes node data: %v", err)
+		// Continue with just Longhorn data
+		basicNodes := make([]models.EnhancedNodeInfo, len(parsedLonghornNodes))
+		for i, lhNode := range parsedLonghornNodes {
+			basicNodes[i] = models.EnhancedNodeInfo{NodeInfo: lhNode}
+		}
+		allData.Nodes = basicNodes
+	} else {
+		log.Printf("Successfully fetched %d Kubernetes node resources from API.", len(kubernetesNodes))
+		
+		parsedKubernetesNodes, err := node.ParseKubernetesNodeData(kubernetesNodes)
+		if err != nil {
+			log.Printf("Warning: Could not parse Kubernetes node data: %v", err)
+			// Continue with just Longhorn data
+			basicNodes := make([]models.EnhancedNodeInfo, len(parsedLonghornNodes))
+			for i, lhNode := range parsedLonghornNodes {
+				basicNodes[i] = models.EnhancedNodeInfo{NodeInfo: lhNode}
+			}
+			allData.Nodes = basicNodes
+		} else {
+			log.Printf("Successfully parsed %d Kubernetes nodes.", len(parsedKubernetesNodes))
+			
+			// Fetch running pod counts
+			log.Println("Fetching running pod counts...")
+			podCounts, err := node.FetchRunningPodCounts(clientset)
+			if err != nil {
+				log.Printf("Warning: Could not fetch pod counts: %v", err)
+				podCounts = make(map[string]int) // Empty map as fallback
+			} else {
+				log.Printf("Successfully fetched pod counts for %d nodes.", len(podCounts))
+			}
+			
+			// Merge Longhorn and Kubernetes node data with pod counts
+			enhancedNodes := make([]models.EnhancedNodeInfo, len(parsedLonghornNodes))
+			for i, longhornNode := range parsedLonghornNodes {
+				enhanced := models.EnhancedNodeInfo{
+					NodeInfo: longhornNode, // Keep all Longhorn data
+				}
+
+				// Try to find matching Kubernetes node data
+				if k8sNode, exists := parsedKubernetesNodes[longhornNode.Name]; exists {
+					enhanced.KubernetesNodeInfo = k8sNode
+					
+					// Add running pod count
+					if podCount, exists := podCounts[longhornNode.Name]; exists {
+						enhanced.RunningPods = podCount
+					}
+					
+					// Log successful merge
+					log.Printf("Successfully merged node data for %s: roles=%v, IP=%s, pods=%d", 
+						longhornNode.Name, k8sNode.Roles, k8sNode.InternalIP, enhanced.RunningPods)
+				} else {
+					log.Printf("Warning: No Kubernetes node data found for Longhorn node %s", longhornNode.Name)
+				}
+
+				enhancedNodes[i] = enhanced
+			}
+			
+			allData.Nodes = enhancedNodes
+			log.Printf("Successfully merged node data for %d nodes.", len(enhancedNodes))
+		}
+	}
 
 	// --- Step 2: Fetch VM Data ---
 	log.Println("Fetching all VM data...")

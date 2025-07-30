@@ -5,7 +5,7 @@ import "time"
 // FullClusterData is the top-level struct that holds all data sent to the frontend.
 type FullClusterData struct {
 	VMs          []VMInfo            `json:"vms"`
-	Nodes        []NodeInfo          `json:"nodes"`
+	Nodes        []EnhancedNodeInfo  `json:"nodes"`
 	UpgradeInfo  *UpgradeInfo        `json:"upgradeInfo,omitempty"`
 	HealthChecks *HealthCheckSummary `json:"healthChecks,omitempty"`
 }
@@ -32,9 +32,12 @@ type ResourcePaths struct {
 	EngineNamespace  string
 }
 type NodeCondition struct {
-	Type    string `json:"type"`
-	Status  string `json:"status"`
-	Message string `json:"message"`
+	Type               string `json:"type"`
+	Status             string `json:"status"`
+	Message            string `json:"message"`
+	LastTransitionTime string `json:"lastTransitionTime,omitempty"`
+	LastHeartbeatTime  string `json:"lastHeartbeatTime,omitempty"`
+	Reason             string `json:"reason,omitempty"`
 }
 type DiskInfo struct {
 	Name              string           `json:"name"`
@@ -51,6 +54,49 @@ type NodeInfo struct {
 	Name       string          `json:"name"`
 	Conditions []NodeCondition `json:"conditions"`
 	Disks      []DiskInfo      `json:"disks"`
+}
+
+// KubernetesNodeInfo holds standard Kubernetes node information
+type KubernetesNodeInfo struct {
+	Name             string                    `json:"name"`
+	Roles            []string                  `json:"roles"`
+	InternalIP       string                    `json:"internalIP"`
+	ExternalIP       string                    `json:"externalIP"`
+	Hostname         string                    `json:"hostname"`
+	Conditions       []NodeCondition           `json:"conditions"`
+	NodeInfo         NodeSystemInfo            `json:"nodeInfo"`
+	Capacity         map[string]string         `json:"capacity"`
+	Allocatable      map[string]string         `json:"allocatable"`
+	VolumesAttached  []VolumeAttachment        `json:"volumesAttached"`
+	VolumesInUse     []string                  `json:"volumesInUse"`
+	Annotations      map[string]string         `json:"annotations"`
+}
+
+// NodeSystemInfo contains system information about the node
+type NodeSystemInfo struct {
+	Architecture            string `json:"architecture"`
+	BootID                  string `json:"bootID"`
+	ContainerRuntimeVersion string `json:"containerRuntimeVersion"`
+	KernelVersion           string `json:"kernelVersion"`
+	KubeProxyVersion        string `json:"kubeProxyVersion"`
+	KubeletVersion          string `json:"kubeletVersion"`
+	MachineID               string `json:"machineID"`
+	OperatingSystem         string `json:"operatingSystem"`
+	OSImage                 string `json:"osImage"`
+	SystemUUID              string `json:"systemUUID"`
+}
+
+// VolumeAttachment represents a volume attached to a node
+type VolumeAttachment struct {
+	Name       string `json:"name"`
+	DevicePath string `json:"devicePath"`
+}
+
+// EnhancedNodeInfo combines Longhorn and Kubernetes node data
+type EnhancedNodeInfo struct {
+	NodeInfo            `json:"longhornInfo"`
+	*KubernetesNodeInfo `json:"kubernetesInfo,omitempty"`
+	RunningPods         int `json:"runningPods"`
 }
 
 type VMError struct {

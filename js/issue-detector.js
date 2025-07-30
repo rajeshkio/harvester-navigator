@@ -71,17 +71,29 @@ const IssueDetector = {
     },
     
     checkNodeIssues(node, issues) {
-        const readyCondition = (node.conditions || []).find(c => c.type === 'Ready');
-        if (!readyCondition || readyCondition.status !== 'True') {
+        // Handle the nested structure - extract node name and conditions
+        const nodeName = node.longhornInfo ? node.longhornInfo.name : (node.name || 'unknown');
+        const longhornConditions = node.longhornInfo ? node.longhornInfo.conditions : (node.conditions || []);
+        const k8sConditions = node.kubernetesInfo ? node.kubernetesInfo.conditions : [];
+        
+        // Check Longhorn Ready condition first
+        const longhornReadyCondition = longhornConditions.find(c => c.type === 'Ready');
+        // Check Kubernetes Ready condition as backup
+        const k8sReadyCondition = k8sConditions.find(c => c.type === 'Ready');
+        
+        const isReady = (longhornReadyCondition && longhornReadyCondition.status === 'True') ||
+                       (k8sReadyCondition && k8sReadyCondition.status === 'True');
+        
+        if (!isReady) {
             issues.push(this.createIssue({
-                id: `node-not-ready-${node.name}`,
+                id: `node-not-ready-${nodeName}`,
                 title: 'Node Not Ready',
                 severity: 'critical',
                 category: 'Node Health',
-                description: `Node ${node.name} is not in Ready state. This affects VM scheduling and storage operations.`,
-                affectedResource: `Node: ${node.name}`,
+                description: `Node ${nodeName} is not in Ready state. This affects VM scheduling and storage operations.`,
+                affectedResource: `Node: ${nodeName}`,
                 resourceType: 'node-not-ready',
-                resourceName: node.name
+                resourceName: nodeName
             }));
         }
     },
@@ -584,10 +596,10 @@ const IssueDetector = {
             ],
             'node-not-ready': [
                 {
-                    id: 'restart-kubelet',
+                    id: 'restart-node-services',
                     title: 'Restart Node Services',
-                    command: `# SSH to node and run: sudo systemctl restart kubelet`,
-                    description: 'Restart kubelet service on the affected node',
+                    command: `# SSH to node and run: sudo systemctl restart rke2-server`,
+                    description: 'Restart RKE2 server service on the affected node',
                     warning: 'This will temporarily disrupt workloads on the node'
                 }
             ]
