@@ -16,7 +16,7 @@ type HealthChecker struct {
 	clientset *kubernetes.Clientset
 }
 
-func NewHealthChecker(clientset *kubernetes.Clientset) *HealthChecker {
+func CreateHealthChecker(clientset *kubernetes.Clientset) *HealthChecker {
 	return &HealthChecker{
 		clientset: clientset,
 	}
@@ -245,7 +245,7 @@ func (h *HealthChecker) checkAttachedVolumes(ctx context.Context) models.HealthC
 	return result
 }
 
-// Enhanced but still simple pod error detection
+// Simple but thorough pod error detection
 func (h *HealthChecker) checkErrorPods(ctx context.Context) models.HealthCheckResult {
 	start := time.Now()
 	result := models.HealthCheckResult{

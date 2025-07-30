@@ -1,12 +1,10 @@
 // Detail view rendering
 const DetailRenderer = {
     renderNodeDetail(nodeData, issues) {
-        // Handle nested structure - extract the actual node name and data
         const nodeName = nodeData.longhornInfo ? nodeData.longhornInfo.name : (nodeData.name || 'Unknown');
         const longhornConditions = nodeData.longhornInfo ? nodeData.longhornInfo.conditions : (nodeData.conditions || []);
         const longhornDisks = nodeData.longhornInfo ? nodeData.longhornInfo.disks : (nodeData.disks || []);
         
-        // Check both Longhorn and Kubernetes ready conditions
         const longhornReadyCondition = longhornConditions.find(c => c.type === 'Ready');
         const k8sReadyCondition = nodeData.kubernetesInfo ? 
             (nodeData.kubernetesInfo.conditions || []).find(c => c.type === 'Ready') : null;
@@ -14,15 +12,13 @@ const DetailRenderer = {
         const isReady = (longhornReadyCondition && longhornReadyCondition.status === 'True') ||
                        (k8sReadyCondition && k8sReadyCondition.status === 'True');
 
-        // Get health status summary
-        const healthSummary = this.getNodeHealthSummary(nodeData);
+        const healthSummary = this.analyzeNodeHealth(nodeData);
         
-        // Create sections (removing duplicate overview)
-        let quickStatsHTML = this.createQuickStatsSection(nodeData);
-        let healthStatusHTML = this.createHealthStatusSection(nodeData, healthSummary);
-        let storageOverviewHTML = this.createStorageOverviewSection(longhornDisks);
-        let troubleshootingHTML = this.createTroubleshootingSection(nodeData, healthSummary);
-        let systemDetailsHTML = this.createSystemDetailsSection(nodeData);
+        let resourceStatsHTML = this.renderResourceStats(nodeData);
+        let healthStatusHTML = this.renderHealthStatus(nodeData, healthSummary);
+        let storageOverviewHTML = this.renderStorageOverview(longhornDisks);
+        let troubleshootingHTML = this.renderTroubleshootingActions(nodeData, healthSummary);
+        let systemDetailsHTML = this.renderSystemDetails(nodeData);
 
         return `
             <div class="card p-4 fade-in max-w-7xl mx-auto">
@@ -33,7 +29,7 @@ const DetailRenderer = {
                             <span class="px-2 py-1 text-sm rounded-full ${isReady ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'} font-medium">
                                 ${isReady ? '● Ready' : '● Not Ready'}
                             </span>
-                            ${this.getNodeHealthBadges(healthSummary)}
+                            ${this.renderHealthBadges(healthSummary)}
                         </div>
                     </div>
                     <div class="text-right text-sm">
@@ -49,7 +45,7 @@ const DetailRenderer = {
                     </div>
                     
                     <div class="space-y-4">
-                        ${quickStatsHTML}
+                        ${resourceStatsHTML}
                         ${systemDetailsHTML}
                         ${troubleshootingHTML}
                     </div>
@@ -276,7 +272,7 @@ const DetailRenderer = {
         `;
     },
     
-    // New helper methods for enhanced node details
+    // Helper methods for node details
     createNodeOverviewSection(nodeData, isReady) {
         if (!nodeData.kubernetesInfo) {
             return '';
@@ -477,8 +473,7 @@ const DetailRenderer = {
         return volumeName;
     },
     
-    // New improved helper methods for better UX
-    getNodeHealthSummary(nodeData) {
+    analyzeNodeHealth(nodeData) {
         const summary = {
             overall: 'healthy',
             issues: [],
@@ -487,7 +482,6 @@ const DetailRenderer = {
             resourceHealth: 'good'
         };
 
-        // Check Kubernetes conditions
         if (nodeData.kubernetesInfo && nodeData.kubernetesInfo.conditions) {
             nodeData.kubernetesInfo.conditions.forEach(condition => {
                 if (condition.type === 'Ready' && condition.status !== 'True') {
@@ -508,7 +502,6 @@ const DetailRenderer = {
             });
         }
 
-        // Check Longhorn conditions
         const longhornConditions = nodeData.longhornInfo ? nodeData.longhornInfo.conditions : [];
         longhornConditions.forEach(condition => {
             if (condition.type === 'Schedulable' && condition.status !== 'True') {
@@ -517,7 +510,6 @@ const DetailRenderer = {
             }
         });
 
-        // Check storage disks
         const disks = nodeData.longhornInfo ? nodeData.longhornInfo.disks : [];
         disks.forEach(disk => {
             if (!disk.isSchedulable) {
@@ -529,7 +521,7 @@ const DetailRenderer = {
         return summary;
     },
 
-    getNodeHealthBadges(healthSummary) {
+    renderHealthBadges(healthSummary) {
         const badges = [];
         
         if (healthSummary.issues.length > 0) {
@@ -543,7 +535,7 @@ const DetailRenderer = {
         return badges.join('');
     },
 
-    createQuickStatsSection(nodeData) {
+    renderResourceStats(nodeData) {
         const capacity = nodeData.kubernetesInfo?.capacity || {};
         const allocatable = nodeData.kubernetesInfo?.allocatable || {};
         
@@ -582,7 +574,7 @@ const DetailRenderer = {
         `;
     },
 
-    createHealthStatusSection(nodeData, healthSummary) {
+    renderHealthStatus(nodeData, healthSummary) {
         const k8sConditions = nodeData.kubernetesInfo?.conditions || [];
         const criticalConditions = ['Ready', 'MemoryPressure', 'DiskPressure', 'PIDPressure', 'NetworkUnavailable'];
         
@@ -665,7 +657,7 @@ const DetailRenderer = {
         `;
     },
 
-    createStorageOverviewSection(longhornDisks) {
+    renderStorageOverview(longhornDisks) {
         if (!longhornDisks || longhornDisks.length === 0) {
             return `
                 <div class="bg-slate-800/30 p-4 rounded-lg">
@@ -757,7 +749,7 @@ const DetailRenderer = {
         `;
     },
 
-    createSystemDetailsSection(nodeData) {
+    renderSystemDetails(nodeData) {
         if (!nodeData.kubernetesInfo?.nodeInfo) {
             return '';
         }
@@ -796,7 +788,7 @@ const DetailRenderer = {
         `;
     },
 
-    createTroubleshootingSection(nodeData, healthSummary) {
+    renderTroubleshootingActions(nodeData, healthSummary) {
         const troubleshootingSteps = [];
         
         // Add troubleshooting based on detected issues

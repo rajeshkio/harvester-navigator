@@ -85,7 +85,7 @@ class HarvesterDashboardApp {
             break;
     }
 
-    // NEW: Process node statuses from your existing data
+    // Process node statuses from existing data
     const nodeStatuses = upgradeInfo.nodeStatuses || {};
     const nodeCount = Object.keys(nodeStatuses).length;
     let nodeStatusHtml = '';
@@ -174,7 +174,7 @@ class HarvesterDashboardApp {
     document.getElementById('upgrade-status').innerHTML = upgradeHtml;
 }
 
-// NEW: Helper function to generate detailed node view
+// Helper function to generate detailed node view
 generateNodeDetailsGrid(nodeStatuses) {
     const nodeEntries = Object.entries(nodeStatuses);
     

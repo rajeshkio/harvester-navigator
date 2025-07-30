@@ -5,7 +5,7 @@ import "time"
 // FullClusterData is the top-level struct that holds all data sent to the frontend.
 type FullClusterData struct {
 	VMs          []VMInfo            `json:"vms"`
-	Nodes        []EnhancedNodeInfo  `json:"nodes"`
+	Nodes        []NodeWithMetrics   `json:"nodes"`
 	UpgradeInfo  *UpgradeInfo        `json:"upgradeInfo,omitempty"`
 	HealthChecks *HealthCheckSummary `json:"healthChecks,omitempty"`
 }
@@ -92,8 +92,8 @@ type VolumeAttachment struct {
 	DevicePath string `json:"devicePath"`
 }
 
-// EnhancedNodeInfo combines Longhorn and Kubernetes node data
-type EnhancedNodeInfo struct {
+// NodeWithMetrics combines Longhorn and Kubernetes node data
+type NodeWithMetrics struct {
 	NodeInfo            `json:"longhornInfo"`
 	*KubernetesNodeInfo `json:"kubernetesInfo,omitempty"`
 	RunningPods         int `json:"runningPods"`
@@ -237,7 +237,7 @@ type VMIInfo struct {
 	Phase       string            `json:"phase"`
 	ActivePods  map[string]string `json:"activePods"`
 	GuestOSInfo *GuestOSInfo      `json:"guestOSInfo"`
-	MemoryInfo  *MemoryInfo       `json:"memoryInfo"` // New field
+	MemoryInfo  *MemoryInfo       `json:"memoryInfo"`
 	Interfaces  []Interface       `json:"interfaces"`
 }
 
