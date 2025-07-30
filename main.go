@@ -148,7 +148,7 @@ func fetchAndBuildVMInfo(clientset *kubernetes.Clientset, vmData map[string]inte
 		return vmInfo, nil
 	}
 
-	volumeDetails, err := volume.FetchVolumeDetailsEnhanced(clientset, vmInfo.ClaimNames, vmInfo.Namespace)
+	volumeDetails, err := volume.FetchVolumeDetails(clientset, vmInfo.ClaimNames, vmInfo.Namespace)
 	if err != nil {
 		vmInfo.Errors = append(vmInfo.Errors, models.VMError{
 			Type:     "volume",
@@ -186,7 +186,7 @@ func fetchAndBuildVMInfo(clientset *kubernetes.Clientset, vmData map[string]inte
 		return vmInfo, nil
 	}
 
-	podName, err := volume.GetPodFromVolumeEnhanced(clientset, volumeDetails)
+	podName, err := volume.GetPodFromVolume(clientset, volumeDetails)
 	if err != nil {
 		vmInfo.Errors = append(vmInfo.Errors, models.VMError{
 			Type:     "pod",
@@ -308,7 +308,7 @@ func fetchFullClusterData(clientset *kubernetes.Clientset) (models.FullClusterDa
 
 	// -- Step 0: Running health checks
 	log.Println("Running health checks...")
-	healthChecker := health.NewHealthChecker(clientset)
+	healthChecker := health.CreateHealthChecker(clientset)
 	healthSummary := healthChecker.RunAllChecks(context.Background())
 	allData.HealthChecks = healthSummary
 	log.Printf("Health checks completed: %d passed, %d failed, %d warnings",
@@ -334,9 +334,9 @@ func fetchFullClusterData(clientset *kubernetes.Clientset) (models.FullClusterDa
 	if err != nil {
 		log.Printf("Warning: Could not fetch Kubernetes node data: %v", err)
 		// Continue with just Longhorn data
-		basicNodes := make([]models.EnhancedNodeInfo, len(parsedLonghornNodes))
+		basicNodes := make([]models.NodeWithMetrics, len(parsedLonghornNodes))
 		for i, lhNode := range parsedLonghornNodes {
-			basicNodes[i] = models.EnhancedNodeInfo{NodeInfo: lhNode}
+			basicNodes[i] = models.NodeWithMetrics{NodeInfo: lhNode}
 		}
 		allData.Nodes = basicNodes
 	} else {
@@ -346,9 +346,9 @@ func fetchFullClusterData(clientset *kubernetes.Clientset) (models.FullClusterDa
 		if err != nil {
 			log.Printf("Warning: Could not parse Kubernetes node data: %v", err)
 			// Continue with just Longhorn data
-			basicNodes := make([]models.EnhancedNodeInfo, len(parsedLonghornNodes))
+			basicNodes := make([]models.NodeWithMetrics, len(parsedLonghornNodes))
 			for i, lhNode := range parsedLonghornNodes {
-				basicNodes[i] = models.EnhancedNodeInfo{NodeInfo: lhNode}
+				basicNodes[i] = models.NodeWithMetrics{NodeInfo: lhNode}
 			}
 			allData.Nodes = basicNodes
 		} else {
@@ -365,33 +365,30 @@ func fetchFullClusterData(clientset *kubernetes.Clientset) (models.FullClusterDa
 			}
 			
 			// Merge Longhorn and Kubernetes node data with pod counts
-			enhancedNodes := make([]models.EnhancedNodeInfo, len(parsedLonghornNodes))
+			mergedNodes := make([]models.NodeWithMetrics, len(parsedLonghornNodes))
 			for i, longhornNode := range parsedLonghornNodes {
-				enhanced := models.EnhancedNodeInfo{
-					NodeInfo: longhornNode, // Keep all Longhorn data
+				nodeWithMetrics := models.NodeWithMetrics{
+					NodeInfo: longhornNode,
 				}
 
-				// Try to find matching Kubernetes node data
 				if k8sNode, exists := parsedKubernetesNodes[longhornNode.Name]; exists {
-					enhanced.KubernetesNodeInfo = k8sNode
+					nodeWithMetrics.KubernetesNodeInfo = k8sNode
 					
-					// Add running pod count
 					if podCount, exists := podCounts[longhornNode.Name]; exists {
-						enhanced.RunningPods = podCount
+						nodeWithMetrics.RunningPods = podCount
 					}
 					
-					// Log successful merge
 					log.Printf("Successfully merged node data for %s: roles=%v, IP=%s, pods=%d", 
-						longhornNode.Name, k8sNode.Roles, k8sNode.InternalIP, enhanced.RunningPods)
+						longhornNode.Name, k8sNode.Roles, k8sNode.InternalIP, nodeWithMetrics.RunningPods)
 				} else {
 					log.Printf("Warning: No Kubernetes node data found for Longhorn node %s", longhornNode.Name)
 				}
 
-				enhancedNodes[i] = enhanced
+				mergedNodes[i] = nodeWithMetrics
 			}
 			
-			allData.Nodes = enhancedNodes
-			log.Printf("Successfully merged node data for %d nodes.", len(enhancedNodes))
+			allData.Nodes = mergedNodes
+			log.Printf("Successfully merged node data for %d nodes.", len(mergedNodes))
 		}
 	}
 
@@ -534,7 +531,7 @@ func main() {
 	log.Printf("✅ Using kubeconfig: %s", kubeconfigPath)
 	log.Printf("📍 Source: %s", source)
 
-	clientset, err := kubeclient.NewClient(kubeconfigPath)
+	clientset, err := kubeclient.CreateClient(kubeconfigPath)
 	if err != nil {
 		log.Fatalf("Error creating Kubernetes client: %v", err)
 	}

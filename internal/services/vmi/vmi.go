@@ -56,7 +56,7 @@ func ParseVMIData(vmiData map[string]interface{}) ([]types.VMIInfo, error) {
 		return vmiInfos, err
 	}
 
-	// Create a new VMI info object
+	// Create a VMI info object
 	vmiInfo := types.VMIInfo{
 		Name:        vmiName,
 		Phase:       extractPhase(vmiStatus),

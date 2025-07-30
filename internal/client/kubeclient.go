@@ -9,29 +9,22 @@ import (
 )
 
 // createKubeConfig creates a Kubernetes client config from the specified kubeconfig path.
-// This function assumes the kubeconfig path has already been validated.
 func createKubeConfig(kubeconfig string) (*rest.Config, error) {
 	var config *rest.Config
 	var err error
 
 	if kubeconfig != "" {
-		// Use the provided kubeconfig file path
-		//	fmt.Printf("kubeconfig from createkubeconfig%v\n", kubeconfig)
 		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to build config from kubeconfig '%s': %w", kubeconfig, err)
 		}
 	}
 
-	//fmt.Printf("config from createkubeconfig%v\n", config)
-
 	return config, nil
 }
 
-// NewClient creates a new Kubernetes clientset using the provided kubeconfig path.
-// The kubeconfig parameter should be a validated file path.
-func NewClient(kubeconfig string) (*kubernetes.Clientset, error) {
-	//fmt.Printf("kubeconfig from newclient %s\n", kubeconfig)
+// CreateClient creates a Kubernetes clientset using the provided kubeconfig path.
+func CreateClient(kubeconfig string) (*kubernetes.Clientset, error) {
 	config, err := createKubeConfig(kubeconfig)
 	if err != nil {
 		return nil, err
@@ -45,9 +38,8 @@ func NewClient(kubeconfig string) (*kubernetes.Clientset, error) {
 	return clientset, nil
 }
 
-// NewClientWithConfig creates a new Kubernetes clientset using a provided rest.Config.
-// This is useful when you want more control over the configuration.
-func NewClientWithConfig(config *rest.Config) (*kubernetes.Clientset, error) {
+// CreateClientWithConfig creates a Kubernetes clientset using a provided rest.Config.
+func CreateClientWithConfig(config *rest.Config) (*kubernetes.Clientset, error) {
 	if config == nil {
 		return nil, fmt.Errorf("config cannot be nil")
 	}

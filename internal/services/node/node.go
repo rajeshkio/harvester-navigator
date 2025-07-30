@@ -214,26 +214,28 @@ func contains(slice []string, item string) bool {
 }
 
 // MergeNodeData combines Longhorn node data with Kubernetes node data
-func MergeNodeData(longhornNodes []models.NodeInfo, kubernetesNodes map[string]*models.KubernetesNodeInfo) []models.EnhancedNodeInfo {
-	var results []models.EnhancedNodeInfo
+func MergeNodeData(longhornNodes []models.NodeInfo, kubernetesNodes map[string]*models.KubernetesNodeInfo, podCounts map[string]int) []models.NodeWithMetrics {
+	var results []models.NodeWithMetrics
 
 	for _, longhornNode := range longhornNodes {
-		enhanced := models.EnhancedNodeInfo{
-			NodeInfo: longhornNode, // Keep all Longhorn data
+		nodeWithMetrics := models.NodeWithMetrics{
+			NodeInfo: longhornNode,
 		}
 
-		// Try to find matching Kubernetes node data
 		if k8sNode, exists := kubernetesNodes[longhornNode.Name]; exists {
-			enhanced.KubernetesNodeInfo = k8sNode
+			nodeWithMetrics.KubernetesNodeInfo = k8sNode
 			
-			// Log successful merge
-			log.Printf("Successfully merged node data for %s: roles=%v, IP=%s", 
-				longhornNode.Name, k8sNode.Roles, k8sNode.InternalIP)
+			if podCount, exists := podCounts[longhornNode.Name]; exists {
+				nodeWithMetrics.RunningPods = podCount
+			}
+			
+			log.Printf("Successfully merged node data for %s: roles=%v, IP=%s, pods=%d", 
+				longhornNode.Name, k8sNode.Roles, k8sNode.InternalIP, nodeWithMetrics.RunningPods)
 		} else {
 			log.Printf("Warning: No Kubernetes node data found for Longhorn node %s", longhornNode.Name)
 		}
 
-		results = append(results, enhanced)
+		results = append(results, nodeWithMetrics)
 	}
 
 	return results
