@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
@@ -244,6 +245,7 @@ func (h *HealthChecker) checkAttachedVolumes(ctx context.Context) models.HealthC
 	return result
 }
 
+// Enhanced but still simple pod error detection
 func (h *HealthChecker) checkErrorPods(ctx context.Context) models.HealthCheckResult {
 	start := time.Now()
 	result := models.HealthCheckResult{
@@ -254,40 +256,188 @@ func (h *HealthChecker) checkErrorPods(ctx context.Context) models.HealthCheckRe
 	systemNamespaces := []string{
 		"cattle-dashboards", "cattle-fleet-clusters-system", "cattle-fleet-local-system", "cattle-fleet-system",
 		"cattle-impersonation-system", "cattle-logging-system", "cattle-monitoring-system", "cattle-provisioning-capi-system",
-		"cattle-system", "cattle-ui-plugin-system", "fleet-default", "fleet-local", "harvester-public", "harvester-system", "kube-system", "longhorn-system",
+		"cattle-system", "cattle-ui-plugin-system", "fleet-default", "fleet-local", "harvester-public",
+		"harvester-system", "kube-system", "longhorn-system",
 	}
 
 	var errorPods []string
+	var podErrors []models.PodError
+
 	for _, ns := range systemNamespaces {
-		fmt.Printf("Checking of pods in ns %s\n", ns)
 		pods, err := h.clientset.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			result.Status = "failed"
-			result.Error = fmt.Sprintf("Failed to list pods: %v", err)
+			result.Error = fmt.Sprintf("Failed to list pods in namespace %s: %v", ns, err)
 			result.Duration = time.Since(start).String()
 			return result
 		}
 
 		for _, pod := range pods.Items {
-			if pod.Status.Phase != "Running" && pod.Status.Phase != "Succeeded" && pod.Status.Phase != "Completed" {
+			// Check if pod has any issues
+			if h.isPodInError(pod) {
+				podError := h.createPodError(pod)
+				podErrors = append(podErrors, podError)
+
+				// Keep old format for compatibility
 				errorPods = append(errorPods, fmt.Sprintf("%s/%s (%s)",
 					pod.Namespace, pod.Name, pod.Status.Phase))
 			}
 		}
+	}
 
-		result.Duration = time.Since(start).String()
+	result.Duration = time.Since(start).String()
 
-		if len(errorPods) > 0 {
-			result.Status = "failed"
-			result.Error = fmt.Sprintf("%d error pods found", len(errorPods))
-			result.Details = errorPods
-		} else {
-			result.Status = "passed"
-			result.Message = "All system pods are OK"
+	if len(errorPods) > 0 {
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("%d error pods found", len(errorPods))
+		result.Details = errorPods
+		result.PodErrors = podErrors
+	} else {
+		result.Status = "passed"
+		result.Message = "All system pods are OK"
+	}
+	fmt.Printf("DEBUG: Found %d error pods, %d podErrors\n", len(errorPods), len(podErrors))
+	for i, pe := range podErrors {
+		fmt.Printf("DEBUG: PodError %d: %s/%s - %s (%s)\n", i, pe.Namespace, pe.Name, pe.Phase, pe.ErrorState)
+	}
+
+	return result
+}
+
+// Simple check for pod errors
+func (h *HealthChecker) isPodInError(pod corev1.Pod) bool {
+	//	fmt.Printf("DEBUG: Checking pod %s/%s - Phase: %s\n", pod.Namespace, pod.Name, pod.Status.Phase)
+	if pod.Status.Phase == "Failed" || pod.Status.Phase == "Unknown" {
+		return true
+	}
+
+	// Long-running pending pods (more than 5 minutes old)
+	if pod.Status.Phase == "Pending" {
+		if time.Since(pod.CreationTimestamp.Time) > 5*time.Minute {
+			return true
+		}
+	}
+
+	// Check container states for common error conditions
+	for _, container := range pod.Status.ContainerStatuses {
+		if container.State.Waiting != nil {
+			reason := container.State.Waiting.Reason
+			switch reason {
+			case "CrashLoopBackOff", "ImagePullBackOff", "ErrImagePull",
+				"CreateContainerConfigError", "InvalidImageName", "CreateContainerError":
+				return true
+			}
 		}
 
+		// High restart count indicates problems
+		if container.RestartCount > 12 && h.hasRecentRestarts(container) {
+			return true
+		}
 	}
-	return result
+
+	// Check init containers too
+	for _, container := range pod.Status.InitContainerStatuses {
+		if container.State.Waiting != nil {
+			reason := container.State.Waiting.Reason
+			switch reason {
+			case "CrashLoopBackOff", "ImagePullBackOff", "ErrImagePull",
+				"CreateContainerConfigError", "InvalidImageName", "CreateContainerError":
+				return true
+			}
+		}
+	}
+
+	if pod.Status.Phase != "Running" && pod.Status.Phase != "Succeeded" {
+		//	fmt.Printf("DEBUG: Found error pod: %s/%s - %s\n", pod.Namespace, pod.Name, pod.Status.Phase)
+		return true
+	}
+
+	return false
+}
+
+func (h *HealthChecker) hasRecentRestarts(container corev1.ContainerStatus) bool {
+	if container.RestartCount == 0 {
+		return false
+	}
+
+	// If we have last restart time, check if it's recent
+	if container.LastTerminationState.Terminated != nil &&
+		container.LastTerminationState.Terminated.FinishedAt.Time != (time.Time{}) {
+		lastRestart := container.LastTerminationState.Terminated.FinishedAt.Time
+
+		// Only consider recent restarts (within last hour)
+		if time.Since(lastRestart) < time.Hour {
+			return true
+		}
+	}
+
+	return false
+}
+
+// Get the most relevant error state for display
+func (h *HealthChecker) getPodErrorState(pod corev1.Pod) string {
+	// Check container states for specific errors
+	for _, container := range pod.Status.ContainerStatuses {
+		if container.State.Waiting != nil && container.State.Waiting.Reason != "" {
+			//	fmt.Printf("DEBUG: Container %s waiting: %s\n", container.Name, container.State.Waiting.Reason)
+
+			return container.State.Waiting.Reason
+		}
+		if container.RestartCount > 50 && h.hasRecentRestarts(container) {
+			restartInfo := fmt.Sprintf("HighRestarts(%d)", container.RestartCount)
+			//	fmt.Printf("DEBUG: Container %s high restarts: %s\n", container.Name, restartInfo)
+
+			return restartInfo
+		}
+	}
+
+	// Check init containers
+	for _, container := range pod.Status.InitContainerStatuses {
+		if container.State.Waiting != nil && container.State.Waiting.Reason != "" {
+			initReason := fmt.Sprintf("Init:%s", container.State.Waiting.Reason)
+			//		fmt.Printf("DEBUG: Init container %s: %s\n", container.Name, initReason)
+			return initReason
+		}
+	}
+
+	// Fall back to pod reason or phase
+	if pod.Status.Reason != "" {
+		//	fmt.Printf("DEBUG: Pod reason: %s\n", pod.Status.Reason)
+		return pod.Status.Reason
+	}
+	//	fmt.Printf("DEBUG: Falling back to phase: %s\n", pod.Status.Phase)
+	return string(pod.Status.Phase)
+}
+
+func (h *HealthChecker) createPodError(pod corev1.Pod) models.PodError {
+	podError := models.PodError{
+		Name:      pod.Name,
+		Namespace: pod.Namespace,
+		Phase:     string(pod.Status.Phase),
+		NodeName:  pod.Spec.NodeName,
+		Reason:    pod.Status.Reason,
+	}
+
+	// Get the most relevant error state/reason
+	if errorState := h.getPodErrorState(pod); errorState != "" {
+		podError.ErrorState = errorState
+	}
+
+	// Include restart information
+	for _, container := range pod.Status.ContainerStatuses {
+		if container.RestartCount > podError.RestartCount {
+			podError.RestartCount = container.RestartCount
+
+			// Include last restart time if available
+			if container.LastTerminationState.Terminated != nil &&
+				container.LastTerminationState.Terminated.FinishedAt.Time != (time.Time{}) {
+				lastRestart := container.LastTerminationState.Terminated.FinishedAt.Time
+				podError.LastRestartTime = &lastRestart
+			}
+		}
+	}
+
+	return podError
 }
 
 func (h *HealthChecker) checkFreeSpace(ctx context.Context) models.HealthCheckResult {

@@ -220,12 +220,7 @@ const ViewManager = {
                                         </button>
                                     </div>
                                     <p class="text-sm text-slate-400 mb-3">${step.description}</p>
-                                    ${step.command.startsWith('#') ? 
-                                        `<div class="bg-slate-950 p-3 rounded font-mono text-sm text-slate-500 italic">${step.command}</div>` : 
-                                        `<div class="bg-slate-950 p-3 rounded font-mono text-sm text-green-300">
-                                            <span class="text-cyan-400">$</span> ${step.command}
-                                        </div>`
-                                    }
+                                    ${this.renderRemediationCommand(step)}
                                     ${step.warning ? `<div class="mt-2 text-xs text-yellow-400 bg-yellow-500/10 p-2 rounded flex items-center gap-2">⚠️ ${step.warning}</div>` : ''}
                                 </div>
                             `).join('')}
@@ -248,7 +243,43 @@ const ViewManager = {
         document.getElementById('issue-detail-container').classList.remove('hidden');
         this.currentView = 'issue-detail';
     },
-    
+    renderRemediationCommand(step) {
+    // Check if this is a documentation reference step
+        if (step.id === 'reference-docs' || step.id === 'documentation' || step.command.startsWith('#')) {
+            // Extract URL from the command or description
+            const urlMatch = step.command.match(/https?:\/\/[^\s)]+/) || step.description.match(/https?:\/\/[^\s)]+/);
+            const url = urlMatch ? urlMatch[0] : null;
+            
+            if (url) {
+                return `
+                    <div class="bg-slate-950 p-3 rounded mb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-blue-400">🔗</span>
+                            <a href="${url}" target="_blank" rel="noopener noreferrer" 
+                            class="text-blue-400 hover:text-blue-300 underline">
+                                ${url}
+                            </a>
+                            <button onclick="Utils.copyToClipboard('${url}')" 
+                                    class="bg-slate-700 text-white px-2 py-1 rounded text-xs hover:bg-slate-600 transition-colors">
+                                📋
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        // Regular command display
+        if (step.command.startsWith('#')) {
+            return `<div class="bg-slate-950 p-3 rounded font-mono text-sm text-slate-500 italic">${step.command}</div>`;
+        } else {
+            return `
+                <div class="bg-slate-950 p-3 rounded font-mono text-sm text-green-300">
+                    <span class="text-cyan-400">$</span> ${step.command}
+                </div>
+            `;
+        }
+    },
     hideAllViews() {
         ['dashboard', 'detail-view-container', 'all-issues-container', 'issue-detail-container'].forEach(id => {
             document.getElementById(id).classList.add('hidden');

@@ -75,13 +75,13 @@ func DiscoverStorageBackends(client *kubernetes.Clientset) ([]StorageBackendInfo
 		result = append(result, *backend)
 	}
 
-	log.Printf("Discovered %d storage backends: %v", len(result), getDriverNames(result))
+	//	log.Printf("Discovered %d storage backends: %v", len(result), getDriverNames(result))
 	return result, nil
 }
 
 // Enhanced volume detection that works with any CSI driver
 func FetchVolumeDetailsEnhanced(client *kubernetes.Clientset, pvcName, namespace string) (*VolumeDetails, error) {
-	log.Printf("Fetching enhanced volume details for PVC %s in namespace %s", pvcName, namespace)
+	//log.Printf("Fetching enhanced volume details for PVC %s in namespace %s", pvcName, namespace)
 
 	// Step 1: Get PVC to find the bound PV
 	pvcData, err := pvc.FetchPVCData(client, pvcName, "/api/v1", namespace, "persistentvolumeclaims")

@@ -128,6 +128,7 @@ func parseUpgradeInfo(upgrade map[string]interface{}) (*models.UpgradeInfo, erro
 	if upgradeInfo.State == "" {
 		if status, ok := upgrade["status"].(map[string]interface{}); ok {
 			if conditions, ok := status["conditions"].([]interface{}); ok {
+				fmt.Printf("conditions: %v", conditions...)
 				// Check if all conditions are successful
 				allSuccess := true
 				hasConditions := false

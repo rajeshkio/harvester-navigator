@@ -195,16 +195,6 @@ type VMIInfo struct {
 	Interfaces  []Interface       `json:"interfaces"`
 }
 
-type HealthCheckResult struct {
-	CheckName string    `json:"checkName"`
-	Status    string    `json:"status"` // "passed", "failed", "warning"
-	Message   string    `json:"message,omitempty"`
-	Error     string    `json:"error,omitempty"`
-	Details   []string  `json:"details,omitempty"`
-	Timestamp time.Time `json:"timestamp"`
-	Duration  string    `json:"duration,omitempty"`
-}
-
 type HealthCheckSummary struct {
 	TotalChecks   int                 `json:"totalChecks"`
 	PassedChecks  int                 `json:"passedChecks"`
@@ -212,4 +202,42 @@ type HealthCheckSummary struct {
 	WarningChecks int                 `json:"warningChecks"`
 	LastRun       time.Time           `json:"lastRun"`
 	Results       []HealthCheckResult `json:"results"`
+}
+
+type PodError struct {
+	Name                string           `json:"name"`
+	Namespace           string           `json:"namespace"`
+	Phase               string           `json:"phase"`
+	NodeName            string           `json:"nodeName,omitempty"`
+	Reason              string           `json:"reason,omitempty"`
+	Message             string           `json:"message,omitempty"`
+	ContainerErrors     []ContainerError `json:"containerErrors,omitempty"`
+	InitContainerErrors []ContainerError `json:"initContainerErrors,omitempty"`
+	CreationTimestamp   time.Time        `json:"creationTimestamp,omitempty"`
+	PodIP               string           `json:"podIP,omitempty"`
+	ErrorState          string           `json:"errorState,omitempty"`
+	RestartCount        int32            `json:"restartCount,omitempty"`
+	LastRestartTime     *time.Time       `json:"lastRestartTime,omitempty"`
+}
+
+type ContainerError struct {
+	Name         string `json:"name"`
+	Ready        bool   `json:"ready"`
+	RestartCount int32  `json:"restartCount"`
+	Image        string `json:"image"`
+	State        string `json:"state"` // "Waiting", "Running", "Terminated"
+	Reason       string `json:"reason,omitempty"`
+	Message      string `json:"message,omitempty"`
+	ExitCode     *int32 `json:"exitCode,omitempty"`
+}
+
+type HealthCheckResult struct {
+	CheckName string     `json:"checkName"`
+	Status    string     `json:"status"`
+	Message   string     `json:"message,omitempty"`
+	Error     string     `json:"error,omitempty"`
+	Details   []string   `json:"details,omitempty"`
+	PodErrors []PodError `json:"podErrors,omitempty"`
+	Timestamp time.Time  `json:"timestamp"`
+	Duration  string     `json:"duration,omitempty"`
 }
