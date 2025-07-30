@@ -114,6 +114,9 @@ func parseUpgradeInfo(upgrade map[string]interface{}) (*models.UpgradeInfo, erro
 					}
 				}
 			}
+
+			fmt.Printf("Node Status is %v", nodeStatuses)
+
 		}
 	}
 
@@ -136,9 +139,10 @@ func parseUpgradeInfo(upgrade map[string]interface{}) (*models.UpgradeInfo, erro
 				for _, condRaw := range conditions {
 					if cond, ok := condRaw.(map[string]interface{}); ok {
 						hasConditions = true
-						if status, ok := cond["status"].(string); ok && status != "True" {
-							allSuccess = false
-							break
+						condStatus := cond["status"].(string)
+						condType := cond["type"].(string)
+						if condStatus != "True" {
+							fmt.Printf("This is condstatus %v,and this is condtype %v \n", condStatus, condType)
 						}
 					}
 				}
@@ -153,7 +157,6 @@ func parseUpgradeInfo(upgrade map[string]interface{}) (*models.UpgradeInfo, erro
 			}
 		}
 	}
-
 	// Default state if none found
 	if upgradeInfo.State == "" {
 		upgradeInfo.State = "Unknown"
