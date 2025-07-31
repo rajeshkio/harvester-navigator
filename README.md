@@ -1,4 +1,4 @@
-v# Harvester Troubleshooting via UI
+# Harvester Troubleshooting via UI
 
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/rajeshkio/harvester-navigator)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -15,7 +15,6 @@ This tool is designed to provide a **holistic view of Harvester clusters** and e
 - **Real-time monitoring** of Harvester clusters via WebSocket connections
 - **Interactive VM explorer** with detailed drill-down capabilities
 - **Comprehensive node dashboard** showing Longhorn node status and disk information
-- **Responsive design** optimized for desktop and mobile devices
 
 ### 🔍 **VM & Infrastructure Insights**
 - **Complete VM lifecycle tracking** - Status, resources, and configuration details
@@ -200,8 +199,8 @@ Error messages include:
 
 ```bash
 # Clone and enter directory
-git clone https://github.com/rk280392/harvesterNavigator.git
-cd harvesterNavigator
+git clone https://github.com/rajeshkio/harvester-navigator.git
+cd harvester-navigator
 
 # Install dependencies
 go mod tidy
@@ -235,12 +234,6 @@ go build -o harvester-troubleshoot
 ## 📄 License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
-
-## 🤝 Support
-
-- **Documentation**: [Project Wiki](https://github.com/rk280392/harvesterNavigator/wiki)
-- **Issues**: [GitHub Issues](https://github.com/rk280392/harvesterNavigator/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/rk280392/harvesterNavigator/discussions)
 
 ---
 
