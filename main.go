@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -341,7 +342,7 @@ func fetchFullClusterData(clientset *kubernetes.Clientset) (models.FullClusterDa
 		allData.Nodes = basicNodes
 	} else {
 		log.Printf("Successfully fetched %d Kubernetes node resources from API.", len(kubernetesNodes))
-		
+
 		parsedKubernetesNodes, err := node.ParseKubernetesNodeData(kubernetesNodes)
 		if err != nil {
 			log.Printf("Warning: Could not parse Kubernetes node data: %v", err)
@@ -353,7 +354,7 @@ func fetchFullClusterData(clientset *kubernetes.Clientset) (models.FullClusterDa
 			allData.Nodes = basicNodes
 		} else {
 			log.Printf("Successfully parsed %d Kubernetes nodes.", len(parsedKubernetesNodes))
-			
+
 			// Fetch running pod counts
 			log.Println("Fetching running pod counts...")
 			podCounts, err := node.FetchRunningPodCounts(clientset)
@@ -363,7 +364,7 @@ func fetchFullClusterData(clientset *kubernetes.Clientset) (models.FullClusterDa
 			} else {
 				log.Printf("Successfully fetched pod counts for %d nodes.", len(podCounts))
 			}
-			
+
 			// Merge Longhorn and Kubernetes node data with pod counts
 			mergedNodes := make([]models.NodeWithMetrics, len(parsedLonghornNodes))
 			for i, longhornNode := range parsedLonghornNodes {
@@ -373,12 +374,12 @@ func fetchFullClusterData(clientset *kubernetes.Clientset) (models.FullClusterDa
 
 				if k8sNode, exists := parsedKubernetesNodes[longhornNode.Name]; exists {
 					nodeWithMetrics.KubernetesNodeInfo = k8sNode
-					
+
 					if podCount, exists := podCounts[longhornNode.Name]; exists {
 						nodeWithMetrics.RunningPods = podCount
 					}
-					
-					log.Printf("Successfully merged node data for %s: roles=%v, IP=%s, pods=%d", 
+
+					log.Printf("Successfully merged node data for %s: roles=%v, IP=%s, pods=%d",
 						longhornNode.Name, k8sNode.Roles, k8sNode.InternalIP, nodeWithMetrics.RunningPods)
 				} else {
 					log.Printf("Warning: No Kubernetes node data found for Longhorn node %s", longhornNode.Name)
@@ -386,7 +387,7 @@ func fetchFullClusterData(clientset *kubernetes.Clientset) (models.FullClusterDa
 
 				mergedNodes[i] = nodeWithMetrics
 			}
-			
+
 			allData.Nodes = mergedNodes
 			log.Printf("Successfully merged node data for %d nodes.", len(mergedNodes))
 		}
@@ -441,69 +442,6 @@ func fetchFullClusterData(clientset *kubernetes.Clientset) (models.FullClusterDa
 	return allData, nil
 }
 
-func handleConnections(w http.ResponseWriter, r *http.Request, clientset *kubernetes.Clientset) {
-	ws, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	defer ws.Close()
-	log.Println("Frontend connected. Fetching data...")
-
-	allData, err := fetchFullClusterData(clientset)
-	if err != nil {
-		log.Printf("Error fetching cluster data: %v", err)
-		ws.WriteJSON(map[string]string{"error": err.Error()})
-		return
-	}
-
-	// Send the data
-	if err := ws.WriteJSON(allData); err != nil {
-		log.Println("Write error:", err)
-		return
-	}
-	log.Println("Data sent to frontend successfully.")
-
-	// Keep the connection alive and handle ping/pong
-	ws.SetReadDeadline(time.Now().Add(60 * time.Second))
-	ws.SetPongHandler(func(string) error {
-		ws.SetReadDeadline(time.Now().Add(60 * time.Second))
-		return nil
-	})
-
-	// Send periodic pings to keep connection alive
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	done := make(chan struct{})
-
-	// Handle incoming messages (mostly pings)
-	go func() {
-		defer close(done)
-		for {
-			_, _, err := ws.ReadMessage()
-			if err != nil {
-				log.Println("WebSocket read error:", err)
-				return
-			}
-		}
-	}()
-
-	// Send pings periodically
-	for {
-		select {
-		case <-done:
-			log.Println("WebSocket connection closed by client")
-			return
-		case <-ticker.C:
-			if err := ws.WriteMessage(websocket.PingMessage, nil); err != nil {
-				log.Println("WebSocket ping error:", err)
-				return
-			}
-		}
-	}
-}
-
 func getDefaultResourcePaths(namespace string) models.ResourcePaths {
 	return models.ResourcePaths{
 		VMPath:           "apis/kubevirt.io/v1",
@@ -519,6 +457,22 @@ func getDefaultResourcePaths(namespace string) models.ResourcePaths {
 	}
 }
 
+func handleData(clientset *kubernetes.Clientset) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("Data request from %s", r.RemoteAddr)
+		start := time.Now()
+
+		data, err := fetchFullClusterData(clientset)
+		if err != nil {
+			log.Printf("Error: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(data)
+		log.Printf("Data sent in %v", time.Since(start))
+	}
+}
 func main() {
 	log.Println("Starting Harvester Navigator Backend...")
 	kubeconfigPath, source, err := determineKubeconfigPath()
@@ -543,11 +497,8 @@ func main() {
 		log.Printf("✅ Connected to Kubernetes cluster (version: %s)", serverVersion.String())
 	}
 	logStorageBackends(clientset)
-	fs := http.FileServer(http.Dir("."))
-	http.Handle("/", fs)
-	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		handleConnections(w, r, clientset)
-	})
+	http.Handle("/", http.FileServer(http.Dir(".")))
+	http.HandleFunc("/data", handleData(clientset))
 	log.Println("🚀 Backend server started. Open http://localhost:8080 in your browser.")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatalf("Failed to start server: %v", err)

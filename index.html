@@ -11,9 +11,18 @@
 <body class="antialiased">
     <div class="container mx-auto p-3 md:p-6 max-w-7xl">
         <header class="text-center mb-6">
-            <h1 class="text-2xl md:text-3xl font-bold text-slate-100 mb-2">Harvester Troubleshooting via UI</h1>
-            <div id="upgrade-info" class="text-sm text-slate-300 font-medium">
-                <span id="upgrade-status">Loading upgrade information...</span>
+            <div class="flex justify-between items-center mb-4">
+                <div></div> <!-- Spacer -->
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-bold text-slate-100 mb-2">Harvester Troubleshooting via UI</h1>
+                    <div id="upgrade-info" class="text-sm text-slate-300 font-medium">
+                        <span id="upgrade-status">Loading upgrade information...</span>
+                    </div>
+                </div>
+                <button id="refresh-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors text-sm flex items-center gap-2">
+                    <span id="refresh-icon">🔄</span>
+                    <span>Refresh</span>
+                </button>
             </div>
         </header>
 

@@ -7,7 +7,31 @@ class HarvesterDashboardApp {
     init() {
         this.bindEvents();
         this.subscribeToStateChanges();
-        WebSocketManager.connect();
+        // WebSocketManager.connect(); // Removed - using HTTP instead
+        this.startDataFetching();
+    }
+
+    async startDataFetching() {
+        try {
+            const response = await fetch('/data');
+            const data = await response.json();
+            AppState.updateData(data);
+            
+            // Set up automatic refresh every 30 seconds
+            setInterval(async () => {
+                try {
+                    const response = await fetch('/data');
+                    const data = await response.json();
+                    AppState.updateData(data);
+                } catch (error) {
+                    console.error('Auto-refresh failed:', error);
+                }
+            }, 30000);
+            
+        } catch (error) {
+            console.error('Initial data fetch failed:', error);
+            ViewManager.updateUpgradeStatus('error', 'Failed to load data');
+        }
     }
     
     bindEvents() {
@@ -36,8 +60,45 @@ class HarvesterDashboardApp {
                         ViewManager.showDashboard();
                     }
                     break;
+                case 'refresh-btn':
+                    this.handleRefresh();
+                    break;
             }
         });
+    }
+
+    async handleRefresh() {
+        const refreshBtn = document.getElementById('refresh-btn');
+        const refreshIcon = document.getElementById('refresh-icon');
+        
+        if (!refreshBtn || !refreshIcon) return;
+        
+        // Disable button and show spinning animation
+        refreshBtn.disabled = true;
+        refreshBtn.classList.add('opacity-75', 'cursor-not-allowed');
+        refreshIcon.style.animation = 'spin 1s linear infinite';
+        
+        try {
+            await DataFetcher.refresh();
+            // Success feedback
+            refreshIcon.textContent = '✅';
+            setTimeout(() => {
+                refreshIcon.textContent = '🔄';
+                refreshIcon.style.animation = '';
+            }, 1000);
+        } catch (error) {
+            // Error feedback
+            refreshIcon.textContent = '❌';
+            setTimeout(() => {
+                refreshIcon.textContent = '🔄';
+                refreshIcon.style.animation = '';
+            }, 2000);
+            console.error('Manual refresh failed:', error);
+        } finally {
+            // Re-enable button
+            refreshBtn.disabled = false;
+            refreshBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+        }
     }
     
     subscribeToStateChanges() {
