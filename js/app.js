@@ -132,17 +132,17 @@ class HarvesterDashboardApp {
     switch (state.toLowerCase()) {
         case 'succeeded':
             stateColor = 'text-green-400';
-            stateIcon = '✅';
+            stateIcon = '✓';
             break;
         case 'failed':
             stateColor = 'text-red-400';
-            stateIcon = '❌';
+            stateIcon = '✗';
             break;
         case 'upgrading':
         case 'upgradingsystemservices':
         case 'upgradingnodes':
             stateColor = 'text-yellow-400';
-            stateIcon = '🔄';
+            stateIcon = '⟳';
             break;
     }
 
@@ -160,21 +160,22 @@ class HarvesterDashboardApp {
         
         // Generate badges for each status type
         const badges = Object.entries(statusCounts).map(([status, count]) => {
-            let icon = '❓';
+            console.log('Processing status:', status); // Debug log
+            let icon = '?';
             let color = 'text-slate-400';
             
             // Map your node status strings to icons and colors
-            if (status.toLowerCase().includes('preloaded')) {
-                icon = '📦';
+            if (status.toLowerCase().includes('pre-drained')) {
+                icon = '□';
                 color = 'text-blue-400';
-            } else if (status.toLowerCase().includes('upgraded') || status.toLowerCase().includes('complete')) {
-                icon = '✅';
+            } else if (status.toLowerCase().includes('succeeded')) {
+                icon = '✓';
                 color = 'text-green-400';
             } else if (status.toLowerCase().includes('upgrading') || status.toLowerCase().includes('rebooting')) {
-                icon = '🔄';
+                icon = '○';
                 color = 'text-yellow-400';
             } else if (status.toLowerCase().includes('failed') || status.toLowerCase().includes('error')) {
-                icon = '❌';
+                icon = '✗';
                 color = 'text-red-400';
             } else if (status.toLowerCase().includes('preparing')) {
                 icon = '⏳';
@@ -261,24 +262,27 @@ generateNodeDetailsGrid(nodeStatuses) {
             let borderClass = 'border-slate-700/50';
             
             // Map your status strings to visual styling
-            if (status.toLowerCase().includes('preloaded')) {
-                icon = '📦'; color = 'text-blue-400'; 
+            if (status.toLowerCase().includes('pre-drained')) {
+                icon = '□'; color = 'text-blue-400'; 
                 bgClass = 'bg-blue-500/10'; borderClass = 'border-blue-500/30';
-            } else if (status.toLowerCase().includes('upgraded') || status.toLowerCase().includes('complete')) {
-                icon = '✅'; color = 'text-green-400';
+            } else if (status.toLowerCase().includes('succeeded')) {
+                icon = '✓'; color = 'text-green-400';
                 bgClass = 'bg-green-500/10'; borderClass = 'border-green-500/30';
             } else if (status.toLowerCase().includes('upgrading') || status.toLowerCase().includes('rebooting')) {
-                icon = '🔄'; color = 'text-yellow-400';
+                icon = '○'; color = 'text-yellow-400';
                 bgClass = 'bg-yellow-500/10'; borderClass = 'border-yellow-500/30';
             } else if (status.toLowerCase().includes('failed') || status.toLowerCase().includes('error')) {
-                icon = '❌'; color = 'text-red-400';
+                icon = '✗'; color = 'text-red-400';
                 bgClass = 'bg-red-500/10'; borderClass = 'border-red-500/30';
             }
             
             const nodesHtml = nodes.map(nodeName => `
                 <div class="${bgClass} border ${borderClass} px-3 py-2 rounded">
                     <div class="font-mono text-sm text-slate-200">${nodeName}</div>
-                    <div class="text-xs text-slate-400">${status}</div>
+                    <div class="text-xs text-slate-400 flex items-center gap-1">
+                        <span class="${color}">${icon}</span>
+                        ${status}
+                    </div>
                 </div>
             `).join('');
 
