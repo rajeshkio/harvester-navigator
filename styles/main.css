@@ -21,6 +21,11 @@ body {
     to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .compact-row { @apply flex justify-between items-center py-1 text-sm; }
 .section-header { 
     @apply text-base font-bold text-white uppercase tracking-wider mt-4 mb-3 pb-2; 

@@ -1,10 +1,10 @@
 // Application configuration and constants
 const CONFIG = {
-    WEBSOCKET: {
-        PROTOCOL: window.location.protocol === 'https:' ? 'wss:' : 'ws:',
-        PORT: 8080,
-        RECONNECT_DELAY: 3000,
-        ERROR_RETRY_DELAY: 5000
+    API: {
+        ENDPOINT: '/data',
+        REFRESH_INTERVAL: 30000, // 30 seconds
+        RETRY_DELAY: 5000, // 5 seconds
+        MAX_RETRIES: 5
     },
     
     STORAGE_BACKENDS: {
