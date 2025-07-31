@@ -65,17 +65,17 @@ const DetailRenderer = {
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div class="bg-slate-800/30 p-3 rounded-md">
                         <h4 class="section-header">Virtual Machine</h4>
-                        <div class="compact-row"><span class="data-label">Namespace:</span><span class="data-value">${vmData.namespace || 'N/A'}</span></div>
-                        <div class="compact-row"><span class="data-label">Image:</span><span class="data-value">${vmData.imageId || 'N/A'}</span></div>
-                        <div class="compact-row"><span class="data-label">Storage Class:</span><span class="data-value">${vmData.storageClass || 'N/A'}</span></div>
+                        <div class="compact-row"><span class="data-label">Namespace:</span> <span class="data-value">${vmData.namespace || 'N/A'}</span></div>
+                        <div class="compact-row"><span class="data-label">Image:</span> <span class="data-value">${vmData.imageId || 'N/A'}</span></div>
+                        <div class="compact-row"><span class="data-label">Storage Class:</span> <span class="data-value">${vmData.storageClass || 'N/A'}</span></div>
                     </div>
 
                     ${vmData.podInfo && vmData.podInfo.length > 0 ? `
                     <div class="bg-slate-800/30 p-3 rounded-md">
                         <h4 class="section-header">Pod</h4>
-                        <div class="compact-row"><span class="data-label">Name:</span><span class="data-value">${vmData.podName || 'N/A'}</span></div>
-                        <div class="compact-row"><span class="data-label">Node:</span><span class="data-value">${vmData.podInfo[0].nodeId || 'N/A'}</span></div>
-                        <div class="compact-row"><span class="data-label">Status:</span><span class="data-value ${Utils.getStatusColorClass(vmData.podInfo[0].status)}">${vmData.podInfo[0].status || 'N/A'}</span></div>
+                        <div class="compact-row"><span class="data-label">Name:</span> <span class="data-value">${vmData.podName || 'N/A'}</span></div>
+                        <div class="compact-row"><span class="data-label">Node:</span> <span class="data-value">${vmData.podInfo[0].nodeId || 'N/A'}</span></div>
+                        <div class="compact-row"><span class="data-label">Status:</span> <span class="data-value ${Utils.getStatusColorClass(vmData.podInfo[0].status)}">${vmData.podInfo[0].status || 'N/A'}</span></div>
                     </div>
                     ` : ''}
 
@@ -83,9 +83,9 @@ const DetailRenderer = {
 
                     <div class="bg-slate-800/30 p-3 rounded-md">
                         <h4 class="section-header">Storage</h4>
-                        <div class="compact-row"><span class="data-label">PVC:</span><span class="data-value">${vmData.claimNames || 'N/A'}</span></div>
-                        <div class="compact-row"><span class="data-label">Volume:</span><span class="data-value">${vmData.volumeName || 'N/A'}</span></div>
-                        <div class="compact-row"><span class="data-label">Status:</span><span class="data-value ${Utils.getStatusColorClass(vmData.pvcStatus)}">${vmData.pvcStatus || 'N/A'}</span></div>
+                        <div class="compact-row"><span class="data-label">PVC:</span> <span class="data-value">${vmData.claimNames || 'N/A'}</span></div>
+                        <div class="compact-row"><span class="data-label">Volume:</span> <span class="data-value">${vmData.volumeName || 'N/A'}</span></div>
+                        <div class="compact-row"><span class="data-label">Status:</span> <span class="data-value ${Utils.getStatusColorClass(vmData.pvcStatus)}">${vmData.pvcStatus || 'N/A'}</span></div>
                     </div>
                 </div>
 
@@ -202,8 +202,8 @@ const DetailRenderer = {
         let content = `
             <div class="bg-slate-800/30 p-3 rounded-md">
                 <h4 class="section-header">VMI</h4>
-                <div class="compact-row"><span class="data-label">Node:</span><span class="data-value">${vmiInfo.nodeName || 'N/A'}</span></div>
-                <div class="compact-row"><span class="data-label">Phase:</span><span class="data-value ${Utils.getStatusColorClass(vmiInfo.phase)}">${vmiInfo.phase || 'N/A'}</span></div>
+                <div class="compact-row"><span class="data-label">Node:</span> <span class="data-value">${vmiInfo.nodeName || 'N/A'}</span></div>
+                <div class="compact-row"><span class="data-label">Phase:</span> <span class="data-value ${Utils.getStatusColorClass(vmiInfo.phase)}">${vmiInfo.phase || 'N/A'}</span></div>
         `;
 
         if (vmiInfo.guestOSInfo && vmiInfo.guestOSInfo.prettyName) {
