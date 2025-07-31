@@ -162,7 +162,8 @@ class HarvesterDashboardApp {
         const badges = Object.entries(statusCounts).map(([status, count]) => {
             let icon = '';
             let color = 'text-slate-400';
-            
+           
+ 
             // Map your node status strings to icons and colors
             if (status.toLowerCase().includes('preloaded')) {
                 icon = '📦';
