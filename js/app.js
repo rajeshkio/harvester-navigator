@@ -157,10 +157,10 @@ class HarvesterDashboardApp {
         Object.values(nodeStatuses).forEach(status => {
             statusCounts[status] = (statusCounts[status] || 0) + 1;
         });
-        
+
         // Generate badges for each status type
         const badges = Object.entries(statusCounts).map(([status, count]) => {
-            let icon = '❓';
+            let icon = '';
             let color = 'text-slate-400';
             
             // Map your node status strings to icons and colors
@@ -273,6 +273,9 @@ generateNodeDetailsGrid(nodeStatuses) {
             } else if (status.toLowerCase().includes('failed') || status.toLowerCase().includes('error')) {
                 icon = '❌'; color = 'text-red-400';
                 bgClass = 'bg-red-500/10'; borderClass = 'border-red-500/30';
+            } else if (status.toLowerCase().includes('succeeded')) {
+                icon = '✅'; color = 'text-green-400';
+                bgClass = 'bg-green-500/10'; borderClass = 'border-green-500/30';
             }
             
             const nodesHtml = nodes.map(nodeName => `
