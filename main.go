@@ -17,6 +17,7 @@ import (
 	models "github.com/rk280392/harvesterNavigator/internal/models"
 	"github.com/rk280392/harvesterNavigator/internal/services/engine"
 	"github.com/rk280392/harvesterNavigator/internal/services/health"
+	"github.com/rk280392/harvesterNavigator/internal/services/lhva"
 	"github.com/rk280392/harvesterNavigator/internal/services/node"
 	"github.com/rk280392/harvesterNavigator/internal/services/pod"
 	"github.com/rk280392/harvesterNavigator/internal/services/pvc"
@@ -186,6 +187,18 @@ func fetchAndBuildVMInfo(clientset *kubernetes.Clientset, vmData map[string]inte
 	if volumeName == "" {
 		return vmInfo, nil
 	}
+
+	lhvaData, err := lhva.FetchLHVAData(clientset, volumeName, paths.LHVAPath, "longhorn-system", "volumeattachments")
+	if err != nil {
+		fmt.Printf("Could not fetch LHVA: %v \n", err)
+	}
+	fmt.Printf("LHVA name is: %v + %v + %v  \n", lhvaData, volumeName, paths.LHVAPath)
+
+	lhvaStatus, err := lhva.ParseLHVAStatus(lhvaData)
+	if err != nil {
+		fmt.Printf("Could not fetch LHVAstatus: %v \n", err)
+	}
+	fmt.Printf("Attachmentticketstatuses is : %v \n", lhvaStatus)
 
 	podName, err := volume.GetPodFromVolume(clientset, volumeDetails)
 	if err != nil {
@@ -446,6 +459,7 @@ func getDefaultResourcePaths(namespace string) models.ResourcePaths {
 	return models.ResourcePaths{
 		VMPath:           "apis/kubevirt.io/v1",
 		PVCPath:          "/api/v1",
+		LHVAPath:         "/apis/longhorn.io/v1beta2",
 		VolumePath:       "apis/longhorn.io/v1beta2",
 		ReplicaPath:      "apis/longhorn.io/v1beta2",
 		EnginePath:       "apis/longhorn.io/v1beta2",

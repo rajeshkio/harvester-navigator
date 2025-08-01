@@ -27,6 +27,7 @@ type ResourcePaths struct {
 	EnginePath       string
 	VMIPath          string
 	PodPath          string
+	LHVAPath         string
 	VolumeNamespace  string
 	ReplicaNamespace string
 	EngineNamespace  string
@@ -58,18 +59,18 @@ type NodeInfo struct {
 
 // KubernetesNodeInfo holds standard Kubernetes node information
 type KubernetesNodeInfo struct {
-	Name             string                    `json:"name"`
-	Roles            []string                  `json:"roles"`
-	InternalIP       string                    `json:"internalIP"`
-	ExternalIP       string                    `json:"externalIP"`
-	Hostname         string                    `json:"hostname"`
-	Conditions       []NodeCondition           `json:"conditions"`
-	NodeInfo         NodeSystemInfo            `json:"nodeInfo"`
-	Capacity         map[string]string         `json:"capacity"`
-	Allocatable      map[string]string         `json:"allocatable"`
-	VolumesAttached  []VolumeAttachment        `json:"volumesAttached"`
-	VolumesInUse     []string                  `json:"volumesInUse"`
-	Annotations      map[string]string         `json:"annotations"`
+	Name            string             `json:"name"`
+	Roles           []string           `json:"roles"`
+	InternalIP      string             `json:"internalIP"`
+	ExternalIP      string             `json:"externalIP"`
+	Hostname        string             `json:"hostname"`
+	Conditions      []NodeCondition    `json:"conditions"`
+	NodeInfo        NodeSystemInfo     `json:"nodeInfo"`
+	Capacity        map[string]string  `json:"capacity"`
+	Allocatable     map[string]string  `json:"allocatable"`
+	VolumesAttached []VolumeAttachment `json:"volumesAttached"`
+	VolumesInUse    []string           `json:"volumesInUse"`
+	Annotations     map[string]string  `json:"annotations"`
 }
 
 // NodeSystemInfo contains system information about the node
