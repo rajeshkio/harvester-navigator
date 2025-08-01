@@ -109,23 +109,24 @@ type VMError struct {
 
 // VMInfo represents complete information about a Virtual Machine and its related resources.
 type VMInfo struct {
-	Name            string        `json:"name"`
-	Namespace       string        `json:"namespace"`
-	ImageId         string        `json:"imageId"`
-	PodName         string        `json:"podName"`
-	StorageClass    string        `json:"storageClass"`
-	ClaimNames      string        `json:"claimNames"`
-	VolumeName      string        `json:"volumeName"`
-	ReplicaInfo     []ReplicaInfo `json:"replicaInfo"`
-	EngineInfo      []EngineInfo  `json:"engineInfo"`
-	PodInfo         []PodInfo     `json:"podInfo"`
-	VMIInfo         []VMIInfo     `json:"vmiInfo"`
-	VMStatus        VMStatus      `json:"vmStatus"`
-	PVCStatus       PVCStatus     `json:"pvcStatus"`
-	PrintableStatus string        `json:"printableStatus"`
-	VMStatusReason  string        `json:"vmStatusReason"`
-	MissingResource string        `json:"missingResource"`
-	Errors          []VMError     `json:"errors,omitempty"`
+	Name                 string        `json:"name"`
+	Namespace            string        `json:"namespace"`
+	ImageId              string        `json:"imageId"`
+	PodName              string        `json:"podName"`
+	StorageClass         string        `json:"storageClass"`
+	ClaimNames           string        `json:"claimNames"`
+	VolumeName           string        `json:"volumeName"`
+	ReplicaInfo          []ReplicaInfo `json:"replicaInfo"`
+	EngineInfo           []EngineInfo  `json:"engineInfo"`
+	PodInfo              []PodInfo     `json:"podInfo"`
+	VMIInfo              []VMIInfo     `json:"vmiInfo"`
+	VMStatus             VMStatus      `json:"vmStatus"`
+	PVCStatus            PVCStatus     `json:"pvcStatus"`
+	AttachmentTicketsRaw any           `json:"attachmentTicketsRaw,omitempty"`
+	PrintableStatus      string        `json:"printableStatus"`
+	VMStatusReason       string        `json:"vmStatusReason"`
+	MissingResource      string        `json:"missingResource"`
+	Errors               []VMError     `json:"errors,omitempty"`
 }
 
 // VMStatus represents the possible states of a Virtual Machine

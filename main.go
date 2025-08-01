@@ -197,6 +197,8 @@ func fetchAndBuildVMInfo(clientset *kubernetes.Clientset, vmData map[string]inte
 	lhvaStatus, err := lhva.ParseLHVAStatus(lhvaData)
 	if err != nil {
 		fmt.Printf("Could not fetch LHVAstatus: %v \n", err)
+	} else {
+		vmInfo.AttachmentTicketsRaw = lhvaStatus
 	}
 	fmt.Printf("Attachmentticketstatuses is : %v \n", lhvaStatus)
 
