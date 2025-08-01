@@ -478,12 +478,15 @@ func handleData(clientset *kubernetes.Clientset) http.HandlerFunc {
 		log.Printf("Data request from %s", r.RemoteAddr)
 		start := time.Now()
 
-		data, err := fetchFullClusterData(clientset)
+		// Use optimized data fetching
+		dataFetcher := CreateDataFetcher(clientset)
+		data, err := dataFetcher.fetchFullClusterData()
 		if err != nil {
 			log.Printf("Error: %v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(data)
 		log.Printf("Data sent in %v", time.Since(start))

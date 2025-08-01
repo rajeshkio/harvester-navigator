@@ -114,6 +114,11 @@ func getEngineMetadataName(engine map[string]interface{}) (string, bool) {
 
 // createEngineInfo creates an EngineInfo object from engine data
 func createEngineInfo(engine map[string]interface{}, engineName string) types.EngineInfo {
+	return CreateEngineInfoFromMap(engine, engineName)
+}
+
+// CreateEngineInfoFromMap creates an EngineInfo object from engine data (for batch processing)
+func CreateEngineInfoFromMap(engine map[string]interface{}, engineName string) types.EngineInfo {
 	engineInfo := types.EngineInfo{
 		Name: engineName,
 		// Initialize with default values
@@ -144,17 +149,19 @@ func createEngineInfo(engine map[string]interface{}, engineName string) types.En
 		if started, ok := status["started"].(bool); ok {
 			engineInfo.Started = started
 		}
-
-		// Process snapshots if needed
-		// Uncomment and use this if snapshots are needed
-		/*
-			if snapshots, ok := status["snapshots"].(map[string]interface{}); ok {
-				engineInfo.Snapshots = processSnapshots(snapshots)
-			}
-		*/
 	}
 
 	return engineInfo
+}
+
+// ExtractEngineInfoFromMap extracts engine info from a map (convenience function)
+func ExtractEngineInfoFromMap(engine map[string]interface{}) (types.EngineInfo, error) {
+	engineName, ok := getEngineMetadataName(engine)
+	if !ok {
+		return types.EngineInfo{}, fmt.Errorf("could not extract engine name")
+	}
+	
+	return CreateEngineInfoFromMap(engine, engineName), nil
 }
 
 // processSnapshots processes the snapshot data from an engine
