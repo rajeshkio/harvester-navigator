@@ -87,6 +87,11 @@ func findRelatedReplicas(replicaData map[string]interface{}, volumeName string) 
 
 // extractReplicaInfo extracts all required fields from a single replica object.
 func extractReplicaInfo(replica map[string]interface{}) (types.ReplicaInfo, error) {
+	return ExtractReplicaInfoFromMap(replica)
+}
+
+// ExtractReplicaInfoFromMap extracts replica info from a map (for batch processing)
+func ExtractReplicaInfoFromMap(replica map[string]interface{}) (types.ReplicaInfo, error) {
 	info := types.ReplicaInfo{}
 
 	// Extract metadata
