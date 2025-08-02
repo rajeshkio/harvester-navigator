@@ -1,0 +1,61 @@
+name: Go CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.go'  # This ensure all .go files are checked recursively
+      - 'go.mod'
+      - 'go.sum'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+
+jobs:
+  go-lint-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+
+    - name: Install dependencies
+      run: go get .
+
+    - name: Check formatting
+      run: |
+        echo "Checking gofmt..."
+        unformatted=$(gofmt -l .)
+        if [ -n "$unformatted" ]; then
+          echo "❌ The following files are not formatted:"
+          echo "$unformatted"
+          exit 1
+        else
+          echo "✅ gofmt passed"
+        fi
+
+    # Install and run golangci-lint
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v3
+      with:
+        version: latest 
+   
+
+    - name: Build Go code
+      run: go build -v ./...
+
+    - name: Run Go tests
+      run: go test -v ./...
+
+    - name: Run Go program
+      run: |
+        echo "Running Go program..."
+        ./harvesterNavigator || echo "Run failed (optional)"
