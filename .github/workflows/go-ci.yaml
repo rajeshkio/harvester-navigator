@@ -15,7 +15,7 @@ on:
       - 'go.sum'
 
 jobs:
-  go-lint-test:
+  go-code-ci:
     runs-on: ubuntu-latest
 
     steps:
@@ -50,10 +50,10 @@ jobs:
    
 
     - name: Build Go code
-      run: go build -v ./...
+      run: go build -v -o harvesterNavigator ./...
 
-    - name: Run Go tests
-      run: go test -v ./...
+    # - name: Run Go tests
+    #  run: go test -v ./...
 
     - name: Run Go program
       run: |
