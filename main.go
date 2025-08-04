@@ -164,6 +164,8 @@ func handleData(clientset *kubernetes.Clientset) http.HandlerFunc {
 	}
 }
 func main() {
+	var version string
+	fmt.Printf("Version: %v", version)
 	log.Println("Starting Harvester Navigator Backend...")
 	log.Println("Testing CI...")
 	kubeconfigPath, source, err := determineKubeconfigPath()
