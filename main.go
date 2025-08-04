@@ -486,7 +486,7 @@ func handleData(clientset *kubernetes.Clientset) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(data)
 		log.Printf("Data sent in %v", time.Since(start))
@@ -494,6 +494,7 @@ func handleData(clientset *kubernetes.Clientset) http.HandlerFunc {
 }
 func main() {
 	log.Println("Starting Harvester Navigator Backend...")
+	log.Println("Testing CI...")
 	kubeconfigPath, source, err := determineKubeconfigPath()
 	if err != nil {
 		log.Fatalf("Error: %v", err)
