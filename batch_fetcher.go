@@ -11,6 +11,7 @@ import (
 	"github.com/rk280392/harvesterNavigator/internal/services/batch"
 	"github.com/rk280392/harvesterNavigator/internal/services/engine"
 	"github.com/rk280392/harvesterNavigator/internal/services/health"
+	"github.com/rk280392/harvesterNavigator/internal/services/lhva"
 	"github.com/rk280392/harvesterNavigator/internal/services/node"
 	"github.com/rk280392/harvesterNavigator/internal/services/pod"
 	"github.com/rk280392/harvesterNavigator/internal/services/replicas"
@@ -296,6 +297,21 @@ func (df *DataFetcher) processVMWithBatchedData(
 		vmInfo.VolumeName = volDetails.VolumeHandle
 		vmInfo.PVCStatus = models.PVCStatus(volDetails.Status)
 		vmInfo.StorageClass = volDetails.StorageClass
+		if vmInfo.VolumeName != "" {
+			paths := getDefaultResourcePaths(namespace)
+			lhvaData, err := lhva.FetchLHVAData(df.client, vmInfo.VolumeName, paths.LHVAPath, "longhorn-system", "volumeattachments")
+			if err != nil {
+				fmt.Printf("Could not fetch LHVA for volume %s: %v\n", vmInfo.VolumeName, err)
+			} else {
+				lhvaStatus, err := lhva.ParseLHVAStatus(lhvaData)
+				if err != nil {
+					fmt.Printf("Could not parse LHVA status for volume %s: %v\n", vmInfo.VolumeName, err)
+				} else {
+					vmInfo.AttachmentTicketsRaw = lhvaStatus
+					//		fmt.Printf("✅ Attachmentticketstatuses for %s: %v\n", vmInfo.VolumeName, lhvaStatus)
+				}
+			}
+		}
 
 		// Get pod information
 		if podName, exists := podMapping[pvcKey]; exists {

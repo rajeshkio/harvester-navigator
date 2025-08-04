@@ -53,6 +53,5 @@ func ParseLHVAStatus(lhvaData map[string]interface{}) (interface{}, error) {
 	if !ok {
 		return nil, fmt.Errorf("attachmentTicketStatuses field missing in LHVA status")
 	}
-	fmt.Printf("attachmentticketstatuses is: %v \n", attachmentTicketStatusesRaw)
 	return attachmentTicketStatusesRaw, nil
 }
