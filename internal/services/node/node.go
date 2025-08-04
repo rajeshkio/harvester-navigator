@@ -90,7 +90,7 @@ func ParseKubernetesNodeData(nodes []interface{}) (map[string]*models.Kubernetes
 					if addrMap, ok := addr.(map[string]interface{}); ok {
 						addrType := getString(addrMap, "type")
 						address := getString(addrMap, "address")
-						
+
 						switch addrType {
 						case "InternalIP":
 							nodeInfo.InternalIP = address
@@ -224,12 +224,12 @@ func MergeNodeData(longhornNodes []models.NodeInfo, kubernetesNodes map[string]*
 
 		if k8sNode, exists := kubernetesNodes[longhornNode.Name]; exists {
 			nodeWithMetrics.KubernetesNodeInfo = k8sNode
-			
+
 			if podCount, exists := podCounts[longhornNode.Name]; exists {
 				nodeWithMetrics.RunningPods = podCount
 			}
-			
-			log.Printf("Successfully merged node data for %s: roles=%v, IP=%s, pods=%d", 
+
+			log.Printf("Successfully merged node data for %s: roles=%v, IP=%s, pods=%d",
 				longhornNode.Name, k8sNode.Roles, k8sNode.InternalIP, nodeWithMetrics.RunningPods)
 		} else {
 			log.Printf("Warning: No Kubernetes node data found for Longhorn node %s", longhornNode.Name)
@@ -244,10 +244,10 @@ func MergeNodeData(longhornNodes []models.NodeInfo, kubernetesNodes map[string]*
 // GetPrimaryNodeConditions extracts the most important conditions for display
 func GetPrimaryNodeConditions(conditions []models.NodeCondition) map[string]models.NodeCondition {
 	result := make(map[string]models.NodeCondition)
-	
+
 	// Priority conditions to extract
 	priorityConditions := []string{"Ready", "MemoryPressure", "DiskPressure", "PIDPressure", "NetworkUnavailable"}
-	
+
 	for _, condition := range conditions {
 		for _, priority := range priorityConditions {
 			if condition.Type == priority {
@@ -256,7 +256,7 @@ func GetPrimaryNodeConditions(conditions []models.NodeCondition) map[string]mode
 			}
 		}
 	}
-	
+
 	return result
 }
 

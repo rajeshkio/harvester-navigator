@@ -160,7 +160,7 @@ func ExtractEngineInfoFromMap(engine map[string]interface{}) (types.EngineInfo, 
 	if !ok {
 		return types.EngineInfo{}, fmt.Errorf("could not extract engine name")
 	}
-	
+
 	return CreateEngineInfoFromMap(engine, engineName), nil
 }
 

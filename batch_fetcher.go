@@ -175,12 +175,12 @@ func (df *DataFetcher) fetchVMData() ([]models.VMInfo, error) {
 
 	for i, vmData := range vmList {
 		vmInfo := &models.VMInfo{Errors: []models.VMError{}}
-		
+
 		metadata, ok := vmData["metadata"].(map[string]interface{})
 		if !ok {
 			continue
 		}
-		
+
 		namespace, _ := metadata["namespace"].(string)
 		vmName, _ := metadata["name"].(string)
 		vmInfo.Namespace = namespace
@@ -233,9 +233,9 @@ func (df *DataFetcher) fetchVMData() ([]models.VMInfo, error) {
 		wg.Add(1)
 		go func(start, end int) {
 			defer wg.Done()
-			
+
 			batchVMs := make([]models.VMInfo, 0, end-start)
-			
+
 			for j := start; j < end; j++ {
 				vmInfo := df.processVMWithBatchedData(j, vmList[j], vmToPVC, volumeDetails, podMapping)
 				if vmInfo != nil {
@@ -300,7 +300,7 @@ func (df *DataFetcher) processVMWithBatchedData(
 		// Get pod information
 		if podName, exists := podMapping[pvcKey]; exists {
 			vmInfo.PodName = podName
-			
+
 			// Fetch pod details if needed
 			if podName != "" {
 				paths := getDefaultResourcePaths(namespace)

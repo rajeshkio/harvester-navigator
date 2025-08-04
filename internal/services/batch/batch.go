@@ -20,9 +20,9 @@ type BatchFetcher struct {
 
 // APICache stores frequently accessed API responses
 type APICache struct {
-	data       map[string]CacheEntry
-	mutex      sync.RWMutex
-	ttl        time.Duration
+	data  map[string]CacheEntry
+	mutex sync.RWMutex
+	ttl   time.Duration
 }
 
 // CacheEntry represents a cached API response
@@ -70,21 +70,21 @@ func (bf *BatchFetcher) ExecuteBatch(requests []BatchRequest, maxConcurrency int
 	}
 
 	responses := make([]BatchResponse, len(requests))
-	
+
 	// Use buffered channel as a semaphore for controlling concurrency
 	semaphore := make(chan struct{}, maxConcurrency)
 	var wg sync.WaitGroup
 
 	for i, req := range requests {
 		wg.Add(1)
-		
+
 		go func(index int, request BatchRequest) {
 			defer wg.Done()
-			
+
 			// Acquire semaphore
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
-			
+
 			// Check cache first
 			if cachedData := bf.cache.Get(request.ID); cachedData != nil {
 				responses[index] = BatchResponse{
@@ -116,13 +116,13 @@ func (bf *BatchFetcher) ExecuteBatch(requests []BatchRequest, maxConcurrency int
 // executeRequest executes a single API request
 func (bf *BatchFetcher) executeRequest(req BatchRequest) (map[string]interface{}, error) {
 	var restClient = bf.client.RESTClient().Get().AbsPath(req.AbsPath)
-	
+
 	if req.Namespace != "" {
 		restClient = restClient.Namespace(req.Namespace)
 	}
-	
+
 	restClient = restClient.Resource(req.Resource)
-	
+
 	if req.Name != "" {
 		restClient = restClient.Name(req.Name)
 	}
@@ -188,7 +188,7 @@ func (c *APICache) Size() int {
 // BatchFetchLonghornResources fetches all Longhorn resources in batch
 func (bf *BatchFetcher) BatchFetchLonghornResources() (map[string]map[string]interface{}, error) {
 	log.Println("Batch fetching Longhorn resources...")
-	
+
 	requests := []BatchRequest{
 		{
 			ID:        "volumes",
@@ -217,7 +217,7 @@ func (bf *BatchFetcher) BatchFetchLonghornResources() (map[string]map[string]int
 	}
 
 	responses := bf.ExecuteBatch(requests, 4) // Use 4 concurrent requests
-	
+
 	result := make(map[string]map[string]interface{})
 	for _, resp := range responses {
 		if resp.Error != nil {
@@ -234,7 +234,7 @@ func (bf *BatchFetcher) BatchFetchLonghornResources() (map[string]map[string]int
 // BatchFetchPVCs fetches multiple PVCs in batch
 func (bf *BatchFetcher) BatchFetchPVCs(pvcList []PVCRequest) map[string]map[string]interface{} {
 	requests := make([]BatchRequest, len(pvcList))
-	
+
 	for i, pvc := range pvcList {
 		requests[i] = BatchRequest{
 			ID:        fmt.Sprintf("pvc-%s-%s", pvc.Namespace, pvc.Name),
@@ -246,7 +246,7 @@ func (bf *BatchFetcher) BatchFetchPVCs(pvcList []PVCRequest) map[string]map[stri
 	}
 
 	responses := bf.ExecuteBatch(requests, 10) // Higher concurrency for PVCs
-	
+
 	result := make(map[string]map[string]interface{})
 	for _, resp := range responses {
 		if resp.Error != nil {
@@ -268,7 +268,7 @@ type PVCRequest struct {
 // BatchFetchPVs fetches multiple Persistent Volumes in batch
 func (bf *BatchFetcher) BatchFetchPVs(pvNames []string) map[string]map[string]interface{} {
 	requests := make([]BatchRequest, len(pvNames))
-	
+
 	for i, pvName := range pvNames {
 		requests[i] = BatchRequest{
 			ID:       fmt.Sprintf("pv-%s", pvName),
@@ -279,7 +279,7 @@ func (bf *BatchFetcher) BatchFetchPVs(pvNames []string) map[string]map[string]in
 	}
 
 	responses := bf.ExecuteBatch(requests, 10)
-	
+
 	result := make(map[string]map[string]interface{})
 	for _, resp := range responses {
 		if resp.Error != nil {
