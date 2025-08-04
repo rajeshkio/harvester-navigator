@@ -250,22 +250,13 @@ func getPodFromLonghornBackend(backendDetails map[string]interface{}) (string, e
 	if backendDetails == nil {
 		return "", fmt.Errorf("backend details are nil")
 	}
-	
+
 	// Try to extract pod name from Longhorn volume annotations or labels
 	if podName, exists := backendDetails["attachedTo"]; exists {
 		if podStr, ok := podName.(string); ok && podStr != "" {
 			return podStr, nil
 		}
 	}
-	
-	return "", fmt.Errorf("no pod information found in backend details")
-}
 
-// Helper function to get driver names for logging
-func getDriverNames(backends []StorageBackendInfo) []string {
-	names := make([]string, len(backends))
-	for i, backend := range backends {
-		names[i] = backend.CSIDriver
-	}
-	return names
+	return "", fmt.Errorf("no pod information found in backend details")
 }

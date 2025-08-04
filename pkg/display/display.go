@@ -2,6 +2,7 @@ package display
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -9,6 +10,19 @@ import (
 
 	types "github.com/rk280392/harvesterNavigator/internal/models"
 )
+
+// Helper functions for safe printing with error handling
+func safePrint(w *tabwriter.Writer, format string, args ...interface{}) {
+	if _, err := fmt.Fprintf(w, format, args...); err != nil {
+		log.Printf("Display error: %v", err)
+	}
+}
+
+func safePrintln(w *tabwriter.Writer, text string) {
+	if _, err := fmt.Fprintln(w, text); err != nil {
+		log.Printf("Display error: %v", err)
+	}
+}
 
 func DisplayVMInfo(info *types.VMInfo) {
 	// Create a tabwriter for consistent alignment
@@ -19,7 +33,13 @@ func DisplayVMInfo(info *types.VMInfo) {
 	displayPodInfo(w, info)
 	displayVMIInfo(w, info)
 	displayStorageInfo(w, info)
-	w.Flush()
+	if err := w.Flush(); err != nil {
+		log.Printf("Failed to flush writer: %v", err)
+	}
+
+	if _, err := fmt.Fprintln(w, strings.Repeat("=", 80)); err != nil {
+		log.Printf("Failed to write separator: %v", err)
+	}
 
 	displayEngineInfo(w, info)
 	displayReplicaInfo(info)
@@ -29,31 +49,37 @@ func DisplayVMInfo(info *types.VMInfo) {
 }
 
 func displayHeader(w *tabwriter.Writer, info *types.VMInfo) {
-	fmt.Fprintln(w, strings.Repeat("=", 80))
-	fmt.Fprintf(w, "VIRTUAL MACHINE DETAILS: %s\n", info.Name)
-	fmt.Fprintln(w, strings.Repeat("=", 80))
+	if _, err := fmt.Fprintln(w, strings.Repeat("=", 80)); err != nil {
+		log.Printf("Failed to write separator: %v", err)
+	}
+	if _, err := fmt.Fprintf(w, "VIRTUAL MACHINE DETAILS: %s\n", info.Name); err != nil {
+		log.Printf("Failed to write VM details: %v", err)
+	}
+	if _, err := fmt.Fprintln(w, strings.Repeat("=", 80)); err != nil {
+		log.Printf("Failed to write separator: %v", err)
+	}
 }
 
 func displayVMInfo(w *tabwriter.Writer, info *types.VMInfo) {
 	// VM details section
-	fmt.Fprintln(w, "\nVIRTUAL MACHINE INFO:")
-	fmt.Fprintln(w, "------------------------")
-	fmt.Fprintf(w, "Name:\t%s\n", info.Name)
-	fmt.Fprintf(w, "Image ID:\t%s\n", info.ImageId)
-	fmt.Fprintf(w, "Storage Class:\t%s\n", info.StorageClass)
-	fmt.Fprintf(w, "Status:\t%s\n", formatVMStatus(string(info.VMStatus)))
-	fmt.Fprintf(w, "Status Reason:\t%s\n", formatVMStatusReason(info.VMStatusReason))
-	fmt.Fprintf(w, "Printable Status:\t%s\n", formatPrintableStatus(info.PrintableStatus))
+	safePrintln(w, "\nVIRTUAL MACHINE INFO:")
+	safePrintln(w, "------------------------")
+	safePrint(w, "Name:\t%s\n", info.Name)
+	safePrint(w, "Image ID:\t%s\n", info.ImageId)
+	safePrint(w, "Storage Class:\t%s\n", info.StorageClass)
+	safePrint(w, "Status:\t%s\n", formatVMStatus(string(info.VMStatus)))
+	safePrint(w, "Status Reason:\t%s\n", formatVMStatusReason(info.VMStatusReason))
+	safePrint(w, "Printable Status:\t%s\n", formatPrintableStatus(info.PrintableStatus))
 }
 
 func displayVMIInfo(w *tabwriter.Writer, info *types.VMInfo) {
 	if len(info.VMIInfo) > 0 {
-		fmt.Fprintf(w, "\nVMI INFORMATION:\n")
-		fmt.Fprintln(w, "------------------------")
+		safePrint(w, "\nVMI INFORMATION:\n")
+		safePrintln(w, "------------------------")
 		for _, vmi := range info.VMIInfo {
-			fmt.Fprintf(w, "VMIName:\t%s\n", vmi.Name)
-			fmt.Fprintf(w, "NodeName:\t%s\n", vmi.NodeName)
-			fmt.Fprintf(w, "Phase:\t%s\n", formatPrintableStatus(vmi.Phase))
+			safePrint(w, "VMIName:\t%s\n", vmi.Name)
+			safePrint(w, "NodeName:\t%s\n", vmi.NodeName)
+			safePrint(w, "Phase:\t%s\n", formatPrintableStatus(vmi.Phase))
 
 			displayVMIActivePodsInfo(w, vmi)
 			displayGuestOSInfo(w, vmi)
@@ -67,58 +93,57 @@ func displayVMIActivePodsInfo(w *tabwriter.Writer, vmi types.VMIInfo) {
 	}
 
 	for podUID, nodeName := range vmi.ActivePods {
-		fmt.Fprintf(w, "POD UUID:\t%s\n", podUID)
-		fmt.Fprintf(w, "Node Name:\t%s\n", nodeName)
+		safePrint(w, "POD UUID:\t%s\n", podUID)
+		safePrint(w, "Node Name:\t%s\n", nodeName)
 	}
 }
 
 func displayGuestOSInfo(w *tabwriter.Writer, vmi types.VMIInfo) {
 	if vmi.GuestOSInfo.Name != "" {
 		if vmi.GuestOSInfo.PrettyName != "" {
-			fmt.Fprintf(w, "Guest OS:\t%s\n", vmi.GuestOSInfo.PrettyName)
+			safePrint(w, "Guest OS:\t%s\n", vmi.GuestOSInfo.PrettyName)
 		} else {
-			fmt.Fprintf(w, "Guest OS:\t%s \t%s\n", vmi.GuestOSInfo.Name, vmi.GuestOSInfo.Version)
+			safePrint(w, "Guest OS:\t%s \t%s\n", vmi.GuestOSInfo.Name, vmi.GuestOSInfo.Version)
 		}
 	}
 }
 func displayInterfaceInfo(w *tabwriter.Writer, vmi types.VMIInfo) {
 	if len(vmi.Interfaces) == 0 {
-		fmt.Fprintf(w, "  No interfaces found\n")
+		safePrint(w, "  No interfaces found\n")
 		return
 	}
 	for _, iface := range vmi.Interfaces {
 		// Only display interfaces with both MAC and IP (or just IP if that's acceptable)
 		if iface.Mac != "" { // Check for MAC if required
-			fmt.Fprintf(w, "  MAC Address: %s\n", iface.Mac)
-			fmt.Fprintf(w, "  IP Address:  %s\n", iface.IpAddress)
-			fmt.Fprintln(w) // Add a blank line between interfaces
+			safePrint(w, "  MAC Address: %s\n", iface.Mac)
+			safePrint(w, "  IP Address:  %s\n", iface.IpAddress)
+			safePrintln(w, "") // Add a blank line between interfaces
 		} else if iface.IpAddress != "" && iface.IpAddress != "127.0.0.1" {
 			// Only print IP addresses without MAC if they're not localhost
-			fmt.Fprintf(w, "  IP Address:  %s\n", iface.IpAddress)
-			fmt.Fprintln(w) // Add a blank line
+			safePrint(w, "  IP Address:  %s\n", iface.IpAddress)
+			safePrintln(w, "") // Add a blank line
 		}
 	}
 }
 
 func displayPodInfo(w *tabwriter.Writer, info *types.VMInfo) {
 	if len(info.PodInfo) > 0 {
-		fmt.Fprintf(w, "\nPOD INFORMATION:\n")
-		fmt.Fprintln(w, "------------------------")
+		safePrint(w, "\nPOD INFORMATION:\n")
+		safePrintln(w, "------------------------")
 
 		for _, pod := range info.PodInfo {
-			fmt.Fprintf(w, "Pod Name:\t%s\n", info.PodName)
-
-			fmt.Fprintf(w, "Node Name:\t%s\n", pod.NodeID)
-			fmt.Fprintf(w, "Pod State:\t%s\n", formatPrintableStatus(pod.Status))
+			safePrint(w, "Pod Name:\t%s\n", info.PodName)
+			safePrint(w, "Node Name:\t%s\n", pod.NodeID)
+			safePrint(w, "Pod State:\t%s\n", formatPrintableStatus(pod.Status))
 		}
 	}
 }
 func displayStorageInfo(w *tabwriter.Writer, info *types.VMInfo) {
-	fmt.Fprintln(w, "\nSTORAGE INFO:")
-	fmt.Fprintln(w, "-------------")
-	fmt.Fprintf(w, "PVC Claim Names:\t%s\n", info.ClaimNames)
-	fmt.Fprintf(w, "Volume Name:\t%s\n", info.VolumeName)
-	fmt.Fprintf(w, "PVC Status:\t%s\n", formatPVCStatus(string(info.PVCStatus)))
+	safePrintln(w, "\nSTORAGE INFO:")
+	safePrintln(w, "-------------")
+	safePrint(w, "PVC Claim Names:\t%s\n", info.ClaimNames)
+	safePrint(w, "Volume Name:\t%s\n", info.VolumeName)
+	safePrint(w, "PVC Status:\t%s\n", formatPVCStatus(string(info.PVCStatus)))
 }
 func displayEngineInfo(w *tabwriter.Writer, info *types.VMInfo) {
 	if len(info.EngineInfo) == 0 {
@@ -130,11 +155,11 @@ func displayEngineInfo(w *tabwriter.Writer, info *types.VMInfo) {
 		if i > 0 {
 			fmt.Println("\n--- Engine", i+1, "---")
 		}
-		fmt.Fprintf(w, "Name:\t%s\n", engine.Name)
-		fmt.Fprintf(w, "Node ID:\t%s\n", engine.NodeID)
-		fmt.Fprintf(w, "Current State:\t%s\n", formatState(engine.CurrentState))
-		fmt.Fprintf(w, "Active:\t%s\n", formatBool(engine.Active))
-		fmt.Fprintf(w, "Started:\t%s\n", formatBool(engine.Started))
+		safePrint(w, "Name:\t%s\n", engine.Name)
+		safePrint(w, "Node ID:\t%s\n", engine.NodeID)
+		safePrint(w, "Current State:\t%s\n", formatState(engine.CurrentState))
+		safePrint(w, "Active:\t%s\n", formatBool(engine.Active))
+		safePrint(w, "Started:\t%s\n", formatBool(engine.Started))
 	}
 }
 

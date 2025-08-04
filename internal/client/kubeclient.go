@@ -28,7 +28,7 @@ func createKubeConfig(kubeconfig string) (*rest.Config, error) {
 		// Increase rate limits to handle burst requests
 		config.QPS = 50    // Default is 5
 		config.Burst = 100 // Default is 10
-		
+
 		// Set reasonable timeouts
 		config.Timeout = 30 * time.Second
 	}

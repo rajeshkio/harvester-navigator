@@ -37,11 +37,11 @@ func (vs *VolumeService) BatchFetchVolumeDetails(pvcRequests []batch.PVCRequest)
 
 	// Step 2: Batch fetch all PVCs
 	pvcData := vs.batchFetcher.BatchFetchPVCs(pvcRequests)
-	
+
 	// Step 3: Extract PV names from PVCs
 	pvNames := make([]string, 0, len(pvcRequests))
 	pvcToPV := make(map[string]string)
-	
+
 	for _, req := range pvcRequests {
 		pvcKey := fmt.Sprintf("pvc-%s-%s", req.Namespace, req.Name)
 		if data, exists := pvcData[pvcKey]; exists {
@@ -64,10 +64,10 @@ func (vs *VolumeService) BatchFetchVolumeDetails(pvcRequests []batch.PVCRequest)
 		wg.Add(1)
 		go func(pvcReq batch.PVCRequest) {
 			defer wg.Done()
-			
+
 			pvcKey := fmt.Sprintf("pvc-%s-%s", pvcReq.Namespace, pvcReq.Name)
 			pvName, hasPV := pvcToPV[pvcKey]
-			
+
 			if !hasPV {
 				// PVC not bound or missing
 				resultMutex.Lock()
@@ -83,7 +83,7 @@ func (vs *VolumeService) BatchFetchVolumeDetails(pvcRequests []batch.PVCRequest)
 			pvKey := fmt.Sprintf("pv-%s", pvName)
 			pvDataMap, hasPVData := pvData[pvKey]
 			pvcDataMap, hasPVCData := pvcData[pvcKey]
-			
+
 			if !hasPVData || !hasPVCData {
 				log.Printf("Warning: Missing data for PVC %s or PV %s", pvcKey, pvName)
 				return
@@ -108,7 +108,7 @@ func (vs *VolumeService) BatchFetchVolumeDetails(pvcRequests []batch.PVCRequest)
 
 			// Determine if this is Longhorn and add backend details
 			volumeDetails.IsLonghornCSI = (volumeDetails.CSIDriver == "driver.longhorn.io")
-			
+
 			if volumeDetails.IsLonghornCSI && volumeDetails.VolumeHandle != "" {
 				if backendDetails := vs.getLonghornVolumeDetails(volumeDetails.VolumeHandle); backendDetails != nil {
 					volumeDetails.BackendDetails = backendDetails
