@@ -7,6 +7,12 @@ on:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
+  
+  push:
+    branches: [main]
+    tags:
+      - 'v*.*'
+      - 'v*.*.*'
 
 jobs:
   go-code-ci:
@@ -46,10 +52,58 @@ jobs:
     - name: Build Go code
       run: go build -v -o harvesterNavigator .
 
-    # - name: Run Go tests
-    #  run: go test -v ./...
+#   - name: Run Go tests
+#     run: go test -v ./...
 
-    - name: Run Go program
+#    - name: Run Go program
+#      run: |
+#        echo "Running Go program..."
+#        ./harvesterNavigator || echo "Run failed (optional)"
+
+  go-release:
+    name: Go Release
+    runs-on: ubuntu-latest
+    # This job only runs when a new tag is pushed.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [go-code-ci] # This ensures the release job only starts after CI checks pass on the PR that created the tag
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+    
+    - name: Get the version from the tag
+      # The github.ref_name variable contains the tag name (e.g., 'v1.1').
+      # This step extracts the name without the 'v'.
+      id: get_version
+      run: echo "VERSION=$(echo ${GITHUB_REF#refs/tags/})" >> $GITHUB_OUTPUT
+      
+    - name: Build Go binary with version
+      # The -ldflags flag injects the version into the binary.
+      # You must have a variable named `version` in your Go code for this to work.
+      # For example: `var version string`
       run: |
-        echo "Running Go program..."
-        ./harvesterNavigator || echo "Run failed (optional)"
+        echo "Building harvesterNavigator with version: ${{ steps.get_version.outputs.VERSION }}"
+        go build -o harvesterNavigator -ldflags "-X 'main.version=${{ steps.get_version.outputs.VERSION }}'" .
+
+    - name: Create GitHub Release
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      with:
+        # The tag name becomes the release tag.
+        tag_name: ${{ steps.get_version.outputs.VERSION }}
+        # The `name` input is what will be displayed as the release title on GitHub.
+        # You can customize this title. For example: "Harvester Navigator v1.1"
+        name: HarvesterNavigator-${{ steps.get_version.outputs.VERSION }}
+        # The name of the binary to upload as a release asset.
+        files: harvesterNavigator
+        # The prerelease flag can be set to true if your version tag indicates a prerelease.
+        prerelease: false
+      env:
+        # This token is automatically provided by GitHub Actions.
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
