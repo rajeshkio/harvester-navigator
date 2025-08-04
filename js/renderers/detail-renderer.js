@@ -89,6 +89,7 @@ const DetailRenderer = {
                     </div>
                 </div>
 
+                ${vmData.attachmentTicketsRaw ? this.createVolumeAttachmentSection(vmData.attachmentTicketsRaw) : ''}
                 ${vmData.volumeName && vmData.replicaInfo && vmData.replicaInfo.length > 0 ? this.createCompactReplicaSection(vmData.replicaInfo) : ''}
             </div>
         `;
@@ -853,5 +854,69 @@ const DetailRenderer = {
                 </div>
             </div>
         `;
+    },
+    createVolumeAttachmentSection(rawTickets) {
+        if (!rawTickets || typeof rawTickets !== 'object') return '';
+        
+        const ticketCards = Object.entries(rawTickets).map(([ticketId, ticketData]) => {
+            const satisfied = ticketData.satisfied || false;
+            const statusColor = satisfied ? 'text-green-400' : 'text-red-400';
+            const statusIcon = satisfied ? '✅' : '❌';
+            
+            // Handle conditions array
+            let conditionsHtml = '';
+            if (ticketData.conditions && Array.isArray(ticketData.conditions)) {
+                conditionsHtml = ticketData.conditions.map(cond => {
+                    const timeAgo = this.getTimeAgo(cond.lastTransitionTime);
+                    return `
+                        <div class="text-xs text-slate-400">
+                            ${cond.type}: <span class="${cond.status === 'True' ? 'text-green-400' : 'text-red-400'}">${cond.status}</span>
+                            <span class="text-slate-500">(${timeAgo})</span>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            return `
+                <div class="${satisfied ? 'bg-green-900/20 border-green-500/30' : 'bg-red-900/20 border-red-500/30'} border p-3 rounded-md">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-slate-200 font-medium text-sm">${statusIcon} Attachment</span>
+                        <span class="${statusColor} text-xs font-medium">${satisfied ? 'SATISFIED' : 'PENDING'}</span>
+                    </div>
+                    <div class="text-xs text-slate-400 mb-1">
+                        ID: <span class="font-mono">${ticketId.substring(0, 20)}...</span>
+                    </div>
+                    ${conditionsHtml}
+                </div>
+            `;
+        }).join('');
+        
+        return `
+            <div class="mb-4">
+                <h4 class="text-base font-bold text-slate-200 mb-3 flex items-center gap-2">
+                    <span>🔗</span>
+                    Volume Attachment Status
+                </h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    ${ticketCards}
+                </div>
+            </div>
+        `;
+    },
+
+    getTimeAgo(timeString) {
+        if (!timeString) return 'unknown';
+        
+        const time = new Date(timeString);
+        const now = new Date();
+        const diffMs = now - time;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+        
+        if (diffMins < 1) return 'just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        return `${diffDays}d ago`;
     }
 };
