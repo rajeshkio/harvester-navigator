@@ -165,7 +165,7 @@ func handleData(clientset *kubernetes.Clientset) http.HandlerFunc {
 }
 func main() {
 	log.Println("Starting Harvester Navigator Backend...")
-	log.Println("Testing CI...")
+	log.Println("Testing CI-2...")
 	kubeconfigPath, source, err := determineKubeconfigPath()
 	if err != nil {
 		log.Fatalf("Error: %v", err)
