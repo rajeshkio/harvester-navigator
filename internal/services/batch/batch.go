@@ -15,7 +15,6 @@ import (
 type BatchFetcher struct {
 	client *kubernetes.Clientset
 	cache  *APICache
-	mutex  sync.RWMutex
 }
 
 // APICache stores frequently accessed API responses

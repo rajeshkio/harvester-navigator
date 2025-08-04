@@ -260,12 +260,3 @@ func getPodFromLonghornBackend(backendDetails map[string]interface{}) (string, e
 
 	return "", fmt.Errorf("no pod information found in backend details")
 }
-
-// Helper function to get driver names for logging
-func getDriverNames(backends []StorageBackendInfo) []string {
-	names := make([]string, len(backends))
-	for i, backend := range backends {
-		names[i] = backend.CSIDriver
-	}
-	return names
-}

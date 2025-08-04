@@ -31,6 +31,7 @@ type ResourcePaths struct {
 	VolumeNamespace  string
 	ReplicaNamespace string
 	EngineNamespace  string
+	Namespace        string
 }
 type NodeCondition struct {
 	Type               string `json:"type"`
