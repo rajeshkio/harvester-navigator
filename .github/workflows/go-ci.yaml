@@ -1,12 +1,6 @@
 name: Go CI
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '**.go'  # This ensure all .go files are checked recursively
-      - 'go.mod'
-      - 'go.sum'
   pull_request:
     branches: [main]
     paths:
@@ -50,7 +44,7 @@ jobs:
    
 
     - name: Build Go code
-      run: go build -v -o harvesterNavigator ./...
+      run: go build -v -o harvesterNavigator .
 
     # - name: Run Go tests
     #  run: go test -v ./...
