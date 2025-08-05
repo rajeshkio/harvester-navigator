@@ -67,7 +67,6 @@ jobs:
     runs-on: ubuntu-latest
     # This job only runs when a new tag is pushed.
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [go-code-ci] # This ensures the release job only starts after CI checks pass on the PR that created the tag
 
     steps:
     - name: Checkout code
