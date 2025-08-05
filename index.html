@@ -26,6 +26,27 @@
             </div>
         </header>
 
+        <!-- Search Bar Section -->
+        <div class="card p-4 mb-6 fade-in">
+            <div class="flex items-center gap-4">
+                <div class="flex-1">
+                    <div class="relative">
+                        <input 
+                            type="text" 
+                            id="universal-search"
+                            placeholder="🔍 Search VM name, PVC name, or Volume handle..."
+                            class="w-full p-3 bg-slate-700/50 border border-slate-600 text-white placeholder-slate-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                        />
+                        <div id="search-results" class="absolute top-full left-0 right-0 z-10 mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg hidden max-h-60 overflow-y-auto"></div>
+                    </div>
+                </div>
+                <button id="clear-search" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-3 rounded-lg transition-colors text-sm hidden">
+                    Clear
+                </button>
+            </div>
+            <div id="search-status" class="mt-2 text-sm text-slate-400 hidden"></div>
+        </div>
+
         <main id="dashboard" class="space-y-6">
             <div id="issues-overview" class="card p-4 fade-in hidden">
                 <div class="flex justify-between items-center mb-4">
@@ -107,6 +128,7 @@
     <script src="js/renderers/vm-renderer.js"></script>
     <script src="js/renderers/issue-renderer.js"></script>
     <script src="js/renderers/detail-renderer.js"></script>
+    <script src="js/search.js"></script>
     <script src="js/view-manager.js"></script>
     <script src="js/app.js"></script>
 </body>
