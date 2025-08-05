@@ -167,7 +167,7 @@ func main() {
 	var version string
 	fmt.Printf("Version: %v", version)
 	log.Println("Starting Harvester Navigator Backend...")
-	log.Println("Testing CI...")
+	log.Println("Testing CI Dev...")
 	kubeconfigPath, source, err := determineKubeconfigPath()
 	if err != nil {
 		log.Fatalf("Error: %v", err)
