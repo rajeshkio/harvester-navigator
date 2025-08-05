@@ -1,6 +1,7 @@
 name: Go CI
 
 on:
+  # This part of the workflow runs on every pull request for quality checks.
   pull_request:
     branches: [main]
     paths:
@@ -8,6 +9,8 @@ on:
       - 'go.mod'
       - 'go.sum'
   
+  # This new section triggers a release when a new version tag is pushed
+  # to the main branch.
   push:
     branches: [main]
     tags:
@@ -16,7 +19,10 @@ on:
 
 jobs:
   go-code-ci:
+    name: Go CI Checks
     runs-on: ubuntu-latest
+    # This job now only runs on pull requests, ensuring it doesn't run on pushes with tags.
+    if: github.event_name == 'pull_request'
 
     steps:
     - name: Checkout code
@@ -46,19 +52,11 @@ jobs:
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v5
       with:
-        version: latest 
-   
-
+        version: latest
+        args: --timeout=5m
+    
     - name: Build Go code
       run: go build -v -o harvesterNavigator .
-
-#   - name: Run Go tests
-#     run: go test -v ./...
-
-#    - name: Run Go program
-#      run: |
-#        echo "Running Go program..."
-#        ./harvesterNavigator || echo "Run failed (optional)"
 
   go-release:
     name: Go Release
@@ -97,7 +95,7 @@ jobs:
         # The tag name becomes the release tag.
         tag_name: ${{ steps.get_version.outputs.VERSION }}
         # The `name` input is what will be displayed as the release title on GitHub.
-        # You can customize this title. For example: "Harvester Navigator v1.1"
+        # You can customize this title. For example: "HarvesterNavigator v1.1"
         name: HarvesterNavigator-${{ steps.get_version.outputs.VERSION }}
         # The name of the binary to upload as a release asset.
         files: harvesterNavigator
