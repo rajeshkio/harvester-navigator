@@ -17,6 +17,7 @@ on:
 jobs:
   go-code-ci:
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
 
     steps:
     - name: Checkout code
@@ -47,6 +48,7 @@ jobs:
       uses: golangci/golangci-lint-action@v5
       with:
         version: latest 
+        args: --timeout=5m
    
 
     - name: Build Go code
