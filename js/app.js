@@ -160,27 +160,30 @@ class HarvesterDashboardApp {
         
         // Generate badges for each status type
         const badges = Object.entries(statusCounts).map(([status, count]) => {
-            console.log('Processing status:', status); // Debug log
+            console.log('Processing top status:', status); // Debug log
             let icon = '?';
             let color = 'text-slate-400';
             
-            // Map your node status strings to icons and colors
-            if (status.toLowerCase().includes('pre-drained')) {
-                icon = '□';
-                color = 'text-blue-400';
-            } else if (status.toLowerCase().includes('succeeded')) {
+            // Map your node status strings to icons and colors (same as detailed view)
+            const lowerStatus = status.toLowerCase();
+            if (lowerStatus.includes('pre-drain')) {
+                icon = '⏳';
+                color = 'text-orange-400';
+            } else if (lowerStatus.includes('succeeded')) {
                 icon = '✓';
                 color = 'text-green-400';
-            } else if (status.toLowerCase().includes('upgrading') || status.toLowerCase().includes('rebooting')) {
+            } else if (lowerStatus.includes('images preloaded')) {
+                icon = '📦';
+                color = 'text-blue-400';
+            } else if (lowerStatus.includes('upgrading') || lowerStatus.includes('rebooting')) {
                 icon = '○';
                 color = 'text-yellow-400';
-            } else if (status.toLowerCase().includes('failed') || status.toLowerCase().includes('error')) {
+            } else if (lowerStatus.includes('failed') || lowerStatus.includes('error')) {
                 icon = '✗';
                 color = 'text-red-400';
-            } else if (status.toLowerCase().includes('preparing')) {
-                icon = '⏳';
-                color = 'text-yellow-400';
             }
+            
+            console.log('Top icon for', status, ':', icon); // Debug log
             
             return `<span class="inline-flex items-center gap-1 px-2 py-1 bg-slate-800/50 rounded-full text-xs">
                       <span class="${color}">${icon}</span>
@@ -262,19 +265,27 @@ generateNodeDetailsGrid(nodeStatuses) {
             let borderClass = 'border-slate-700/50';
             
             // Map your status strings to visual styling
-            if (status.toLowerCase().includes('pre-drained')) {
-                icon = '□'; color = 'text-blue-400'; 
-                bgClass = 'bg-blue-500/10'; borderClass = 'border-blue-500/30';
-            } else if (status.toLowerCase().includes('succeeded')) {
-                icon = '✓'; color = 'text-green-400';
+            const lowerStatus = status.toLowerCase();
+            console.log('Status mapping:', status, '→', lowerStatus); // Debug log
+            
+            if (lowerStatus.includes('pre-drain')) {
+                icon = '⏳'; color = 'text-orange-400'; 
+                bgClass = 'bg-orange-500/10'; borderClass = 'border-orange-500/30';
+            } else if (lowerStatus.includes('succeeded')) {
+                icon = '✅'; color = 'text-green-400';
                 bgClass = 'bg-green-500/10'; borderClass = 'border-green-500/30';
-            } else if (status.toLowerCase().includes('upgrading') || status.toLowerCase().includes('rebooting')) {
-                icon = '○'; color = 'text-yellow-400';
+            } else if (lowerStatus.includes('images preloaded')) {
+                icon = '📦'; color = 'text-blue-400';
+                bgClass = 'bg-blue-500/10'; borderClass = 'border-blue-500/30';
+            } else if (lowerStatus.includes('upgrading') || lowerStatus.includes('rebooting')) {
+                icon = '🔄'; color = 'text-yellow-400';
                 bgClass = 'bg-yellow-500/10'; borderClass = 'border-yellow-500/30';
-            } else if (status.toLowerCase().includes('failed') || status.toLowerCase().includes('error')) {
-                icon = '✗'; color = 'text-red-400';
+            } else if (lowerStatus.includes('failed') || lowerStatus.includes('error')) {
+                icon = '❌'; color = 'text-red-400';
                 bgClass = 'bg-red-500/10'; borderClass = 'border-red-500/30';
             }
+            
+            console.log('Final icon for', status, ':', icon); // Debug log
             
             const nodesHtml = nodes.map(nodeName => `
                 <div class="${bgClass} border ${borderClass} px-3 py-2 rounded">
