@@ -6,20 +6,20 @@ FROM golang:1.23-alpine AS builder
 WORKDIR /app
 
 # Copy the Go module and checksum files to leverage Docker's cache
-COPY go.mod go.sum /app
+COPY ../go.mod ../go.sum /app
 
 # Download the dependencies. This step is cached and will only re-run
 # if go.mod or go.sum change.
 RUN go mod download
 
 # Copy the rest of the application source code
-COPY . /app
+COPY ../ /app
 
 # Build the Go application for Linux.
 # The CGO_ENABLED=0 flag creates a statically-linked binary, which is important
 # for the final minimal image.
 # Build the entire package to include all .go files.
-RUN CGO_ENABLED=0 go build -o /app/harvesterNavigator .
+RUN CGO_ENABLED=0 go build -o /app/harvesterNavigator /app
 
 # Stage 2: Create the final production image
 # We use a small, fresh, scratch image for the final container.
@@ -29,6 +29,9 @@ FROM alpine:latest
 # Set the working directory
 WORKDIR /root/
 
+# Set the kubeconfig file
+ENV KUBECONFIG=.kube/config
+
 # Copy the built binary from the builder stage
 COPY --from=builder /app/harvesterNavigator .
 
@@ -37,4 +40,4 @@ COPY --from=builder /app/harvesterNavigator .
 EXPOSE 8080
 
 # The command to run the application when the container starts
-CMD ["./app/harvesterNavigator"]
+CMD ["./harvesterNavigator"]
