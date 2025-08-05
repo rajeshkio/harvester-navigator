@@ -71,6 +71,9 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        # Use a Personal Access Token to trigger the push event correctly.
+        token: ${{ secrets.RELEASE_PAT }}
 
     - name: Setup Go
       uses: actions/setup-go@v5
