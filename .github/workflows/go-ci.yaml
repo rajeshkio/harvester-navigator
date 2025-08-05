@@ -67,6 +67,10 @@ jobs:
     runs-on: ubuntu-latest
     # This job only runs when a new tag is pushed.
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    
+  # Grant write permissions for the job to create the release
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout code
