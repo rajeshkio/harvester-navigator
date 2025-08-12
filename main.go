@@ -132,6 +132,7 @@ func getDefaultResourcePaths(namespace string) models.ResourcePaths {
 		ReplicaPath:      "apis/longhorn.io/v1beta2",
 		EnginePath:       "apis/longhorn.io/v1beta2",
 		VMIPath:          "apis/kubevirt.io/v1",
+		VMIMPath:         "apis/kubevirt.io/v1",
 		PodPath:          "/api/v1",
 		VolumeNamespace:  "longhorn-system",
 		ReplicaNamespace: "longhorn-system",
@@ -164,10 +165,7 @@ func handleData(clientset *kubernetes.Clientset) http.HandlerFunc {
 	}
 }
 func main() {
-	var version string
-	fmt.Printf("Version: %v", version)
 	log.Println("Starting Harvester Navigator Backend...")
-	log.Println("Testing CI Dev...")
 	kubeconfigPath, source, err := determineKubeconfigPath()
 	if err != nil {
 		log.Fatalf("Error: %v", err)

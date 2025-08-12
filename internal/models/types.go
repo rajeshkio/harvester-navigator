@@ -28,6 +28,7 @@ type ResourcePaths struct {
 	VMIPath          string
 	PodPath          string
 	LHVAPath         string
+	VMIMPath         string
 	VolumeNamespace  string
 	ReplicaNamespace string
 	EngineNamespace  string
