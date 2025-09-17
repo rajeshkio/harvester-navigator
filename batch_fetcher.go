@@ -18,6 +18,7 @@ import (
 	"github.com/rk280392/harvesterNavigator/internal/services/upgrade"
 	"github.com/rk280392/harvesterNavigator/internal/services/vm"
 	"github.com/rk280392/harvesterNavigator/internal/services/vmi"
+	"github.com/rk280392/harvesterNavigator/internal/services/vmim"
 	"github.com/rk280392/harvesterNavigator/internal/services/volume"
 	"k8s.io/client-go/kubernetes"
 )
@@ -354,6 +355,24 @@ func (df *DataFetcher) processVMWithBatchedData(
 	} else {
 		vmiStatus, _ := vmi.ParseVMIData(vmiData)
 		vmInfo.VMIInfo = vmiStatus
+	}
+
+	// Fetch VMIM details (migrations for this VMI)
+	vmimDataList, err := vmim.FetchVMIMData(df.client, vmInfo.Name, paths.VMIMPath, namespace, "virtualmachineinstancemigrations")
+	if err != nil {
+		vmInfo.Errors = append(vmInfo.Errors, models.VMError{
+			Type:     "vmim",
+			Resource: vmInfo.Name,
+			Message:  fmt.Sprintf("Could not fetch VMIM details: %v", err),
+			Severity: "info", // Non-critical since not all VMs have migrations
+		})
+	} else {
+		vmimStatus, err := vmim.ParseVMIMData(vmimDataList)
+		if err != nil {
+			log.Printf("Warning: Could not parse VMIM data for VM %s: %v", vmInfo.Name, err)
+		} else {
+			vmInfo.VMIMInfo = vmimStatus
+		}
 	}
 
 	return vmInfo

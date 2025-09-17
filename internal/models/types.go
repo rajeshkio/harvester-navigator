@@ -28,6 +28,7 @@ type ResourcePaths struct {
 	VMIPath          string
 	PodPath          string
 	LHVAPath         string
+	VMIMPath         string
 	VolumeNamespace  string
 	ReplicaNamespace string
 	EngineNamespace  string
@@ -121,6 +122,7 @@ type VMInfo struct {
 	EngineInfo           []EngineInfo  `json:"engineInfo"`
 	PodInfo              []PodInfo     `json:"podInfo"`
 	VMIInfo              []VMIInfo     `json:"vmiInfo"`
+	VMIMInfo             []VMIMInfo    `json:"vmimInfo"`
 	VMStatus             VMStatus      `json:"vmStatus"`
 	PVCStatus            PVCStatus     `json:"pvcStatus"`
 	AttachmentTicketsRaw any           `json:"attachmentTicketsRaw,omitempty"`
@@ -233,7 +235,7 @@ type Interface struct {
 	Mac           string `json:"mac"`
 }
 
-// Update your existing VMIInfo struct to include:
+// VMIInfo represents information about a Virtual Machine Instance
 type VMIInfo struct {
 	Name        string            `json:"name"`
 	NodeName    string            `json:"nodeName"`
@@ -242,6 +244,19 @@ type VMIInfo struct {
 	GuestOSInfo *GuestOSInfo      `json:"guestOSInfo"`
 	MemoryInfo  *MemoryInfo       `json:"memoryInfo"`
 	Interfaces  []Interface       `json:"interfaces"`
+}
+
+// VMIMInfo represents information about a Virtual Machine Instance Migration
+type VMIMInfo struct {
+	Name           string `json:"name"`
+	VMIName        string `json:"vmiName"`
+	Namespace      string `json:"namespace"`
+	MigrationState string `json:"migrationState"`
+	SourceNode     string `json:"sourceNode,omitempty"`
+	TargetNode     string `json:"targetNode,omitempty"`
+	StartTimestamp string `json:"startTimestamp,omitempty"`
+	EndTimestamp   string `json:"endTimestamp,omitempty"`
+	Phase          string `json:"phase,omitempty"`
 }
 
 type HealthCheckSummary struct {
