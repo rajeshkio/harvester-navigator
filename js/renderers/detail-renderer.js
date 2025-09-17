@@ -823,13 +823,337 @@ const DetailRenderer = {
         return iconMap[severity] || '⚠️';
     },
 
-    // Simplified node detail functions
-    renderNodeDetail(nodeData, issues) { return ''; },
-    analyzeNodeHealth(nodeData) { return { issues: [], warnings: [] }; },
-    renderHealthBadges(healthSummary) { return ''; },
+    renderNodeDetail(nodeData, issues) {
+        if (!nodeData) return '<div class="text-red-400">Node data not found</div>';
+        
+        // Extract node name from nested structure
+        const nodeName = nodeData.longhornInfo ? nodeData.longhornInfo.name : (nodeData.name || 'Unknown');
+        console.log('Rendering node detail for:', nodeName, nodeData);
+        
+        const nodeIssues = issues.filter(issue => 
+            issue.resourceType === 'node-not-ready' && issue.resourceName === nodeName
+        );
+        
+        const healthSummary = this.analyzeNodeHealth(nodeData);
+        
+        return `
+            <div class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+                <!-- Hero Header -->
+                <div class="bg-gradient-to-r from-blue-600/10 to-purple-600/10 border-b border-slate-700/50 backdrop-blur-sm">
+                    <div class="max-w-7xl mx-auto px-8 py-8">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-6">
+                                <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
+                                    <span class="text-2xl font-bold text-white">🖥️</span>
+                                </div>
+                                <div>
+                                    <h1 class="text-4xl font-bold text-white mb-2">${nodeName}</h1>
+                                    <p class="text-slate-300 text-lg flex items-center gap-2">
+                                        <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                                        Kubernetes Node • ${nodeData.kubernetesInfo ? nodeData.kubernetesInfo.roles?.join(' • ') || 'Worker' : 'Unknown Role'}
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                ${this.renderHealthBadges(healthSummary)}
+                                ${nodeIssues.length > 0 ? `<div class="bg-red-500/20 border border-red-500/30 rounded-xl px-4 py-2 flex items-center gap-2">
+                                    <span class="w-3 h-3 bg-red-400 rounded-full animate-pulse"></span>
+                                    <span class="text-red-400 font-semibold">${nodeIssues.length} Issue${nodeIssues.length !== 1 ? 's' : ''}</span>
+                                </div>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Dashboard -->
+                <div class="max-w-7xl mx-auto px-8 py-8 space-y-8">
+                    <!-- KPI Cards Row -->
+                    ${this.renderKPICards(nodeData)}
+
+                    <!-- Two Column Layout -->
+                    <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                        <!-- Left Column: Health & System -->
+                        <div class="xl:col-span-2 space-y-8">
+                            ${this.renderHealthDashboard(nodeData, healthSummary)}
+                            ${this.renderStorageDashboard(nodeData.longhornInfo ? nodeData.longhornInfo.disks : [])}
+                        </div>
+
+                        <!-- Right Column: System Info & Actions -->
+                        <div class="space-y-8">
+                            ${this.renderSystemCard(nodeData)}
+                            ${this.renderQuickActions(nodeData, healthSummary)}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    analyzeNodeHealth(nodeData) {
+        const issues = [];
+        const warnings = [];
+        
+        // Check Longhorn conditions
+        const longhornConditions = nodeData.longhornInfo ? nodeData.longhornInfo.conditions : [];
+        const longhornReadyCondition = longhornConditions.find(c => c.type === 'Ready');
+        
+        // Check Kubernetes conditions
+        const k8sConditions = nodeData.kubernetesInfo ? nodeData.kubernetesInfo.conditions : [];
+        const k8sReadyCondition = k8sConditions.find(c => c.type === 'Ready');
+        
+        if (longhornReadyCondition && longhornReadyCondition.status !== 'True') {
+            issues.push({ type: 'Longhorn', condition: longhornReadyCondition });
+        }
+        
+        if (k8sReadyCondition && k8sReadyCondition.status !== 'True') {
+            issues.push({ type: 'Kubernetes', condition: k8sReadyCondition });
+        }
+        
+        // Check disk health
+        const disks = nodeData.longhornInfo ? nodeData.longhornInfo.disks : [];
+        disks.forEach(disk => {
+            if (!disk.isSchedulable) {
+                warnings.push({ type: 'Storage', message: `Disk ${disk.name} is not schedulable` });
+            }
+        });
+        
+        return { issues, warnings };
+    },
+
+    renderHealthBadges(healthSummary) {
+        const hasIssues = healthSummary.issues.length > 0;
+        const hasWarnings = healthSummary.warnings.length > 0;
+        
+        if (!hasIssues && !hasWarnings) {
+            return `
+                <div class="bg-emerald-500/20 border border-emerald-500/30 rounded-xl px-6 py-3 flex items-center gap-3">
+                    <div class="w-3 h-3 bg-emerald-400 rounded-full animate-pulse"></div>
+                    <span class="text-emerald-400 font-semibold text-lg">All Systems Healthy</span>
+                </div>
+            `;
+        }
+        
+        let badges = '';
+        if (hasIssues) {
+            badges += `
+                <div class="bg-red-500/20 border border-red-500/30 rounded-xl px-4 py-2 flex items-center gap-2">
+                    <span class="w-3 h-3 bg-red-400 rounded-full animate-pulse"></span>
+                    <span class="text-red-400 font-semibold">${healthSummary.issues.length} Critical</span>
+                </div>
+            `;
+        }
+        if (hasWarnings) {
+            badges += `
+                <div class="bg-yellow-500/20 border border-yellow-500/30 rounded-xl px-4 py-2 flex items-center gap-2">
+                    <span class="w-3 h-3 bg-yellow-400 rounded-full animate-pulse"></span>
+                    <span class="text-yellow-400 font-semibold">${healthSummary.warnings.length} Warning${healthSummary.warnings.length !== 1 ? 's' : ''}</span>
+                </div>
+            `;
+        }
+        
+        return badges;
+    },
+
+    renderKPICards(nodeData) {
+        const k8sInfo = nodeData.kubernetesInfo;
+        if (!k8sInfo) return '';
+        
+        const cpuCores = k8sInfo.capacity?.cpu || '0';
+        const memoryGb = k8sInfo.capacity?.memory ? (parseInt(k8sInfo.capacity.memory.replace('Ki', '')) / 1024 / 1024).toFixed(1) + ' GB' : 'N/A';
+        const diskCount = nodeData.longhornInfo?.disks?.length || 0;
+        const schedulableDisks = nodeData.longhornInfo?.disks?.filter(d => d.isSchedulable).length || 0;
+        
+        return `
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                <!-- CPU Card -->
+                <div class="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 backdrop-blur-sm border border-emerald-500/20 rounded-2xl p-6 hover:shadow-xl transition-all duration-300">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+                            <span class="text-2xl">⚡</span>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-3xl font-bold text-emerald-400">${cpuCores}</div>
+                            <div class="text-sm text-emerald-300">CPU Cores</div>
+                        </div>
+                    </div>
+                    <div class="text-slate-400 text-sm">Total Processing Power</div>
+                </div>
+
+                <!-- Memory Card -->
+                <div class="bg-gradient-to-br from-blue-500/10 to-blue-600/5 backdrop-blur-sm border border-blue-500/20 rounded-2xl p-6 hover:shadow-xl transition-all duration-300">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
+                            <span class="text-2xl">🧠</span>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-3xl font-bold text-blue-400">${memoryGb}</div>
+                            <div class="text-sm text-blue-300">Memory</div>
+                        </div>
+                    </div>
+                    <div class="text-slate-400 text-sm">Available RAM</div>
+                </div>
+
+                <!-- Storage Card -->
+                <div class="bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-sm border border-purple-500/20 rounded-2xl p-6 hover:shadow-xl transition-all duration-300">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center">
+                            <span class="text-2xl">💽</span>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-3xl font-bold text-purple-400">${schedulableDisks}/${diskCount}</div>
+                            <div class="text-sm text-purple-300">Disks Ready</div>
+                        </div>
+                    </div>
+                    <div class="text-slate-400 text-sm">Schedulable Storage</div>
+                </div>
+
+                <!-- Pods Card -->
+                <div class="bg-gradient-to-br from-orange-500/10 to-orange-600/5 backdrop-blur-sm border border-orange-500/20 rounded-2xl p-6 hover:shadow-xl transition-all duration-300">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-orange-500/20 rounded-xl flex items-center justify-center">
+                            <span class="text-2xl">📦</span>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-3xl font-bold text-orange-400">${nodeData.runningPods || 0}</div>
+                            <div class="text-sm text-orange-300">Running Pods</div>
+                        </div>
+                    </div>
+                    <div class="text-slate-400 text-sm">Active Workloads</div>
+                </div>
+            </div>
+        `;
+    },
+
     renderResourceStats(nodeData) { return ''; },
+
+    renderHealthDashboard(nodeData, healthSummary) {
+        return `
+            <div class="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-2xl overflow-hidden">
+                <div class="bg-gradient-to-r from-green-500/10 to-emerald-500/5 px-8 py-6 border-b border-slate-700/50">
+                    <h3 class="text-2xl font-bold text-white flex items-center gap-3">
+                        <span class="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">💚</span>
+                        Node Health Status
+                    </h3>
+                </div>
+                <div class="p-8">
+                    <div class="space-y-4">
+                        <div class="text-slate-300">
+                            Health summary: ${healthSummary.issues.length} issues, ${healthSummary.warnings.length} warnings
+                        </div>
+                        <div class="bg-slate-700/30 p-4 rounded-lg">
+                            <p class="text-slate-400">Detailed health information would appear here.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    renderStorageDashboard(disks) {
+        return `
+            <div class="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-2xl overflow-hidden">
+                <div class="bg-gradient-to-r from-purple-500/10 to-blue-500/5 px-8 py-6 border-b border-slate-700/50">
+                    <h3 class="text-2xl font-bold text-white flex items-center gap-3">
+                        <span class="w-8 h-8 bg-purple-500/20 rounded-lg flex items-center justify-center">💾</span>
+                        Storage Overview
+                    </h3>
+                </div>
+                <div class="p-8">
+                    ${disks && disks.length > 0 ? `
+                        <div class="space-y-3">
+                            ${disks.map(disk => `
+                                <div class="bg-slate-700/30 p-4 rounded-lg">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-slate-200 font-medium">${disk.name}</span>
+                                        <span class="text-${disk.isSchedulable ? 'green' : 'red'}-400">
+                                            ${disk.isSchedulable ? 'Schedulable' : 'Not Schedulable'}
+                                        </span>
+                                    </div>
+                                    <div class="text-sm text-slate-400 mt-1">${disk.path}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : `
+                        <div class="text-slate-400">No storage information available</div>
+                    `}
+                </div>
+            </div>
+        `;
+    },
+
+    renderSystemCard(nodeData) {
+        const k8sInfo = nodeData.kubernetesInfo;
+        return `
+            <div class="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-2xl overflow-hidden">
+                <div class="bg-gradient-to-r from-blue-500/10 to-cyan-500/5 px-6 py-5 border-b border-slate-700/50">
+                    <h3 class="text-xl font-bold text-white flex items-center gap-3">
+                        <span class="w-7 h-7 bg-blue-500/20 rounded-lg flex items-center justify-center">🖥️</span>
+                        System Information
+                    </h3>
+                </div>
+                <div class="p-6">
+                    ${k8sInfo ? `
+                        <div class="space-y-3">
+                            <div class="flex justify-between">
+                                <span class="text-slate-400">Internal IP</span>
+                                <span class="text-slate-200">${k8sInfo.internalIP || 'N/A'}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-400">OS</span>
+                                <span class="text-slate-200">${k8sInfo.nodeInfo?.osImage || 'N/A'}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-400">Kernel</span>
+                                <span class="text-slate-200">${k8sInfo.nodeInfo?.kernelVersion || 'N/A'}</span>
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="text-slate-400">No system information available</div>
+                    `}
+                </div>
+            </div>
+        `;
+    },
+
+    renderQuickActions(nodeData, healthSummary) {
+        return `
+            <div class="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-2xl overflow-hidden">
+                <div class="bg-gradient-to-r from-orange-500/10 to-red-500/5 px-6 py-5 border-b border-slate-700/50">
+                    <h3 class="text-xl font-bold text-white flex items-center gap-3">
+                        <span class="w-7 h-7 bg-orange-500/20 rounded-lg flex items-center justify-center">🛠️</span>
+                        Quick Actions
+                    </h3>
+                </div>
+                <div class="p-6">
+                    <div class="space-y-3">
+                        <button class="w-full bg-slate-700 hover:bg-slate-600 text-white p-3 rounded-lg transition-colors text-left">
+                            🔍 Check Node Logs
+                        </button>
+                        <button class="w-full bg-slate-700 hover:bg-slate-600 text-white p-3 rounded-lg transition-colors text-left">
+                            📊 View Resource Usage
+                        </button>
+                        <button class="w-full bg-slate-700 hover:bg-slate-600 text-white p-3 rounded-lg transition-colors text-left">
+                            🔄 Restart Services
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    getK8sConditionBadge(type, status) {
+        const inversedConditions = ['MemoryPressure', 'DiskPressure', 'PIDPressure', 'NetworkUnavailable'];
+        const isGood = inversedConditions.includes(type) ? status === 'False' : status === 'True';
+        return isGood ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400';
+    },
+
+    getK8sConditionText(type, status) {
+        const inversedConditions = ['MemoryPressure', 'DiskPressure', 'PIDPressure', 'NetworkUnavailable'];
+        const isGood = inversedConditions.includes(type) ? status === 'False' : status === 'True';
+        return isGood ? 'Healthy' : 'Issue';
+    },
+
     renderHealthStatus(nodeData, healthSummary) { return ''; },
-    renderStorageOverview(longhornDisks) { return ''; },
     renderSystemDetails(nodeData) { return ''; },
     renderTroubleshootingActions(nodeData, healthSummary) { return ''; }
 };
