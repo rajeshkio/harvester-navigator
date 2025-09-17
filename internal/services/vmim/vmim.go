@@ -161,7 +161,7 @@ func parseVMIMDetailed(vmimData map[string]interface{}, client *kubernetes.Clien
 						}
 					}
 					vmimInfo.PhaseTransitionTimestamps = transitions
-					
+
 					// Set the latest transition
 					if len(transitions) > 0 {
 						latest := transitions[len(transitions)-1]

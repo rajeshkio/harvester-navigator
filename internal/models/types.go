@@ -248,42 +248,42 @@ type VMIInfo struct {
 
 // VMIMInfo represents information about a Virtual Machine Instance Migration
 type VMIMInfo struct {
-	Name                        string                    `json:"name"`
-	VMIName                     string                    `json:"vmiName"`
-	Namespace                   string                    `json:"namespace"`
-	MigrationState              string                    `json:"migrationState"`
-	SourceNode                  string                    `json:"sourceNode,omitempty"`
-	SourcePod                   string                    `json:"sourcePod,omitempty"`
-	TargetNode                  string                    `json:"targetNode,omitempty"`
-	TargetPod                   string                    `json:"targetPod,omitempty"`
-	TargetNodeAddress           string                    `json:"targetNodeAddress,omitempty"`
-	StartTimestamp              string                    `json:"startTimestamp,omitempty"`
-	EndTimestamp                string                    `json:"endTimestamp,omitempty"`
-	Phase                       string                    `json:"phase,omitempty"`
-	PhaseTransitionTimestamps   []PhaseTransition         `json:"phaseTransitionTimestamps,omitempty"`
-	LatestPhaseTransition       *PhaseTransition          `json:"latestPhaseTransition,omitempty"`
-	MigrationConfiguration      *MigrationConfiguration   `json:"migrationConfiguration,omitempty"`
-	TargetPodExists             bool                      `json:"targetPodExists"`
-	TargetPodStatus             string                    `json:"targetPodStatus,omitempty"`
-	MigrationMode               string                    `json:"migrationMode,omitempty"`
+	Name                      string                  `json:"name"`
+	VMIName                   string                  `json:"vmiName"`
+	Namespace                 string                  `json:"namespace"`
+	MigrationState            string                  `json:"migrationState"`
+	SourceNode                string                  `json:"sourceNode,omitempty"`
+	SourcePod                 string                  `json:"sourcePod,omitempty"`
+	TargetNode                string                  `json:"targetNode,omitempty"`
+	TargetPod                 string                  `json:"targetPod,omitempty"`
+	TargetNodeAddress         string                  `json:"targetNodeAddress,omitempty"`
+	StartTimestamp            string                  `json:"startTimestamp,omitempty"`
+	EndTimestamp              string                  `json:"endTimestamp,omitempty"`
+	Phase                     string                  `json:"phase,omitempty"`
+	PhaseTransitionTimestamps []PhaseTransition       `json:"phaseTransitionTimestamps,omitempty"`
+	LatestPhaseTransition     *PhaseTransition        `json:"latestPhaseTransition,omitempty"`
+	MigrationConfiguration    *MigrationConfiguration `json:"migrationConfiguration,omitempty"`
+	TargetPodExists           bool                    `json:"targetPodExists"`
+	TargetPodStatus           string                  `json:"targetPodStatus,omitempty"`
+	MigrationMode             string                  `json:"migrationMode,omitempty"`
 }
 
 // PhaseTransition represents a phase transition in migration
 type PhaseTransition struct {
-	Phase                      string `json:"phase"`
-	PhaseTransitionTimestamp   string `json:"phaseTransitionTimestamp"`
+	Phase                    string `json:"phase"`
+	PhaseTransitionTimestamp string `json:"phaseTransitionTimestamp"`
 }
 
 // MigrationConfiguration represents migration settings
 type MigrationConfiguration struct {
-	AllowAutoConverge                    bool   `json:"allowAutoConverge"`
-	AllowPostCopy                       bool   `json:"allowPostCopy"`
-	BandwidthPerMigration               string `json:"bandwidthPerMigration"`
-	CompletionTimeoutPerGiB             int    `json:"completionTimeoutPerGiB"`
-	ParallelMigrationsPerCluster        int    `json:"parallelMigrationsPerCluster"`
-	ParallelOutboundMigrationsPerNode   int    `json:"parallelOutboundMigrationsPerNode"`
-	ProgressTimeout                     int    `json:"progressTimeout"`
-	UnsafeMigrationOverride             bool   `json:"unsafeMigrationOverride"`
+	AllowAutoConverge                 bool   `json:"allowAutoConverge"`
+	AllowPostCopy                     bool   `json:"allowPostCopy"`
+	BandwidthPerMigration             string `json:"bandwidthPerMigration"`
+	CompletionTimeoutPerGiB           int    `json:"completionTimeoutPerGiB"`
+	ParallelMigrationsPerCluster      int    `json:"parallelMigrationsPerCluster"`
+	ParallelOutboundMigrationsPerNode int    `json:"parallelOutboundMigrationsPerNode"`
+	ProgressTimeout                   int    `json:"progressTimeout"`
+	UnsafeMigrationOverride           bool   `json:"unsafeMigrationOverride"`
 }
 
 type HealthCheckSummary struct {
