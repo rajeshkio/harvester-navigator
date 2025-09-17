@@ -358,7 +358,7 @@ func (df *DataFetcher) processVMWithBatchedData(
 	}
 
 	// Fetch VMIM details (migrations for this VMI)
-	vmimDataList, err := vmim.FetchVMIMData(df.client, vmInfo.Name, paths.VMIMPath, namespace, "virtualmachineinstancemigrations")
+	vmimDataList, err := vmim.FetchAllVMIMsForVMI(df.client, vmInfo.Name, paths.VMIMPath, namespace)
 	if err != nil {
 		vmInfo.Errors = append(vmInfo.Errors, models.VMError{
 			Type:     "vmim",
@@ -367,7 +367,7 @@ func (df *DataFetcher) processVMWithBatchedData(
 			Severity: "info", // Non-critical since not all VMs have migrations
 		})
 	} else {
-		vmimStatus, err := vmim.ParseVMIMData(vmimDataList)
+		vmimStatus, err := vmim.ParseVMIMData(vmimDataList, df.client)
 		if err != nil {
 			log.Printf("Warning: Could not parse VMIM data for VM %s: %v", vmInfo.Name, err)
 		} else {
