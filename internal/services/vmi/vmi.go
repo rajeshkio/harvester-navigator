@@ -76,6 +76,9 @@ func ParseVMIData(vmiData map[string]interface{}) ([]types.VMIInfo, error) {
 	// Extract memory information
 	extractMemoryInfo(vmiStatus, &vmiInfo)
 
+	// Extract CPU topology information
+	extractCPUTopology(vmiData, vmiStatus, &vmiInfo)
+
 	// Extract network interfaces
 	extractNetworkInterfaces(vmiStatus, &vmiInfo)
 
@@ -257,6 +260,51 @@ func extractMemoryInfo(vmiStatus map[string]interface{}, vmiInfo *types.VMIInfo)
 	if guestRequestedRaw, ok := memory["guestRequested"]; ok {
 		if guestRequested, ok := guestRequestedRaw.(string); ok {
 			vmiInfo.MemoryInfo.GuestRequested = guestRequested
+		}
+	}
+}
+
+// extractCPUTopology extracts CPU topology information from VMI data and status
+func extractCPUTopology(vmiData map[string]interface{}, vmiStatus map[string]interface{}, vmiInfo *types.VMIInfo) {
+	// First try to get CPU info from status.currentCPUTopology
+	if currentCPUTopologyRaw, ok := vmiStatus["currentCPUTopology"]; ok {
+		if currentCPUTopology, ok := currentCPUTopologyRaw.(map[string]interface{}); ok {
+			if coresRaw, ok := currentCPUTopology["cores"]; ok {
+				if cores, ok := coresRaw.(float64); ok {
+					vmiInfo.CurrentCPUTopology = &types.CPUTopology{
+						Cores: int(cores),
+					}
+				}
+			}
+		}
+	}
+
+	// Also try to get CPU info from spec.domain.cpu
+	if specRaw, ok := vmiData["spec"]; ok {
+		if spec, ok := specRaw.(map[string]interface{}); ok {
+			if domainRaw, ok := spec["domain"]; ok {
+				if domain, ok := domainRaw.(map[string]interface{}); ok {
+					if cpuRaw, ok := domain["cpu"]; ok {
+						if cpu, ok := cpuRaw.(map[string]interface{}); ok {
+							cpuDomain := &types.CPUDomain{}
+							
+							if coresRaw, ok := cpu["cores"]; ok {
+								if cores, ok := coresRaw.(float64); ok {
+									cpuDomain.Cores = int(cores)
+								}
+							}
+							
+							if modelRaw, ok := cpu["model"]; ok {
+								if model, ok := modelRaw.(string); ok {
+									cpuDomain.Model = model
+								}
+							}
+							
+							vmiInfo.CPUDomain = cpuDomain
+						}
+					}
+				}
+			}
 		}
 	}
 }

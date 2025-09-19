@@ -8,9 +8,11 @@ const ViewManager = {
     },
     issueSort: 'time-desc',
     showDashboard() {
+        console.log('ViewManager.showDashboard called');
         this.hideAllViews();
         document.getElementById('dashboard').classList.remove('hidden');
         this.currentView = 'dashboard';
+        console.log('Dashboard should now be visible');
     },
     
     showNodeDetail(nodeName) {
@@ -54,6 +56,9 @@ const ViewManager = {
         this.hideAllViews();
         document.getElementById('detail-view-container').classList.remove('hidden');
         this.currentView = 'vm-detail';
+        
+        // Scroll to top when showing VM detail
+        window.scrollTo(0, 0);
     },
     
     showAllIssuesView() {
@@ -309,15 +314,20 @@ const ViewManager = {
         const colorMap = { 
             info: 'text-slate-300', 
             error: 'text-red-400', 
-            success: 'text-green-400' 
+            success: 'text-green-400',
+            warning: 'text-yellow-400'
         };
         const iconMap = { 
             info: '📋', 
             error: '❌', 
-            success: '✅' 
+            success: '✅',
+            warning: '⚠️'
         };
         
-        document.getElementById('upgrade-status').innerHTML = 
-            `<span class="${colorMap[type]}">${iconMap[type]} ${message}</span>`;
+        const statusElement = document.getElementById('upgrade-status');
+        if (statusElement) {
+            statusElement.innerHTML = 
+                `<span class="${colorMap[type] || 'text-slate-300'}">${iconMap[type] || '📋'} ${message}</span>`;
+        }
     }
 };

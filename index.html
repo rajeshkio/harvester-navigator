@@ -3,122 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Harvester Navigator - Advanced Troubleshooting</title>
+    <title>Harvester Navigator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="styles/main.css">
-    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body class="antialiased">
-    <div class="container mx-auto p-3 md:p-6 max-w-7xl">
-        <header class="text-center mb-6">
-            <div class="flex justify-between items-center mb-4">
-                <div></div> <!-- Spacer -->
-                <div>
-                    <h1 class="text-2xl md:text-3xl font-bold text-slate-100 mb-2">Harvester Troubleshooting via UI</h1>
-                    <div id="upgrade-info" class="text-sm text-slate-300 font-medium">
-                        <span id="upgrade-status">Loading upgrade information...</span>
+<body class="bg-slate-900 text-white">
+    <!-- Container with proper max-width and responsive padding -->
+    <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- Redesigned Compact Header -->
+        <header class="mb-8">
+            <div class="text-center">
+                <div class="flex items-center justify-center gap-3 mb-4">
+                    <div class="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center">
+                        <span class="text-2xl">🛠️</span>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-white">Harvester Navigator</h1>
+                        <p class="text-slate-400 text-sm">Cluster Overview and Troubleshooting</p>
                     </div>
                 </div>
-                <button id="refresh-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors text-sm flex items-center gap-2">
-                    <span id="refresh-icon">🔄</span>
-                    <span>Refresh</span>
-                </button>
+                <div class="flex items-center justify-center gap-6 text-sm">
+                    <div id="upgrade-info" class="text-slate-300">
+                        <span id="upgrade-status">Loading cluster information...</span>
+                    </div>
+                    <button id="refresh-btn" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors">
+                        <span id="refresh-icon">🔄</span>
+                        <span>Refresh</span>
+                    </button>
+                </div>
             </div>
         </header>
 
-        <!-- Search Bar Section -->
-        <div class="card p-4 mb-6 fade-in">
-            <div class="flex items-center gap-4">
-                <div class="flex-1">
-                    <div class="relative">
-                        <input 
-                            type="text" 
-                            id="universal-search"
-                            placeholder="🔍 Search VM name, PVC name, or Volume handle..."
-                            class="w-full p-3 bg-slate-700/50 border border-slate-600 text-white placeholder-slate-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                        />
-                        <div id="search-results" class="absolute top-full left-0 right-0 z-10 mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg hidden max-h-60 overflow-y-auto"></div>
-                    </div>
-                </div>
-                <button id="clear-search" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-3 rounded-lg transition-colors text-sm hidden">
-                    Clear
-                </button>
+        <!-- Compact Search -->
+        <div class="bg-slate-800 border border-slate-700 rounded-lg p-3 mb-6">
+            <div class="flex gap-3">
+                <input type="text" id="universal-search" placeholder="Search VMs, PVCs, volumes..." 
+                       class="flex-1 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-slate-500">
+                <button id="clear-search" class="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded text-sm hidden">Clear</button>
             </div>
-            <div id="search-status" class="mt-2 text-sm text-slate-400 hidden"></div>
+            <div id="search-results" class="absolute z-10 mt-1 bg-slate-800 border border-slate-700 rounded shadow-lg hidden max-h-48 overflow-y-auto"></div>
+            <div id="search-status" class="mt-2 text-xs text-slate-400 hidden"></div>
         </div>
 
+        <!-- Main Content - Full Width Stacked Layout -->
         <main id="dashboard" class="space-y-6">
-            <div id="issues-overview" class="card p-4 fade-in hidden">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-bold text-slate-200 flex items-center gap-2">
-                        🚨 Detected Issues
-                        <span id="issue-count" class="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">0</span>
-                    </h2>
-                    <button id="view-all-issues-btn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors text-sm">
-                        View All Issues
-                    </button>
+            <!-- Issues Overview -->
+            <div id="issues-overview" class="bg-slate-800 border border-slate-700 rounded-lg p-4 hidden">
+                <div class="flex justify-between items-center mb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg">⚠️</span>
+                        <h2 class="text-lg font-medium">Issues</h2>
+                        <span id="issue-count" class="bg-red-600 text-white text-xs px-2 py-0.5 rounded">0</span>
+                    </div>
+                    <button id="view-all-issues-btn" class="bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-xs">View All</button>
                 </div>
-                <div id="critical-issues-preview" class="space-y-2"></div>
+                <div id="critical-issues-preview" class="space-y-1"></div>
             </div>
 
-            <div id="node-dashboard-container" class="card p-4 fade-in">
-                <h2 class="text-xl font-bold mb-3 text-slate-200">Node Dashboard</h2>
-                <div id="node-dashboard" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+            <!-- Nodes Section - Full Width Container -->
+            <div id="node-dashboard-container" class="bg-slate-800 rounded-lg">
+                <div class="p-6 border-b border-slate-700">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-lg">🖥️</span>
+                            <h2 class="text-lg font-medium">Nodes</h2>
+                        </div>
+                        <span class="text-sm text-slate-400" id="node-count">0</span>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div id="node-dashboard" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+                </div>
             </div>
 
-            <div id="vm-list-container" class="card p-4 fade-in">
-                <h2 class="text-xl font-bold mb-3 text-slate-200">Virtual Machines</h2>
-                <div id="vm-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+            <!-- Virtual Machines Section - Full Width Container -->
+            <div id="vm-list-container" class="bg-slate-800 rounded-lg">
+                <div class="p-6 border-b border-slate-700">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-lg">💻</span>
+                            <h2 class="text-lg font-medium">Virtual Machines</h2>
+                        </div>
+                        <span class="text-sm text-slate-400" id="vm-count">0</span>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div id="vm-list"></div>
+                </div>
             </div>
         </main>
 
-        <div id="detail-view-container" class="hidden space-y-4">
-            <button id="back-button" class="mb-4 bg-blue-600 text-white font-medium py-2 px-4 rounded-md hover:bg-blue-700 transition-colors text-sm">
-                ← Back to Dashboard
+        <!-- Detail View -->
+        <div id="detail-view-container" class="hidden">
+            <button id="back-button" class="mb-4 bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-sm flex items-center gap-2">
+                <span>←</span> Back
             </button>
-            <div id="detail-view" class="space-y-4"></div>
+            <div id="detail-view"></div>
         </div>
 
-        <div id="all-issues-container" class="card p-4 fade-in hidden">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold text-slate-200">All Detected Issues</h2>
-                <button id="back-from-all-issues" class="bg-slate-600 text-white px-4 py-2 rounded-md hover:bg-slate-700 transition-colors text-sm">
-                    Back to Dashboard
-                </button>
-            </div>
-            <div id="issue-filter-bar" class="bg-slate-900/50 p-3 rounded-md mb-4 flex gap-4 items-center">
-                <div class="flex-grow">
-                    <input type="search" id="issue-search-input" placeholder="Search by name or message..." class="w-full bg-slate-800 text-slate-200 px-3 py-1.5 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                </div>
-                <div>
-                    <select id="issue-severity-filter" class="bg-slate-800 text-slate-200 px-3 py-1.5 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                        <option value="all">All Severities</option>
-                        <option value="critical">Critical</option>
-                        <option value="high">High</option>
-                        <option value="medium">Medium</option>
-                        <option value="low">Low</option>
-                    </select>
-                </div>
-                <div>
-                    <select id="issue-sort-filter" class="bg-slate-800 text-slate-200 px-3 py-1.5 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                        <option value="time-desc">Newest First</option>
-                        <option value="time-asc">Oldest First</option>
-                        <option value="severity-desc">Severity (High to Low)</option>
-                    </select>
-                </div>
+        <!-- All Issues View -->
+        <div id="all-issues-container" class="bg-slate-800 border border-slate-700 rounded-lg p-4 hidden">
+            <button id="back-from-all-issues" class="mb-4 bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-sm flex items-center gap-2">
+                <span>←</span> Back
+            </button>
+            <h2 class="text-lg font-medium mb-4">All Issues</h2>
+            <div id="issue-filter-bar" class="bg-slate-900 p-3 rounded mb-4 flex gap-3">
+                <input type="search" id="issue-search-input" placeholder="Search issues..." 
+                       class="flex-1 bg-slate-700 px-3 py-2 rounded text-sm focus:outline-none">
+                <select id="issue-severity-filter" class="bg-slate-700 px-3 py-2 rounded text-sm">
+                    <option value="all">All Severities</option>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select>
+                <select id="issue-sort-filter" class="bg-slate-700 px-3 py-2 rounded text-sm">
+                    <option value="time-desc">Newest First</option>
+                    <option value="time-asc">Oldest First</option>
+                    <option value="severity-desc">By Severity</option>
+                </select>
             </div>
             <div id="all-issues-list" class="space-y-3"></div>
         </div>
 
+        <!-- Issue Detail View -->
         <div id="issue-detail-container" class="hidden">
-            <button id="back-from-issue" class="mb-4 bg-blue-600 text-white font-medium py-2 px-4 rounded-md hover:bg-blue-700 transition-colors text-sm">
+            <button id="back-from-issue" class="mb-4 bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded text-sm">
                 ← Back to Issues
             </button>
-            <div id="issue-detail-view" class="space-y-4"></div>
+            <div id="issue-detail-view"></div>
         </div>
     </div>
 
-    <!-- Load modules in dependency order -->
+    <!-- Scripts -->
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/state.js"></script>
@@ -127,7 +148,7 @@
     <script src="js/renderers/node-renderer.js"></script>
     <script src="js/renderers/vm-renderer.js"></script>
     <script src="js/renderers/issue-renderer.js"></script>
-    <script src="js/renderers/detail-renderer.js?v=node-functions-added"></script>
+    <script src="js/renderers/detail-renderer.js"></script>
     <script src="js/search.js"></script>
     <script src="js/view-manager.js"></script>
     <script src="js/app.js"></script>

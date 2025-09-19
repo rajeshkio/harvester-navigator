@@ -235,15 +235,28 @@ type Interface struct {
 	Mac           string `json:"mac"`
 }
 
+// CPUTopology represents CPU configuration information
+type CPUTopology struct {
+	Cores int `json:"cores"`
+}
+
+// CPUDomain represents CPU domain configuration
+type CPUDomain struct {
+	Cores int    `json:"cores"`
+	Model string `json:"model,omitempty"`
+}
+
 // VMIInfo represents information about a Virtual Machine Instance
 type VMIInfo struct {
-	Name        string            `json:"name"`
-	NodeName    string            `json:"nodeName"`
-	Phase       string            `json:"phase"`
-	ActivePods  map[string]string `json:"activePods"`
-	GuestOSInfo *GuestOSInfo      `json:"guestOSInfo"`
-	MemoryInfo  *MemoryInfo       `json:"memoryInfo"`
-	Interfaces  []Interface       `json:"interfaces"`
+	Name               string            `json:"name"`
+	NodeName           string            `json:"nodeName"`
+	Phase              string            `json:"phase"`
+	ActivePods         map[string]string `json:"activePods"`
+	GuestOSInfo        *GuestOSInfo      `json:"guestOSInfo"`
+	MemoryInfo         *MemoryInfo       `json:"memoryInfo"`
+	Interfaces         []Interface       `json:"interfaces"`
+	CurrentCPUTopology *CPUTopology      `json:"currentCPUTopology,omitempty"`
+	CPUDomain          *CPUDomain        `json:"cpuDomain,omitempty"`
 }
 
 // VMIMInfo represents information about a Virtual Machine Instance Migration

@@ -1,887 +1,50 @@
-/**
- * DetailRenderer - Clean, Aligned, Professional UI Layout
- * Fixes alignment issues and creates an intuitive, space-efficient interface
- */
+// Compact Detail Renderer - Dense Layout with Fixed Issues
 const DetailRenderer = {
-    
-    renderVMDetail(vmData) {
-        return `
-            <div class="max-w-6xl mx-auto p-6 space-y-6">
-                <!-- VM Header -->
-                <div class="flex items-center justify-between pb-4 border-b border-slate-700">
-                    <div>
-                        <h1 class="text-2xl font-bold text-slate-100">${vmData.name}</h1>
-                        <p class="text-slate-400">${vmData.namespace}</p>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <span class="px-3 py-1 rounded-full text-sm font-medium ${this.getStatusBadgeClass(vmData.printableStatus)}">${vmData.printableStatus}</span>
-                        ${vmData.vmStatusReason ? `<span class="text-slate-400 text-sm">• ${vmData.vmStatusReason}</span>` : ''}
-                    </div>
-                </div>
-
-                <!-- VM Details Grid -->
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-6 p-4 bg-slate-800/30 rounded-lg">
-                    <div>
-                        <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Image</div>
-                        <div class="text-sm text-slate-200 font-mono">${this.truncateText(vmData.imageId || 'N/A', 30)}</div>
-                    </div>
-                    <div>
-                        <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Storage Class</div>
-                        <div class="text-sm text-slate-200">${vmData.storageClass || 'N/A'}</div>
-                    </div>
-                    <div>
-                        <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">PVC Status</div>
-                        <div class="text-sm font-medium ${Utils.getStatusColorClass(vmData.pvcStatus)}">${vmData.pvcStatus || 'N/A'}</div>
-                    </div>
-                    <div>
-                        <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Volume</div>
-                        <div class="text-sm text-slate-200 font-mono">${this.truncateText(vmData.volumeName || 'N/A', 25)}</div>
-                    </div>
-                </div>
-
-                ${vmData.errors && vmData.errors.length > 0 ? this.createErrorSection(vmData.errors) : ''}
-
-                <!-- Two Column Layout -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <!-- Left: Compute Section -->
-                    <div class="space-y-2">
-                        <div class="flex items-center gap-2 mb-2">
-                            <span class="text-lg">💻</span>
-                            <h2 class="text-lg font-semibold text-slate-200">Compute</h2>
-                        </div>
-                        
-                        ${vmData.vmiInfo && vmData.vmiInfo.length > 0 ? this.createVMICard(vmData.vmiInfo[0]) : ''}
-                        ${vmData.podInfo && vmData.podInfo.length > 0 ? this.createPodCard(vmData) : ''}
-                    </div>
-
-                    <!-- Right: Migration Section -->
-                    <div>
-                        ${vmData.vmimInfo && vmData.vmimInfo.length > 0 ? this.createMigrationSection(vmData.vmimInfo) : ''}
-                    </div>
-                </div>
-
-                ${this.createAdditionalSections(vmData)}
-            </div>
-        `;
-    },
-
-    getStatusBadgeClass(status) {
-        const statusMap = {
-            'running': 'bg-green-500/20 text-green-400',
-            'stopped': 'bg-gray-500/20 text-gray-400',
-            'starting': 'bg-yellow-500/20 text-yellow-400',
-            'stopping': 'bg-orange-500/20 text-orange-400',
-            'error': 'bg-red-500/20 text-red-400',
-            'failed': 'bg-red-500/20 text-red-400'
-        };
-        return statusMap[status?.toLowerCase()] || 'bg-slate-500/20 text-slate-400';
-    },
-
-    truncateText(text, maxLength) {
-        if (!text || text.length <= maxLength) return text;
-        return text.substring(0, maxLength) + '...';
-    },
-
-    createVMICard(vmiInfo) {
-        if (!vmiInfo) return '';
-
-        const primaryInterface = vmiInfo.interfaces?.find(iface => 
-            iface.ipAddress && 
-            !iface.interfaceName?.startsWith('lxc') && 
-            !iface.interfaceName?.startsWith('cilium') &&
-            iface.ipAddress !== '127.0.0.1'
-        );
-
-        return `
-            <div class="bg-slate-800/40 rounded-lg p-3 border border-slate-700/50">
-                <div class="flex items-center gap-2 mb-3">
-                    <span class="text-blue-400">🖥️</span>
-                    <span class="font-medium text-slate-200">VMI</span>
-                </div>
-                <div class="space-y-1 text-sm">
-                    <div class="flex justify-between items-center">
-                        <span class="text-slate-400">Node</span>
-                        <span class="text-slate-200 font-medium">${vmiInfo.nodeName || 'N/A'}</span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <span class="text-slate-400">Phase</span>
-                        <span class="px-2 py-0.5 rounded text-xs font-medium ${this.getStatusBadgeClass(vmiInfo.phase)}">${vmiInfo.phase || 'N/A'}</span>
-                    </div>
-                    ${primaryInterface ? `
-                    <div class="flex justify-between items-center">
-                        <span class="text-slate-400">IP Address</span>
-                        <span class="text-blue-300 font-mono">${primaryInterface.ipAddress}</span>
-                    </div>
-                    ` : ''}
-                    ${vmiInfo.guestOSInfo?.prettyName ? `
-                    <div class="flex justify-between items-center">
-                        <span class="text-slate-400">Guest OS</span>
-                        <span class="text-slate-200">${this.truncateText(vmiInfo.guestOSInfo.prettyName, 25)}</span>
-                    </div>
-                    ` : ''}
-                </div>
-            </div>
-        `;
-    },
-
-    createPodCard(vmData) {
-        if (!vmData.podInfo || vmData.podInfo.length === 0) return '';
-
-        return `
-            <div class="bg-slate-800/40 rounded-lg p-3 border border-slate-700/50">
-                <div class="flex items-center gap-2 mb-3">
-                    <span class="text-purple-400">📦</span>
-                    <span class="font-medium text-slate-200">Pod</span>
-                </div>
-                <div class="space-y-1 text-sm">
-                    <div>
-                        <div class="text-slate-400 text-xs mb-1">Name</div>
-                        <div class="bg-slate-900/50 rounded p-1.5 border border-slate-700/50">
-                            <div class="flex items-center justify-between gap-2">
-                                <div class="text-slate-200 font-mono text-xs break-all text-left" title="${vmData.podName || 'N/A'}">
-                                    ${vmData.podName || 'N/A'}
-                                </div>
-                                ${vmData.podName ? `
-                                <button class="flex-shrink-0 text-slate-400 hover:text-slate-200 p-1 rounded transition-colors" 
-                                        onclick="DetailRenderer.copyToClipboard('${vmData.podName}', this)"
-                                        title="Copy pod name">
-                                    <span class="copy-icon">📋</span>
-                                </button>
-                                ` : ''}
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="flex justify-between items-center">
-                        <span class="text-slate-400">Node</span>
-                        <span class="text-slate-200">${vmData.podInfo[0].nodeId || 'N/A'}</span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <span class="text-slate-400">Status</span>
-                        <span class="px-2 py-0.5 rounded text-xs font-medium ${this.getStatusBadgeClass(vmData.podInfo[0].status)}">${vmData.podInfo[0].status || 'N/A'}</span>
-                    </div>
-                </div>
-            </div>
-        `;
-    },
-
-    createMigrationSection(vmimInfos) {
-        if (!vmimInfos || vmimInfos.length === 0) return '';
-
-        const latestMigration = vmimInfos[vmimInfos.length - 1];
-        if (!latestMigration) return '';
-
-        const migrationIcon = this.getMigrationIcon(latestMigration.phase);
-        const isActive = ['Running', 'Scheduling', 'Scheduled', 'PreparingTarget', 'TargetReady'].includes(latestMigration.phase);
-        const migrationId = `migration-section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        
-        return `
-            <div class="space-y-2">
-                <div class="bg-slate-800/40 rounded-lg border border-slate-700/50">
-                    <div class="p-4 border-b border-slate-700/50">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <span class="text-lg">${migrationIcon}</span>
-                                <h2 class="text-lg font-semibold text-slate-200">Migration</h2>
-                                ${isActive ? '<span class="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs rounded-full font-medium">ACTIVE</span>' : ''}
-                            </div>
-                            <button class="text-slate-400 hover:text-slate-300 text-sm transition-colors" 
-                                    onclick="DetailRenderer.toggleMigrationSection('${migrationId}', this)">
-                                <span class="toggle-text">Show Details</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div id="${migrationId}" class="hidden p-4 space-y-4">
-
-                        <!-- Current Migration Status -->
-                        <div class="bg-slate-900/50 rounded-lg p-4 border ${latestMigration.phase === 'Failed' ? 'border-red-500/50' : 'border-slate-700/50'}">
-                            <div class="flex items-center justify-between mb-4">
-                                <div class="flex items-center gap-3">
-                                    <span class="text-lg">${migrationIcon}</span>
-                                    <div>
-                                        <div class="text-slate-200 font-medium">Latest Migration</div>
-                                        <div class="text-slate-400 text-sm">${this.truncateText(latestMigration.name || 'Unknown', 30)}</div>
-                                    </div>
-                                </div>
-                                <span class="px-3 py-1 rounded text-sm font-medium ${this.getStatusBadgeClass(latestMigration.phase)}">${latestMigration.phase || 'Unknown'}</span>
-                            </div>
-
-                            <!-- Migration Path -->
-                            <div class="bg-slate-800/50 rounded-lg p-4 mb-4">
-                                <div class="grid grid-cols-3 gap-4 text-center">
-                                    <div>
-                                        <div class="text-slate-400 text-xs mb-1">Source</div>
-                                        <div class="text-slate-200 font-medium">${latestMigration.sourceNode || 'Unknown'}</div>
-                                        ${latestMigration.sourcePod ? `
-                                        <div class="mt-2">
-                                            <div class="text-slate-400 text-xs mb-1">Source Pod</div>
-                                            <div class="bg-slate-800/50 rounded p-2 border border-slate-700/50">
-                                                <div class="flex items-center justify-between gap-2">
-                                                    <div class="text-slate-300 font-mono text-xs break-all text-left" title="${latestMigration.sourcePod}">
-                                                        ${latestMigration.sourcePod}
-                                                    </div>
-                                                    <button class="flex-shrink-0 text-slate-400 hover:text-slate-200 p-1 rounded transition-colors" 
-                                                            onclick="DetailRenderer.copyToClipboard('${latestMigration.sourcePod}', this)"
-                                                            title="Copy pod name">
-                                                        <span class="copy-icon">📋</span>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        ` : ''}
-                                    </div>
-                                    <div class="flex items-center justify-center">
-                                        <span class="text-2xl text-slate-500">→</span>
-                                    </div>
-                                    <div>
-                                        <div class="text-slate-400 text-xs mb-1">Target</div>
-                                        <div class="text-green-400 font-medium">${latestMigration.targetNode || 'Unknown'}</div>
-                                        ${latestMigration.targetPod ? `
-                                        <div class="mt-2">
-                                            <div class="text-slate-400 text-xs mb-1">Target Pod</div>
-                                            <div class="bg-slate-800/50 rounded p-2 border ${latestMigration.targetPodExists ? 'border-slate-700/50' : 'border-red-500/50'}">
-                                                <div class="flex items-center justify-between gap-2">
-                                                    <div class="${latestMigration.targetPodExists ? 'text-slate-300' : 'text-red-400'} font-mono text-xs break-all text-left" title="${latestMigration.targetPod}">
-                                                        ${latestMigration.targetPod}
-                                                        ${!latestMigration.targetPodExists ? ' ⚠️' : ''}
-                                                    </div>
-                                                    <button class="flex-shrink-0 text-slate-400 hover:text-slate-200 p-1 rounded transition-colors" 
-                                                            onclick="DetailRenderer.copyToClipboard('${latestMigration.targetPod}', this)"
-                                                            title="Copy pod name">
-                                                        <span class="copy-icon">📋</span>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        ` : ''}
-                                    </div>
-                                </div>
-                                ${latestMigration.migrationMode ? `
-                                <div class="text-center mt-3 pt-3 border-t border-slate-700/50">
-                                    <span class="text-slate-400 text-xs">Mode: </span>
-                                    <span class="text-slate-300 text-sm font-medium">${latestMigration.migrationMode}</span>
-                                </div>
-                                ` : ''}
-                            </div>
-
-                            <!-- Migration Details -->
-                            ${latestMigration.latestPhaseTransition ? `
-                            <div class="text-sm text-slate-400">
-                                <span>Last updated: </span>
-                                <span class="text-slate-300">${new Date(latestMigration.latestPhaseTransition.phaseTransitionTimestamp).toLocaleString('en-GB', { 
-                                    day: '2-digit', 
-                                    month: '2-digit', 
-                                    year: 'numeric',
-                                    hour: '2-digit', 
-                                    minute: '2-digit' 
-                                })}</span>
-                            </div>
-                            ` : ''}
-
-                            ${!latestMigration.targetPodExists && latestMigration.targetPod ? `
-                            <div class="mt-3 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
-                                <div class="flex items-center gap-2">
-                                    <span class="text-red-400">⚠️</span>
-                                    <span class="text-red-400 text-sm font-medium">Target pod validation failed</span>
-                                </div>
-                                <div class="text-red-300 text-xs mt-1">The target pod could not be found or is not running</div>
-                            </div>
-                            ` : ''}
-                        </div>
-
-                        <!-- Migration History -->
-                        ${vmimInfos.length > 1 ? this.createMigrationHistory(vmimInfos) : ''}
-                    </div>
-                </div>
-            </div>
-        `;
-    },
-
-    createMigrationHistory(vmimInfos) {
-        const historyItems = vmimInfos.slice(0, -1).reverse(); // Exclude current migration, newest first
-        const historyId = `migration-history-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        
-        return `
-            <div class="bg-slate-800/40 rounded-lg border border-slate-700/50">
-                <div class="p-4 border-b border-slate-700/50">
-                    <div class="flex items-center justify-between">
-                        <h4 class="font-medium text-slate-200">Migration History (${historyItems.length})</h4>
-                        <button class="text-slate-400 hover:text-slate-300 text-sm transition-colors" 
-                                onclick="DetailRenderer.toggleMigrationHistory('${historyId}', this)">
-                            <span class="toggle-text">Show History</span>
-                        </button>
-                    </div>
-                </div>
-                <div id="${historyId}" class="hidden p-4 space-y-3">
-                    ${historyItems.map(migration => `
-                        <div class="flex items-center justify-between py-2 border-b border-slate-700/30 last:border-b-0">
-                            <div class="flex items-center gap-3">
-                                <span class="text-sm">${this.getMigrationIcon(migration.phase)}</span>
-                                <div>
-                                    <div class="text-sm font-medium ${this.getMigrationColorClass(migration.phase)}">${migration.phase}</div>
-                                    <div class="text-xs text-slate-400">${migration.sourceNode || 'Unknown'} → ${migration.targetNode || 'Unknown'}</div>
-                                </div>
-                            </div>
-                            <div class="text-right">
-                                ${migration.latestPhaseTransition ? `
-                                <div class="text-xs text-slate-400">
-                                    ${new Date(migration.latestPhaseTransition.phaseTransitionTimestamp).toLocaleDateString('en-GB')}
-                                </div>
-                                ` : ''}
-                                <div class="text-xs text-slate-500">${migration.migrationMode || 'Unknown mode'}</div>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-    },
-
-    toggleMigrationSection(sectionId, button) {
-        const sectionDiv = document.getElementById(sectionId);
-        const toggleText = button.querySelector('.toggle-text');
-        
-        if (sectionDiv) {
-            if (sectionDiv.classList.contains('hidden')) {
-                sectionDiv.classList.remove('hidden');
-                toggleText.textContent = 'Hide Details';
-                button.classList.add('text-slate-300');
-                button.classList.remove('text-slate-400');
-            } else {
-                sectionDiv.classList.add('hidden');
-                toggleText.textContent = 'Show Details';
-                button.classList.add('text-slate-400');
-                button.classList.remove('text-slate-300');
-            }
+    renderNodeDetail(nodeData) {
+        if (!nodeData) {
+            return '<div class="text-center py-8 text-slate-400">Node data not available</div>';
         }
-    },
 
-    toggleMigrationHistory(historyId, button) {
-        const historyDiv = document.getElementById(historyId);
-        const toggleText = button.querySelector('.toggle-text');
-        
-        if (historyDiv) {
-            if (historyDiv.classList.contains('hidden')) {
-                historyDiv.classList.remove('hidden');
-                toggleText.textContent = 'Hide History';
-                button.classList.add('text-slate-300');
-                button.classList.remove('text-slate-400');
-            } else {
-                historyDiv.classList.add('hidden');
-                toggleText.textContent = 'Show History';
-                button.classList.add('text-slate-400');
-                button.classList.remove('text-slate-300');
-            }
-        }
-    },
-
-    createErrorSection(errors) {
-        if (!errors || errors.length === 0) return '';
-        
-        // Separate actual errors from storage info
-        const actualIssues = errors.filter(error => 
-            error.severity !== 'info' && error.severity !== 'information'
-        );
-        
-        const storageInfo = errors.filter(error => 
-            error.severity === 'info' && error.type === 'info'
-        );
-        
-        let sections = '';
-        
-        // Storage backend info section
-        if (storageInfo.length > 0) {
-            sections += this.createStorageBackendSection(storageInfo);
-        }
-        
-        // Actual error section
-        if (actualIssues.length > 0) {
-            sections += `
-                <div class="mb-6 p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
-                    <h3 class="text-lg font-bold text-red-400 mb-3 flex items-center gap-2">
-                        <span>🚨</span> Issues Found (${actualIssues.length})
-                    </h3>
-                    <div class="space-y-3">
-                        ${actualIssues.map(error => `
-                            <div class="flex items-start gap-3 p-3 bg-red-900/10 rounded border border-red-500/20">
-                                <span class="text-lg">${this.getErrorIcon(error.severity)}</span>
-                                <div class="flex-1">
-                                    <div class="flex items-center gap-2 mb-1">
-                                        <span class="text-red-400 font-semibold text-sm uppercase">${error.severity}</span>
-                                        <span class="text-slate-400">•</span>
-                                        <span class="text-slate-300 text-sm">${error.type.toUpperCase()}</span>
-                                    </div>
-                                    <p class="text-slate-200 text-sm">${error.message}</p>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `;
-        }
-        
-        return sections;
-    },
-
-    createStorageBackendSection(storageInfos) {
-        if (!storageInfos || storageInfos.length === 0) return '';
-        
-        return `
-            <div class="mb-6 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
-                <h3 class="text-lg font-semibold text-slate-200 mb-3 flex items-center gap-2">
-                    <span>💽</span> Storage Backend Information
-                </h3>
-                <div class="space-y-3">
-                    ${storageInfos.map(info => `
-                        <div class="bg-blue-900/10 rounded-lg p-3 border border-blue-500/20">
-                            <div class="flex items-center gap-2 mb-2">
-                                <span class="text-blue-400 font-semibold text-sm">Backend:</span>
-                                <span class="bg-blue-500/20 text-blue-300 text-xs px-2 py-1 rounded-full font-mono">
-                                    ${this.getStorageBackendDisplayName(info.resource)}
-                                </span>
-                            </div>
-                            <p class="text-slate-300 text-sm">${info.message}</p>
-                            ${info.resource ? `
-                            <div class="mt-2 text-xs text-slate-400">
-                                <span>Resource: </span>
-                                <span class="font-mono text-slate-300">${info.resource}</span>
-                            </div>
-                            ` : ''}
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-    },
-
-    getStorageBackendDisplayName(resource) {
-        if (!resource) return 'Unknown';
-        
-        // Extract meaningful name from resource identifier
-        if (resource.includes('longhorn')) return 'Longhorn';
-        if (resource.includes('ceph')) return 'Ceph';
-        if (resource.includes('nfs')) return 'NFS';
-        if (resource.includes('iscsi')) return 'iSCSI';
-        
-        // Return last part of resource path as fallback
-        const parts = resource.split('/');
-        return parts[parts.length - 1] || resource;
-    },
-
-    createAdditionalSections(vmData) {
-        let sections = '';
-        
-        // Storage section with all storage-related info
-        const hasStorageInfo = (vmData.attachmentTicketsRaw && Object.keys(vmData.attachmentTicketsRaw).length > 0) ||
-                               (vmData.volumeName && vmData.replicaInfo && vmData.replicaInfo.length > 0);
-        
-        if (hasStorageInfo) {
-            sections += `
-                <div class="mt-6 space-y-4">
-                    <div class="flex items-center gap-2">
-                        <span class="text-xl">💾</span>
-                        <h2 class="text-lg font-semibold text-slate-200">Storage</h2>
-                    </div>
-                    
-                    ${vmData.attachmentTicketsRaw ? this.createVolumeAttachmentSection(vmData.attachmentTicketsRaw) : ''}
-                    ${vmData.volumeName && vmData.replicaInfo && vmData.replicaInfo.length > 0 ? this.createCompactReplicaSection(vmData.replicaInfo) : ''}
-                </div>
-            `;
-        }
-        
-        return sections;
-    },
-
-    createVolumeAttachmentSection(rawTickets) {
-        if (!rawTickets || typeof rawTickets !== 'object') return '';
-        
-        const tickets = Object.entries(rawTickets);
-        if (tickets.length === 0) return '';
-        
-        return `
-            <div class="p-4 bg-slate-800/30 rounded-lg">
-                <h4 class="font-medium text-slate-200 mb-4 flex items-center gap-2">
-                    <span>🔗</span> Volume Attachment Status
-                </h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    ${tickets.map(([ticketId, ticketData]) => this.createAttachmentTicketCard(ticketId, ticketData)).join('')}
-                </div>
-            </div>
-        `;
-    },
-
-    createAttachmentTicketCard(ticketId, ticketData) {
-        const satisfied = ticketData.satisfied || false;
-        const conditions = ticketData.conditions || [];
-        
-        return `
-            <div class="bg-slate-800/40 rounded-lg p-4 border ${satisfied ? 'border-green-500/30' : 'border-red-500/30'}">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center gap-2">
-                        <span class="${satisfied ? 'text-green-400' : 'text-red-400'}">${satisfied ? '✅' : '❌'}</span>
-                        <span class="font-medium text-slate-200 text-sm">Attachment</span>
-                    </div>
-                    <span class="px-2 py-1 rounded text-xs font-medium ${satisfied ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">
-                        ${satisfied ? 'SATISFIED' : 'PENDING'}
-                    </span>
-                </div>
-                
-                <div class="space-y-2">
-                    <div>
-                        <div class="text-slate-400 text-xs mb-2">Ticket ID</div>
-                        <div class="bg-slate-900/50 rounded p-2 border border-slate-700/50">
-                            <div class="flex items-center justify-between gap-2">
-                                <div class="text-slate-200 font-mono text-xs break-all text-left" title="${ticketId}">
-                                    ${ticketId}
-                                </div>
-                                <button class="flex-shrink-0 text-slate-400 hover:text-slate-200 p-1 rounded transition-colors" 
-                                        onclick="DetailRenderer.copyToClipboard('${ticketId}', this)"
-                                        title="Copy ticket ID">
-                                    <span class="copy-icon">📋</span>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    ${conditions.length > 0 ? `
-                    <div>
-                        <div class="text-slate-400 text-xs mb-2">Conditions</div>
-                        <div class="space-y-1">
-                            ${conditions.map(condition => `
-                                <div class="flex items-center justify-between text-xs">
-                                    <span class="text-slate-300">${condition.type}</span>
-                                    <div class="flex items-center gap-2">
-                                        <span class="px-1 py-0.5 rounded text-xs ${condition.status === 'True' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">
-                                            ${condition.status}
-                                        </span>
-                                        ${condition.lastTransitionTime ? `
-                                        <span class="text-slate-500">${this.getTimeAgo(condition.lastTransitionTime)}</span>
-                                        ` : ''}
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                    ` : ''}
-                    
-                    ${ticketData.node ? `
-                    <div>
-                        <div class="text-slate-400 text-xs mb-1">Node</div>
-                        <div class="text-slate-200 text-sm">${ticketData.node}</div>
-                    </div>
-                    ` : ''}
-                </div>
-                
-                ${!satisfied ? `
-                <div class="mt-3 p-2 bg-red-900/20 border border-red-500/30 rounded text-xs">
-                    <span class="text-red-400">⚠️ Volume attachment pending - check node connectivity and storage backend</span>
-                </div>
-                ` : ''}
-            </div>
-        `;
-    },
-
-    getTimeAgo(timeString) {
-        if (!timeString) return 'unknown';
-        
-        try {
-            const date = new Date(timeString);
-            const now = new Date();
-            const seconds = Math.round(Math.abs(now - date) / 1000);
-            const minutes = Math.round(seconds / 60);
-            const hours = Math.round(minutes / 60);
-            const days = Math.round(hours / 24);
-            
-            if (seconds < 60) return `${seconds}s ago`;
-            if (minutes < 60) return `${minutes}m ago`;
-            if (hours < 24) return `${hours}h ago`;
-            return `${days}d ago`;
-        } catch (e) {
-            return 'unknown';
-        }
-    },
-
-    createCompactReplicaSection(replicas) {
-        if (!replicas || replicas.length === 0) return '';
-        
-        return `
-            <div class="p-4 bg-slate-800/30 rounded-lg">
-                <h4 class="font-medium text-slate-200 mb-4 flex items-center gap-2">
-                    <span>💿</span> Storage Replicas (${replicas.length})
-                </h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    ${replicas.map(replica => this.createReplicaCard(replica)).join('')}
-                </div>
-            </div>
-        `;
-    },
-
-    createReplicaCard(replica) {
-        if (!replica) return '';
-        
-        const healthStatus = this.getReplicaHealthStatus(replica.currentState);
-        const isHealthy = replica.currentState === 'running';
-        
-        return `
-            <div class="bg-slate-800/40 rounded-lg p-4 border ${isHealthy ? 'border-green-500/30' : 'border-red-500/30'}">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center gap-2">
-                        <span class="${isHealthy ? 'text-green-400' : 'text-red-400'}">${isHealthy ? '✅' : '❌'}</span>
-                        <span class="font-medium text-slate-200 text-sm">Replica</span>
-                    </div>
-                    <span class="px-2 py-1 rounded text-xs font-medium ${this.getReplicaStatusBadgeClass(replica.currentState)}">${replica.currentState || 'Unknown'}</span>
-                </div>
-                
-                <div class="space-y-2 text-sm">
-                    <div>
-                        <div class="text-slate-400 text-xs mb-2">Name</div>
-                        <div class="bg-slate-900/50 rounded p-2 border border-slate-700/50">
-                            <div class="flex items-center justify-between gap-2">
-                                <div class="text-slate-200 font-mono text-xs break-all text-left" title="${replica.name}">
-                                    ${replica.name || 'N/A'}
-                                </div>
-                                ${replica.name ? `
-                                <button class="flex-shrink-0 text-slate-400 hover:text-slate-200 p-1 rounded transition-colors" 
-                                        onclick="DetailRenderer.copyToClipboard('${replica.name}', this)"
-                                        title="Copy replica name">
-                                    <span class="copy-icon">📋</span>
-                                </button>
-                                ` : ''}
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <div class="text-slate-400 text-xs mb-1">Node</div>
-                            <div class="text-slate-200 text-sm">${replica.nodeId || 'N/A'}</div>
-                        </div>
-                        <div>
-                            <div class="text-slate-400 text-xs mb-1">Started</div>
-                            <div class="text-sm font-medium ${replica.started ? 'text-green-400' : 'text-red-400'}">
-                                ${replica.started ? 'Yes' : 'No'}
-                            </div>
-                        </div>
-                    </div>
-                    
-                    ${replica.diskPath ? `
-                    <div>
-                        <div class="text-slate-400 text-xs mb-1">Disk Path</div>
-                        <div class="text-slate-300 font-mono text-xs">${replica.diskPath}</div>
-                    </div>
-                    ` : ''}
-                    
-                    ${replica.dataPath ? `
-                    <div>
-                        <div class="text-slate-400 text-xs mb-1">Data Path</div>
-                        <div class="text-slate-300 font-mono text-xs">${this.truncateText(replica.dataPath, 40)}</div>
-                    </div>
-                    ` : ''}
-                    
-                    ${replica.size ? `
-                    <div>
-                        <div class="text-slate-400 text-xs mb-1">Size</div>
-                        <div class="text-slate-200 text-sm">${this.formatBytes(replica.size)}</div>
-                    </div>
-                    ` : ''}
-                </div>
-                
-                ${!isHealthy && replica.currentState ? `
-                <div class="mt-3 p-2 bg-red-900/20 border border-red-500/30 rounded text-xs">
-                    <span class="text-red-400">⚠️ Replica not running - check node health and storage availability</span>
-                </div>
-                ` : ''}
-            </div>
-        `;
-    },
-
-    getReplicaHealthStatus(state) {
-        const healthyStates = ['running', 'healthy', 'ready'];
-        return healthyStates.includes(state?.toLowerCase()) ? 'healthy' : 'unhealthy';
-    },
-
-    getReplicaStatusBadgeClass(state) {
-        switch(state?.toLowerCase()) {
-            case 'running':
-            case 'healthy':
-            case 'ready': 
-                return 'bg-green-500/20 text-green-400';
-            case 'stopped':
-            case 'failed':
-            case 'error': 
-                return 'bg-red-500/20 text-red-400';
-            case 'starting':
-            case 'rebuilding': 
-                return 'bg-yellow-500/20 text-yellow-400';
-            default: 
-                return 'bg-slate-500/20 text-slate-400';
-        }
-    },
-
-    formatBytes(bytes) {
-        if (!bytes || bytes === 0) return '0 B';
-        
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    },
-
-    getMigrationIcon(phase) {
-        const iconMap = {
-            'Running': '🔄',
-            'Scheduling': '⏳',
-            'Pending': '⏳',
-            'Scheduled': '📋',
-            'PreparingTarget': '🔧',
-            'TargetReady': '✅',
-            'Failed': '❌',
-            'Succeeded': '🎉'
-        };
-        return iconMap[phase] || '📦';
-    },
-
-    getMigrationColorClass(phase) {
-        const colorMap = {
-            'Running': 'text-yellow-400',
-            'Scheduling': 'text-blue-400',
-            'Pending': 'text-blue-400',
-            'Scheduled': 'text-blue-400',
-            'PreparingTarget': 'text-purple-400',
-            'TargetReady': 'text-green-400',
-            'Failed': 'text-red-400',
-            'Succeeded': 'text-green-400'
-        };
-        return colorMap[phase] || 'text-slate-400';
-    },
-
-    copyToClipboard(text, button) {
-        if (!text) return;
-        
-        // Use the modern clipboard API if available
-        if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(text).then(() => {
-                this.showCopyFeedback(button, true);
-            }).catch(() => {
-                this.fallbackCopyToClipboard(text, button);
-            });
-        } else {
-            this.fallbackCopyToClipboard(text, button);
-        }
-    },
-
-    fallbackCopyToClipboard(text, button) {
-        // Fallback for older browsers or non-secure contexts
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        textArea.style.top = '-999999px';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        
-        try {
-            const successful = document.execCommand('copy');
-            this.showCopyFeedback(button, successful);
-        } catch (err) {
-            this.showCopyFeedback(button, false);
-        }
-        
-        document.body.removeChild(textArea);
-    },
-
-    showCopyFeedback(button, success) {
-        const icon = button.querySelector('.copy-icon');
-        const originalIcon = icon.textContent;
-        
-        if (success) {
-            icon.textContent = '✅';
-            button.classList.add('text-green-400');
-            button.classList.remove('text-slate-400');
-        } else {
-            icon.textContent = '❌';
-            button.classList.add('text-red-400');
-            button.classList.remove('text-slate-400');
-        }
-        
-        // Reset after 2 seconds
-        setTimeout(() => {
-            icon.textContent = originalIcon;
-            button.classList.remove('text-green-400', 'text-red-400');
-            button.classList.add('text-slate-400');
-        }, 2000);
-    },
-
-    getErrorIcon(severity) {
-        const iconMap = {
-            'error': '❌',
-            'warning': '⚠️',
-            'critical': '🚨'
-        };
-        return iconMap[severity] || '⚠️';
-    },
-
-    renderNodeDetail(nodeData, issues) {
-        if (!nodeData) return '<div class="text-red-400">Node data not found</div>';
-        
-        // Extract node name from nested structure
-        const nodeName = nodeData.longhornInfo ? nodeData.longhornInfo.name : (nodeData.name || 'Unknown');
-        console.log('Rendering node detail for:', nodeName, nodeData);
-        
-        const nodeIssues = issues.filter(issue => 
-            issue.resourceType === 'node-not-ready' && issue.resourceName === nodeName
-        );
-        
+        const nodeName = nodeData.longhornInfo?.name || nodeData.kubernetesInfo?.name || 'Unknown Node';
         const healthSummary = this.analyzeNodeHealth(nodeData);
+        const lastUpdated = new Date().toLocaleString();
         
         return `
-            <div class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-                <!-- Hero Header -->
-                <div class="bg-gradient-to-r from-blue-600/10 to-purple-600/10 border-b border-slate-700/50 backdrop-blur-sm">
-                    <div class="max-w-7xl mx-auto px-8 py-8">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center space-x-6">
-                                <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
-                                    <span class="text-2xl font-bold text-white">🖥️</span>
-                                </div>
-                                <div>
-                                    <h1 class="text-4xl font-bold text-white mb-2">${nodeName}</h1>
-                                    <p class="text-slate-300 text-lg flex items-center gap-2">
-                                        <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                                        Kubernetes Node • ${nodeData.kubernetesInfo ? nodeData.kubernetesInfo.roles?.join(' • ') || 'Worker' : 'Unknown Role'}
-                                    </p>
-                                </div>
+            <div class="bg-slate-800 rounded-lg">
+                <!-- Enhanced Header with Last Updated -->
+                <div class="p-4 border-b border-slate-700">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h1 class="text-2xl font-semibold text-white">${nodeName}</h1>
+                            <div class="flex items-center gap-3 mt-2">
+                                <span class="px-3 py-1 text-sm rounded ${this.getNodeStatusBadge(nodeData)}">
+                                    ${this.getNodeStatus(nodeData)}
+                                </span>
+                                ${this.renderRoleTags(nodeData.kubernetesInfo?.roles || ['worker'])}
                             </div>
-                            <div class="flex items-center gap-4">
-                                ${this.renderHealthBadges(healthSummary)}
-                                ${nodeIssues.length > 0 ? `<div class="bg-red-500/20 border border-red-500/30 rounded-xl px-4 py-2 flex items-center gap-2">
-                                    <span class="w-3 h-3 bg-red-400 rounded-full animate-pulse"></span>
-                                    <span class="text-red-400 font-semibold">${nodeIssues.length} Issue${nodeIssues.length !== 1 ? 's' : ''}</span>
-                                </div>` : ''}
-                            </div>
+                        </div>
+                        <div class="text-right text-sm text-slate-400">
+                            <div>Last Updated</div>
+                            <div class="font-medium">${lastUpdated}</div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Main Dashboard -->
-                <div class="max-w-7xl mx-auto px-8 py-8 space-y-8">
-                    <!-- KPI Cards Row -->
-                    ${this.renderKPICards(nodeData)}
-
-                    <!-- Two Column Layout -->
-                    <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                        <!-- Left Column: Health & System -->
-                        <div class="xl:col-span-2 space-y-8">
-                            ${this.renderHealthDashboard(nodeData, healthSummary)}
-                            ${this.renderStorageDashboard(nodeData.longhornInfo ? nodeData.longhornInfo.disks : [])}
+                <!-- Enhanced Layout with System Details -->
+                <div class="p-6">
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                        
+                        <!-- Left Column -->
+                        <div class="space-y-6">
+                            ${this.renderEnhancedHealth(nodeData, healthSummary)}
+                            ${this.renderEnhancedResources(nodeData)}
+                            ${this.renderEnhancedSystem(nodeData)}
                         </div>
 
-                        <!-- Right Column: System Info & Actions -->
-                        <div class="space-y-8">
-                            ${this.renderSystemCard(nodeData)}
-                            ${this.renderQuickActions(nodeData, healthSummary)}
+                        <!-- Right Column -->
+                        <div class="space-y-6">
+                            ${this.renderEnhancedStorage(nodeData.longhornInfo ? nodeData.longhornInfo.disks : [])}
+                            ${this.renderQuickCommands(nodeName)}
                         </div>
                     </div>
                 </div>
@@ -889,271 +52,1599 @@ const DetailRenderer = {
         `;
     },
 
-    analyzeNodeHealth(nodeData) {
-        const issues = [];
-        const warnings = [];
-        
-        // Check Longhorn conditions
-        const longhornConditions = nodeData.longhornInfo ? nodeData.longhornInfo.conditions : [];
-        const longhornReadyCondition = longhornConditions.find(c => c.type === 'Ready');
-        
-        // Check Kubernetes conditions
-        const k8sConditions = nodeData.kubernetesInfo ? nodeData.kubernetesInfo.conditions : [];
-        const k8sReadyCondition = k8sConditions.find(c => c.type === 'Ready');
-        
-        if (longhornReadyCondition && longhornReadyCondition.status !== 'True') {
-            issues.push({ type: 'Longhorn', condition: longhornReadyCondition });
+    renderRoleTags(roles) {
+        if (!roles || roles.length === 0) {
+            return '<span class="px-2 py-1 text-xs rounded-full bg-slate-600/60 text-slate-300">worker</span>';
         }
         
-        if (k8sReadyCondition && k8sReadyCondition.status !== 'True') {
-            issues.push({ type: 'Kubernetes', condition: k8sReadyCondition });
-        }
+        return roles.map(role => {
+            const isControlPlane = role === 'control-plane';
+            const bgClass = isControlPlane ? 'bg-blue-600/60 text-blue-200' : 'bg-slate-600/60 text-slate-300';
+            return `<span class="px-2 py-1 text-xs rounded-full ${bgClass}">${role}</span>`;
+        }).join(' ');
+    },
+
+    renderEnhancedHealth(nodeData, healthSummary) {
+        return `
+            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-lg">🏥</span>
+                    <h2 class="text-lg font-medium text-white">Health Status</h2>
+                </div>
+                <div class="space-y-3">
+                    <div class="flex items-center gap-3 p-3 rounded ${healthSummary.overallHealthy ? 'bg-green-900/20 border border-green-600/30' : 'bg-red-900/20 border border-red-600/30'}">
+                        <span class="text-2xl">${healthSummary.overallHealthy ? '✅' : '❌'}</span>
+                        <div>
+                            <div class="font-medium text-white">${healthSummary.overallHealthy ? 'All Systems Healthy' : 'Issues Detected'}</div>
+                            <div class="text-sm text-slate-400">${healthSummary.summary}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    renderEnhancedResources(nodeData) {
+        console.log('Node data for resources:', nodeData); // Debug log
         
-        // Check disk health
-        const disks = nodeData.longhornInfo ? nodeData.longhornInfo.disks : [];
-        disks.forEach(disk => {
-            if (!disk.isSchedulable) {
-                warnings.push({ type: 'Storage', message: `Disk ${disk.name} is not schedulable` });
-            }
+        const k8sInfo = nodeData.kubernetesInfo;
+        const cpu = k8sInfo?.capacity?.cpu || '0';
+        const memoryBytes = k8sInfo?.capacity?.memory ? this.parseMemoryToBytes(k8sInfo.capacity.memory) : 0;
+        const memory = this.formatBytes(memoryBytes);
+        
+        // Debug multiple possible paths for attached volumes
+        console.log('Volumes debug:', {
+            'k8sInfo?.status?.volumesAttached': k8sInfo?.status?.volumesAttached,
+            'k8sInfo?.volumesAttached': k8sInfo?.volumesAttached,
+            'nodeData?.volumesAttached': nodeData?.volumesAttached,
+            'nodeData?.status?.volumesAttached': nodeData?.status?.volumesAttached
         });
         
-        return { issues, warnings };
+        // Try multiple possible paths for attached volumes - DEBUG shows it's at k8sInfo.volumesAttached
+        const attachedVolumes = k8sInfo?.volumesAttached?.length || 0;
+        
+        return `
+            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-lg">📊</span>
+                    <h2 class="text-lg font-medium text-white">Resources</h2>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-blue-400">${cpu}</div>
+                        <div class="text-sm text-slate-400">cores</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-green-400">${memory}</div>
+                        <div class="text-sm text-slate-400">Memory</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-purple-400">${nodeData.runningPods || 0}</div>
+                        <div class="text-sm text-slate-400">Running Pods</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-orange-400">${attachedVolumes}</div>
+                        <div class="text-sm text-slate-400">Volumes Attached</div>
+                    </div>
+                </div>
+                ${k8sInfo?.internalIP ? `
+                    <div class="mt-4 pt-4 border-t border-slate-600">
+                        <div class="text-sm text-slate-400">Internal IP</div>
+                        <div class="font-mono text-blue-300">${k8sInfo.internalIP}</div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
     },
 
-    renderHealthBadges(healthSummary) {
-        const hasIssues = healthSummary.issues.length > 0;
-        const hasWarnings = healthSummary.warnings.length > 0;
+    renderEnhancedSystem(nodeData) {
+        const k8sInfo = nodeData.kubernetesInfo;
+        const nodeInfo = k8sInfo?.nodeInfo || {};
         
-        if (!hasIssues && !hasWarnings) {
+        return `
+            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-lg">⚙️</span>
+                    <h2 class="text-lg font-medium text-white">System</h2>
+                </div>
+                <div class="space-y-3">
+                    <div class="grid grid-cols-[120px_1fr] gap-2 text-sm">
+                        <span class="text-slate-400">Architecture:</span>
+                        <span class="text-white font-medium">${nodeInfo.architecture || 'amd64'}</span>
+                        
+                        <span class="text-slate-400">Kernel:</span>
+                        <span class="text-white font-medium">${nodeInfo.kernelVersion || 'N/A'}</span>
+                        
+                        <span class="text-slate-400">Runtime:</span>
+                        <span class="text-white font-medium">${nodeInfo.containerRuntimeVersion || 'N/A'}</span>
+                        
+                        <span class="text-slate-400">OS:</span>
+                        <span class="text-white font-medium">${nodeInfo.osImage || 'linux'}</span>
+                        
+                        <span class="text-slate-400">Kubelet:</span>
+                        <span class="text-white font-medium">${nodeInfo.kubeletVersion || 'N/A'}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    renderEnhancedStorage(disks) {
+        console.log('Storage disks data:', disks); // Debug log
+        
+        if (!disks || disks.length === 0) {
             return `
-                <div class="bg-emerald-500/20 border border-emerald-500/30 rounded-xl px-6 py-3 flex items-center gap-3">
-                    <div class="w-3 h-3 bg-emerald-400 rounded-full animate-pulse"></div>
-                    <span class="text-emerald-400 font-semibold text-lg">All Systems Healthy</span>
+                <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                    <div class="flex items-center gap-2 mb-4">
+                        <span class="text-lg">💾</span>
+                        <h2 class="text-lg font-medium text-white">Storage Overview</h2>
+                    </div>
+                    <div class="text-center py-4 text-slate-400">No storage information available</div>
                 </div>
             `;
         }
+
+        const totalDisks = disks.length;
+        const activeDisks = disks.filter(d => d.isSchedulable).length;
         
-        let badges = '';
-        if (hasIssues) {
-            badges += `
-                <div class="bg-red-500/20 border border-red-500/30 rounded-xl px-4 py-2 flex items-center gap-2">
-                    <span class="w-3 h-3 bg-red-400 rounded-full animate-pulse"></span>
-                    <span class="text-red-400 font-semibold">${healthSummary.issues.length} Critical</span>
+        // Calculate total replica count correctly (count entries, not sum bytes)
+        const totalReplicas = disks.reduce((sum, disk) => {
+            const replicaCount = Object.keys(disk.scheduledReplicas || {}).length;
+            console.log(`Disk ${disk.name || disk.path}: ${replicaCount} replicas`); // Debug log
+            return sum + replicaCount;
+        }, 0);
+
+        return `
+            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-lg">💾</span>
+                    <h2 class="text-lg font-medium text-white">Storage Overview</h2>
                 </div>
-            `;
-        }
-        if (hasWarnings) {
-            badges += `
-                <div class="bg-yellow-500/20 border border-yellow-500/30 rounded-xl px-4 py-2 flex items-center gap-2">
-                    <span class="w-3 h-3 bg-yellow-400 rounded-full animate-pulse"></span>
-                    <span class="text-yellow-400 font-semibold">${healthSummary.warnings.length} Warning${healthSummary.warnings.length !== 1 ? 's' : ''}</span>
+                
+                <!-- Storage Summary -->
+                <div class="grid grid-cols-3 gap-4 mb-4 text-center">
+                    <div>
+                        <div class="text-2xl font-bold text-blue-400">${totalDisks}</div>
+                        <div class="text-sm text-slate-400">Disks</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-green-400">${activeDisks}</div>
+                        <div class="text-sm text-slate-400">Active</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-purple-400">${totalReplicas}</div>
+                        <div class="text-sm text-slate-400">Replicas</div>
+                    </div>
                 </div>
-            `;
-        }
-        
-        return badges;
+
+                <!-- Disk Details -->
+                <div class="space-y-3">
+                    ${disks.map(disk => {
+                        console.log('Rendering disk:', disk); // Debug log
+                        return this.renderDiskDetail(disk);
+                    }).join('')}
+                </div>
+            </div>
+        `;
     },
 
-    renderKPICards(nodeData) {
+    renderDiskDetail(disk) {
+        // Extract readable disk name from path
+        const diskName = this.getDiskDisplayName(disk.path);
+        
+        // Debug logging to see the actual data structure
+        console.log('Disk detail data:', {
+            path: disk.path,
+            storageScheduled: disk.storageScheduled,
+            storageMaximum: disk.storageMaximum,
+            storageAvailable: disk.storageAvailable,
+            scheduledReplicas: disk.scheduledReplicas
+        });
+        
+        // Parse storage information correctly - check both locations
+        const usedBytes = this.parseStorageToBytes(disk.storageScheduled || '0');
+        const totalBytes = this.parseStorageToBytes(disk.storageMaximum || '0');
+        const availableBytes = this.parseStorageToBytes(disk.storageAvailable || '0');
+        const usagePercent = totalBytes > 0 ? Math.round((usedBytes / totalBytes) * 100) : 0;
+        
+        console.log('Parsed storage:', { usedBytes, totalBytes, availableBytes, usagePercent }); // Debug
+        
+        // Count actual replicas and get their details
+        const replicaEntries = Object.entries(disk.scheduledReplicas || {});
+        const replicaCount = replicaEntries.length;
+        
+        return `
+            <div class="border border-slate-600 rounded p-3" data-disk-name="${diskName}">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full ${disk.isSchedulable ? 'bg-green-400' : 'bg-gray-400'}"></span>
+                        <span class="text-white font-medium">${diskName}</span>
+                        <span class="text-xs text-slate-400">${replicaCount} replicas</span>
+                    </div>
+                    <span class="text-sm text-slate-300">${this.formatBytes(totalBytes)}</span>
+                </div>
+                
+                <!-- Disk Usage -->
+                <div class="mb-3">
+                    <div class="flex justify-between text-sm text-slate-400 mb-1">
+                        <span>Used: ${this.formatBytes(usedBytes)}</span>
+                        <span>Available: ${this.formatBytes(availableBytes)}</span>
+                    </div>
+                    <div class="flex justify-between text-xs text-slate-500 mb-2">
+                        <span>${usagePercent}% used</span>
+                        <span>${Math.round((availableBytes / totalBytes) * 100)}% free</span>
+                    </div>
+                    <div class="w-full bg-slate-600 rounded-full h-2">
+                        <div class="bg-blue-500 h-2 rounded-full" style="width: ${Math.min(usagePercent, 100)}%"></div>
+                    </div>
+                </div>
+
+                <!-- Replicas List -->
+                ${replicaCount > 0 ? `
+                    <div class="border-t border-slate-600 pt-3">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-medium text-slate-300">Replicas (${replicaCount})</span>
+                            ${replicaCount > 10 ? `<span class="text-xs text-slate-400">Showing first 10</span>` : ''}
+                        </div>
+                        <div class="max-h-40 overflow-y-auto space-y-1 replicas-container">
+                            ${replicaEntries.slice(0, 10).map(([replicaName, sizeBytes]) => `
+                                <div class="flex justify-between items-center py-1 text-xs">
+                                    <span class="text-slate-400 font-mono">${replicaName}</span>
+                                    <span class="text-slate-300 font-medium ml-2">${this.formatBytes(sizeBytes)}</span>
+                                </div>
+                            `).join('')}
+                            ${replicaCount > 10 ? `
+                                <div class="text-center py-1">
+                                    <button onclick="DetailRenderer.expandReplicas('${diskName}', '${encodeURIComponent(JSON.stringify(replicaEntries))}')" 
+                                            class="text-blue-400 hover:text-blue-300 text-xs">
+                                        Show ${replicaCount - 10} more replicas...
+                                    </button>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    },
+
+    getDiskDisplayName(diskPath) {
+        if (!diskPath) return 'Unknown';
+        
+        // Extract meaningful name from path
+        if (diskPath.includes('/defaultdisk')) {
+            return 'defaultdisk';
+        } else if (diskPath.includes('/extra-disks/')) {
+            const parts = diskPath.split('/');
+            const diskId = parts[parts.length - 1];
+            // Show first 8 and last 8 characters for readability
+            if (diskId.length > 16) {
+                return `${diskId.substring(0, 8)}...${diskId.substring(diskId.length - 8)}`;
+            }
+            return diskId;
+        } else {
+            return diskPath.split('/').pop() || 'Unknown';
+        }
+    },
+
+    // Remove the shortenReplicaName method since we're showing full names now
+    showAllReplicas(diskName) {
+        // This would be implemented to show a modal or expand the list
+        console.log('Show all replicas for disk:', diskName);
+    },
+
+    renderQuickCommands(nodeName) {
+        const commands = [
+            {
+                title: 'View Running Pods',
+                command: `kubectl get pods --all-namespaces --field-selector spec.nodeName=${nodeName}`,
+                icon: '🔄'
+            },
+            {
+                title: 'Check System Logs',
+                command: `journalctl -u rke2-server`,
+                icon: '📋'
+            },
+            {
+                title: 'Node Describe',
+                command: `kubectl describe node ${nodeName}`,
+                icon: '🔍'
+            },
+            {
+                title: 'Check Disk Usage',
+                command: `kubectl exec -n longhorn-system $(kubectl get pod -n longhorn-system -l app=longhorn-manager --field-selector spec.nodeName=${nodeName} -o jsonpath='{.items[0].metadata.name}') -- df -h`,
+                icon: '💾'
+            }
+        ];
+
+        return `
+            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-lg">⚡</span>
+                    <h2 class="text-lg font-medium text-white">Quick Commands</h2>
+                </div>
+                <div class="space-y-3">
+                    ${commands.map(cmd => `
+                        <div class="border border-slate-600 rounded-lg p-3">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center gap-2">
+                                    <span>${cmd.icon}</span>
+                                    <span class="text-white font-medium">${cmd.title}</span>
+                                </div>
+                                <button onclick="Utils.copyToClipboard('${cmd.command.replace(/'/g, "\\'")}')" 
+                                        class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition-colors">
+                                    📋 Copy
+                                </button>
+                            </div>
+                            <code class="text-xs text-green-300 bg-slate-800 p-2 rounded block overflow-x-auto">${cmd.command}</code>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    },
+
+    renderCompactKPIs(nodeData) {
         const k8sInfo = nodeData.kubernetesInfo;
         if (!k8sInfo) return '';
         
         const cpuCores = k8sInfo.capacity?.cpu || '0';
-        const memoryGb = k8sInfo.capacity?.memory ? (parseInt(k8sInfo.capacity.memory.replace('Ki', '')) / 1024 / 1024).toFixed(1) + ' GB' : 'N/A';
+        const memoryTotalKi = k8sInfo.capacity?.memory ? parseInt(k8sInfo.capacity.memory.replace('Ki', '')) : 0;
+        const memoryTotal = (memoryTotalKi / 1024 / 1024).toFixed(1);
         const diskCount = nodeData.longhornInfo?.disks?.length || 0;
         const schedulableDisks = nodeData.longhornInfo?.disks?.filter(d => d.isSchedulable).length || 0;
         
         return `
-            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-                <!-- CPU Card -->
-                <div class="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 backdrop-blur-sm border border-emerald-500/20 rounded-2xl p-6 hover:shadow-xl transition-all duration-300">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center">
-                            <span class="text-2xl">⚡</span>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-3xl font-bold text-emerald-400">${cpuCores}</div>
-                            <div class="text-sm text-emerald-300">CPU Cores</div>
-                        </div>
+            <div class="bg-slate-700 rounded p-3">
+                <h3 class="font-medium mb-2">Resources</h3>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">CPU:</span>
+                        <span class="text-white">${cpuCores} cores</span>
                     </div>
-                    <div class="text-slate-400 text-sm">Total Processing Power</div>
-                </div>
-
-                <!-- Memory Card -->
-                <div class="bg-gradient-to-br from-blue-500/10 to-blue-600/5 backdrop-blur-sm border border-blue-500/20 rounded-2xl p-6 hover:shadow-xl transition-all duration-300">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
-                            <span class="text-2xl">🧠</span>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-3xl font-bold text-blue-400">${memoryGb}</div>
-                            <div class="text-sm text-blue-300">Memory</div>
-                        </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Memory:</span>
+                        <span class="text-white">${memoryTotal} GB</span>
                     </div>
-                    <div class="text-slate-400 text-sm">Available RAM</div>
-                </div>
-
-                <!-- Storage Card -->
-                <div class="bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-sm border border-purple-500/20 rounded-2xl p-6 hover:shadow-xl transition-all duration-300">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center">
-                            <span class="text-2xl">💽</span>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-3xl font-bold text-purple-400">${schedulableDisks}/${diskCount}</div>
-                            <div class="text-sm text-purple-300">Disks Ready</div>
-                        </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Disks:</span>
+                        <span class="text-white">${schedulableDisks}/${diskCount} active</span>
                     </div>
-                    <div class="text-slate-400 text-sm">Schedulable Storage</div>
-                </div>
-
-                <!-- Pods Card -->
-                <div class="bg-gradient-to-br from-orange-500/10 to-orange-600/5 backdrop-blur-sm border border-orange-500/20 rounded-2xl p-6 hover:shadow-xl transition-all duration-300">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="w-12 h-12 bg-orange-500/20 rounded-xl flex items-center justify-center">
-                            <span class="text-2xl">📦</span>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-3xl font-bold text-orange-400">${nodeData.runningPods || 0}</div>
-                            <div class="text-sm text-orange-300">Running Pods</div>
-                        </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Pods:</span>
+                        <span class="text-white">${nodeData.runningPods || 0}</span>
                     </div>
-                    <div class="text-slate-400 text-sm">Active Workloads</div>
                 </div>
             </div>
         `;
     },
 
-    renderResourceStats(nodeData) { return ''; },
-
-    renderHealthDashboard(nodeData, healthSummary) {
+    renderCompactHealth(nodeData, healthSummary) {
+        const hasIssues = healthSummary.issues.length > 0 || healthSummary.warnings.length > 0;
+        
         return `
-            <div class="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-2xl overflow-hidden">
-                <div class="bg-gradient-to-r from-green-500/10 to-emerald-500/5 px-8 py-6 border-b border-slate-700/50">
-                    <h3 class="text-2xl font-bold text-white flex items-center gap-3">
-                        <span class="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">💚</span>
-                        Node Health Status
-                    </h3>
+            <div class="bg-slate-700 rounded p-3">
+                <h3 class="font-medium mb-2">Health</h3>
+                ${hasIssues ? `
+                    <div class="space-y-1 text-sm">
+                        ${healthSummary.issues.map(issue => `
+                            <div class="text-red-400">• ${issue}</div>
+                        `).join('')}
+                        ${healthSummary.warnings.map(warning => `
+                            <div class="text-yellow-400">• ${warning}</div>
+                        `).join('')}
+                    </div>
+                ` : `
+                    <div class="text-green-400 text-sm">✓ All systems operational</div>
+                `}
+            </div>
+        `;
+    },
+
+    renderCompactStorage(disks) {
+        if (!disks || disks.length === 0) {
+            return `
+                <div class="bg-slate-700 rounded p-3">
+                    <h3 class="font-medium mb-2">Storage</h3>
+                    <div class="text-slate-400 text-sm">No storage disks</div>
                 </div>
-                <div class="p-8">
-                    <div class="space-y-4">
-                        <div class="text-slate-300">
-                            Health summary: ${healthSummary.issues.length} issues, ${healthSummary.warnings.length} warnings
-                        </div>
-                        <div class="bg-slate-700/30 p-4 rounded-lg">
-                            <p class="text-slate-400">Detailed health information would appear here.</p>
-                        </div>
+            `;
+        }
+
+        return `
+            <div class="bg-slate-700 rounded p-3">
+                <h3 class="font-medium mb-2">Storage (${disks.length})</h3>
+                <div class="space-y-2 max-h-48 overflow-y-auto">
+                    ${disks.map(disk => this.renderCompactDisk(disk)).join('')}
+                </div>
+            </div>
+        `;
+    },
+
+    renderCompactDisk(disk) {
+        const capacity = this.parseStorageSize(disk.storageMaximum);
+        const available = this.parseStorageSize(disk.storageAvailable);
+        const used = capacity - available;
+        const utilizationPercent = capacity > 0 ? ((used / capacity) * 100).toFixed(0) : 0;
+        const replicaCount = Object.keys(disk.scheduledReplicas || {}).length;
+        const isSchedulable = disk.isSchedulable === true;
+        
+        let diskName = disk.name || 'Unknown';
+        if (!diskName || diskName === 'Unknown') {
+            const path = disk.path || '';
+            if (path.includes('/')) {
+                const pathParts = path.split('/');
+                diskName = pathParts[pathParts.length - 1] || 'Unknown';
+            }
+        }
+        if (diskName.length > 15) diskName = diskName.substring(0, 12) + '...';
+        
+        return `
+            <div class="border border-slate-600 rounded p-2">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-white text-xs font-medium">${diskName}</span>
+                    <span class="px-1 py-0.5 text-xs rounded ${isSchedulable ? 'bg-green-700 text-green-200' : 'bg-yellow-700 text-yellow-200'}">
+                        ${isSchedulable ? 'Active' : 'Inactive'}
+                    </span>
+                </div>
+                
+                <div class="grid grid-cols-3 gap-2 text-xs text-center mb-2">
+                    <div>
+                        <div class="text-white font-medium">${this.formatBytes(capacity)}</div>
+                        <div class="text-slate-400">Total</div>
+                    </div>
+                    <div>
+                        <div class="text-white font-medium">${this.formatBytes(available)}</div>
+                        <div class="text-slate-400">Free</div>
+                    </div>
+                    <div>
+                        <div class="text-white font-medium">${replicaCount}</div>
+                        <div class="text-slate-400">Replicas</div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs text-slate-400 mb-1">
+                        <span>Usage</span>
+                        <span>${utilizationPercent}%</span>
+                    </div>
+                    <div class="w-full bg-slate-600 rounded-full h-1">
+                        <div class="bg-slate-400 h-1 rounded-full" style="width: ${Math.min(utilizationPercent, 100)}%"></div>
                     </div>
                 </div>
             </div>
         `;
     },
 
-    renderStorageDashboard(disks) {
-        return `
-            <div class="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-2xl overflow-hidden">
-                <div class="bg-gradient-to-r from-purple-500/10 to-blue-500/5 px-8 py-6 border-b border-slate-700/50">
-                    <h3 class="text-2xl font-bold text-white flex items-center gap-3">
-                        <span class="w-8 h-8 bg-purple-500/20 rounded-lg flex items-center justify-center">💾</span>
-                        Storage Overview
-                    </h3>
-                </div>
-                <div class="p-8">
-                    ${disks && disks.length > 0 ? `
-                        <div class="space-y-3">
-                            ${disks.map(disk => `
-                                <div class="bg-slate-700/30 p-4 rounded-lg">
-                                    <div class="flex justify-between items-center">
-                                        <span class="text-slate-200 font-medium">${disk.name}</span>
-                                        <span class="text-${disk.isSchedulable ? 'green' : 'red'}-400">
-                                            ${disk.isSchedulable ? 'Schedulable' : 'Not Schedulable'}
-                                        </span>
-                                    </div>
-                                    <div class="text-sm text-slate-400 mt-1">${disk.path}</div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    ` : `
-                        <div class="text-slate-400">No storage information available</div>
-                    `}
-                </div>
-            </div>
-        `;
-    },
-
-    renderSystemCard(nodeData) {
+    renderCompactSystem(nodeData) {
         const k8sInfo = nodeData.kubernetesInfo;
+        
         return `
-            <div class="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-2xl overflow-hidden">
-                <div class="bg-gradient-to-r from-blue-500/10 to-cyan-500/5 px-6 py-5 border-b border-slate-700/50">
-                    <h3 class="text-xl font-bold text-white flex items-center gap-3">
-                        <span class="w-7 h-7 bg-blue-500/20 rounded-lg flex items-center justify-center">🖥️</span>
-                        System Information
-                    </h3>
-                </div>
-                <div class="p-6">
-                    ${k8sInfo ? `
-                        <div class="space-y-3">
-                            <div class="flex justify-between">
-                                <span class="text-slate-400">Internal IP</span>
-                                <span class="text-slate-200">${k8sInfo.internalIP || 'N/A'}</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-slate-400">OS</span>
-                                <span class="text-slate-200">${k8sInfo.nodeInfo?.osImage || 'N/A'}</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-slate-400">Kernel</span>
-                                <span class="text-slate-200">${k8sInfo.nodeInfo?.kernelVersion || 'N/A'}</span>
-                            </div>
+            <div class="bg-slate-700 rounded p-3">
+                <h3 class="font-medium mb-2">System Info</h3>
+                <div class="space-y-2 text-sm">
+                    ${k8sInfo?.internalIP ? `
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">IP:</span>
+                            <span class="text-white font-mono text-xs">${k8sInfo.internalIP}</span>
                         </div>
-                    ` : `
-                        <div class="text-slate-400">No system information available</div>
-                    `}
+                    ` : ''}
+                    ${k8sInfo?.nodeInfo?.osImage ? `
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">OS:</span>
+                            <span class="text-white text-xs">${k8sInfo.nodeInfo.osImage}</span>
+                        </div>
+                    ` : ''}
+                    ${k8sInfo?.nodeInfo?.kernelVersion ? `
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">Kernel:</span>
+                            <span class="text-white font-mono text-xs">${k8sInfo.nodeInfo.kernelVersion}</span>
+                        </div>
+                    ` : ''}
                 </div>
             </div>
         `;
     },
 
-    renderQuickActions(nodeData, healthSummary) {
+    renderVMDetail(vmData) {
+        if (!vmData) {
+            return '<div class="text-center py-8 text-slate-400">VM data not available</div>';
+        }
+
+        const vmName = vmData.name || 'Unknown VM';
+        const status = vmData.printableStatus || 'Unknown';
+        const namespace = vmData.namespace || 'default';
+        
         return `
-            <div class="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-2xl overflow-hidden">
-                <div class="bg-gradient-to-r from-orange-500/10 to-red-500/5 px-6 py-5 border-b border-slate-700/50">
-                    <h3 class="text-xl font-bold text-white flex items-center gap-3">
-                        <span class="w-7 h-7 bg-orange-500/20 rounded-lg flex items-center justify-center">🛠️</span>
-                        Quick Actions
-                    </h3>
+            <div class="bg-slate-800 rounded-lg">
+                <!-- Enhanced Header with VM Details -->
+                <div class="p-6 border-b border-slate-700">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h1 class="text-2xl font-semibold text-white">${vmName}</h1>
+                            <div class="flex items-center gap-3 mt-2">
+                                <span class="px-3 py-1 text-sm rounded ${this.getVMStatusBadge(status)}">${status}</span>
+                                <span class="text-slate-400">Namespace: ${namespace}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- VM Header Info Row -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-600">
+                        <div>
+                            <div class="text-xs text-slate-400 uppercase tracking-wide">Image</div>
+                            <div class="text-sm text-white font-medium">${vmData.imageId || 'N/A'}</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-slate-400 uppercase tracking-wide">Storage Class</div>
+                            <div class="text-sm text-white font-medium">${vmData.storageClass || 'N/A'}</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-slate-400 uppercase tracking-wide">PVC Status</div>
+                            <div class="text-sm">
+                                <span class="px-2 py-1 text-xs rounded ${this.getStorageStatusBadge(vmData.pvcStatus)}">${vmData.pvcStatus || 'Unknown'}</span>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-slate-400 uppercase tracking-wide">Volume</div>
+                            <div class="text-sm text-blue-300 font-mono">${vmData.volumeName || 'N/A'}</div>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Enhanced Layout with All Details -->
                 <div class="p-6">
-                    <div class="space-y-3">
-                        <button class="w-full bg-slate-700 hover:bg-slate-600 text-white p-3 rounded-lg transition-colors text-left">
-                            🔍 Check Node Logs
-                        </button>
-                        <button class="w-full bg-slate-700 hover:bg-slate-600 text-white p-3 rounded-lg transition-colors text-left">
-                            📊 View Resource Usage
-                        </button>
-                        <button class="w-full bg-slate-700 hover:bg-slate-600 text-white p-3 rounded-lg transition-colors text-left">
-                            🔄 Restart Services
-                        </button>
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                        
+                        <!-- Left Column: Compute & Migration -->
+                        <div class="space-y-6">
+                            ${this.renderEnhancedCompute(vmData)}
+                            ${this.renderEnhancedMigration(vmData.vmimInfo || [], vmData.vmiInfo)}
+                            ${this.renderVMErrors(vmData.errors || [])}
+                        </div>
+
+                        <!-- Right Column: Storage & Replicas -->
+                        <div class="space-y-6">
+                            ${this.renderEnhancedVMStorage(vmData)}
+                            ${this.renderEnhancedVolumeAttachment(vmData.attachmentTicketsRaw)}
+                            ${this.renderEnhancedStorageReplicas(vmData)}
+                        </div>
                     </div>
                 </div>
             </div>
         `;
     },
 
-    getK8sConditionBadge(type, status) {
-        const inversedConditions = ['MemoryPressure', 'DiskPressure', 'PIDPressure', 'NetworkUnavailable'];
-        const isGood = inversedConditions.includes(type) ? status === 'False' : status === 'True';
-        return isGood ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400';
+    renderCompactVMInfo(vmData) {
+        const vmMetrics = this.getCompactVMMetrics(vmData);
+        
+        return `
+            <div class="bg-slate-700 rounded p-3">
+                <h3 class="font-medium mb-2">VM Information</h3>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Status:</span>
+                        <span class="text-white">${vmData.printableStatus || 'Unknown'}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Node:</span>
+                        <span class="text-white">${vmMetrics.node}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Phase:</span>
+                        <span class="text-white">${vmMetrics.phase}</span>
+                    </div>
+                    ${vmMetrics.ipAddress ? `
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">IP:</span>
+                            <span class="text-white font-mono text-xs">${vmMetrics.ipAddress}</span>
+                        </div>
+                    ` : ''}
+                    ${vmData.podName ? `
+                        <div class="border-t border-slate-600 pt-2 mt-2">
+                            <div class="text-slate-400 text-xs mb-1">Pod:</div>
+                            <div class="text-white font-mono text-xs break-all">${vmData.podName}</div>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
     },
 
-    getK8sConditionText(type, status) {
-        const inversedConditions = ['MemoryPressure', 'DiskPressure', 'PIDPressure', 'NetworkUnavailable'];
-        const isGood = inversedConditions.includes(type) ? status === 'False' : status === 'True';
-        return isGood ? 'Healthy' : 'Issue';
+    renderCompactVMIssues(errors) {
+        const realIssues = (errors || []).filter(error => error.severity !== 'info' || error.type !== 'info');
+        
+        return `
+            <div class="bg-slate-700 rounded p-3">
+                <h3 class="font-medium mb-2">Health Status</h3>
+                ${realIssues.length === 0 ? `
+                    <div class="text-green-400 text-sm">✓ No issues detected</div>
+                ` : `
+                    <div class="space-y-1 max-h-32 overflow-y-auto text-sm">
+                        ${realIssues.map(error => `
+                            <div class="text-${this.getSeverityColor(error.severity)} text-xs">
+                                • ${error.type || 'Issue'}: ${error.message}
+                            </div>
+                        `).join('')}
+                    </div>
+                `}
+            </div>
+        `;
     },
 
-    renderHealthStatus(nodeData, healthSummary) { return ''; },
-    renderSystemDetails(nodeData) { return ''; },
-    renderTroubleshootingActions(nodeData, healthSummary) { return ''; }
+    renderCompactVMIInfo(vmData) {
+        const vmiInfo = vmData.vmiInfo && vmData.vmiInfo.length > 0 ? vmData.vmiInfo[0] : null;
+        
+        if (!vmiInfo) {
+            return `
+                <div class="bg-slate-700 rounded p-3">
+                    <h3 class="font-medium mb-2">VMI Details</h3>
+                    <div class="text-slate-400 text-sm">VMI information not available</div>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="bg-slate-700 rounded p-3">
+                <h3 class="font-medium mb-2">VMI Details</h3>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Node Name:</span>
+                        <span class="text-white font-mono text-xs">${vmiInfo.nodeName || 'N/A'}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Phase:</span>
+                        <span class="text-white">${vmiInfo.phase || 'Unknown'}</span>
+                    </div>
+                    
+                    ${vmiInfo.memoryInfo && vmiInfo.memoryInfo.guestCurrent ? `
+                        <div class="border-t border-slate-600 pt-2 mt-2">
+                            <div class="text-slate-400 text-xs mb-1">Memory:</div>
+                            <div class="text-white text-xs">${vmiInfo.memoryInfo.guestCurrent}</div>
+                        </div>
+                    ` : ''}
+
+                    ${this.renderCompactNetworkInterfaces(vmiInfo.interfaces)}
+                </div>
+            </div>
+        `;
+    },
+
+    renderCompactNetworkInterfaces(interfaces) {
+        if (!interfaces || interfaces.length === 0) {
+            return `
+                <div class="border-t border-slate-600 pt-2 mt-2">
+                    <div class="text-slate-400 text-xs mb-1">Network Interfaces:</div>
+                    <div class="text-slate-500 text-xs">No interfaces available</div>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="border-t border-slate-600 pt-2 mt-2">
+                <div class="text-slate-400 text-xs mb-1">Network Interfaces:</div>
+                <div class="space-y-1 max-h-24 overflow-y-auto">
+                    ${interfaces.map(iface => `
+                        <div class="flex justify-between text-xs">
+                            <span class="text-slate-400">${iface.name || 'Unknown'}:</span>
+                            <span class="text-white font-mono">${iface.ipAddress || 'No IP'}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    },
+
+    renderCompactStorageInfo(vmData) {
+        return `
+            <div class="bg-slate-700 rounded p-3">
+                <h3 class="font-medium mb-2">Storage</h3>
+                <div class="space-y-2 text-sm">
+                    ${vmData.storageClass ? `
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">Class:</span>
+                            <span class="text-white text-xs">${vmData.storageClass}</span>
+                        </div>
+                    ` : ''}
+                    ${vmData.pvcStatus ? `
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">PVC:</span>
+                            <span class="text-white text-xs">${vmData.pvcStatus}</span>
+                        </div>
+                    ` : ''}
+                    ${vmData.claimNames ? `
+                        <div class="border-t border-slate-600 pt-2 mt-2">
+                            <div class="text-slate-400 text-xs mb-1">Claim:</div>
+                            <div class="text-white font-mono text-xs break-all">${vmData.claimNames}</div>
+                        </div>
+                    ` : ''}
+                    ${vmData.volumeName ? `
+                        <div class="border-t border-slate-600 pt-2 mt-2">
+                            <div class="text-slate-400 text-xs mb-1">Volume:</div>
+                            <div class="text-white font-mono text-xs break-all">${vmData.volumeName}</div>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    },
+
+    renderCompactMigration(vmimInfo) {
+        // Always show the migration section to help with debugging
+        const hasData = vmimInfo && vmimInfo.length > 0;
+        
+        if (!hasData) {
+            return `
+                <div class="bg-slate-700 rounded p-3">
+                    <h3 class="font-medium mb-2">Migration History</h3>
+                    <div class="text-slate-400 text-sm">No migrations found</div>
+                    <div class="text-xs text-slate-500 mt-1">
+                        This VM has not been migrated between nodes
+                    </div>
+                </div>
+            `;
+        }
+
+        // Show comprehensive migration information
+        return `
+            <div class="bg-slate-700 rounded p-3">
+                <h3 class="font-medium mb-2">Migration History (${vmimInfo.length})</h3>
+                <div class="space-y-3 max-h-64 overflow-y-auto">
+                    ${vmimInfo.map((migration, index) => this.renderMigrationItem(migration, index, vmimInfo.length)).join('')}
+                </div>
+            </div>
+        `;
+    },
+
+    renderMigrationItem(migration, index, total) {
+        const isLatest = index === total - 1;
+        const isActive = ['Running', 'Scheduling', 'Scheduled', 'PreparingTarget', 'TargetReady'].includes(migration.phase);
+        const isCompleted = migration.phase === 'Succeeded';
+        const isFailed = migration.phase === 'Failed';
+        
+        // Get status styling
+        let statusBadge = 'bg-slate-600 text-slate-200';
+        if (isActive) statusBadge = 'bg-yellow-700 text-yellow-200';
+        else if (isCompleted) statusBadge = 'bg-green-700 text-green-200';
+        else if (isFailed) statusBadge = 'bg-red-700 text-red-200';
+
+        return `
+            <div class="border border-slate-600 rounded p-2 ${isLatest ? 'border-blue-500/50 bg-blue-900/10' : ''}">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 text-xs rounded ${statusBadge}">
+                            ${migration.phase}
+                        </span>
+                        ${isActive ? '<span class="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse"></span>' : ''}
+                        ${isLatest ? '<span class="text-xs text-blue-400">(Latest)</span>' : ''}
+                    </div>
+                    <span class="text-xs text-slate-400">#${total - index}</span>
+                </div>
+
+                <!-- Migration details grid -->
+                <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                    ${migration.sourceNode ? `
+                        <span class="text-slate-400">From:</span>
+                        <span class="text-white font-mono">${migration.sourceNode}</span>
+                    ` : ''}
+                    
+                    ${migration.targetNode ? `
+                        <span class="text-slate-400">To:</span>
+                        <span class="text-white font-mono">${migration.targetNode}</span>
+                    ` : ''}
+
+                    ${migration.sourcePod ? `
+                        <span class="text-slate-400">Source Pod:</span>
+                        <span class="text-white font-mono text-xs break-all">${migration.sourcePod}</span>
+                    ` : ''}
+
+                    ${migration.targetPod ? `
+                        <span class="text-slate-400">Target Pod:</span>
+                        <span class="text-white font-mono text-xs break-all ${!migration.targetPodExists ? 'text-red-400' : ''}">${migration.targetPod}</span>
+                    ` : ''}
+
+                    ${migration.creationTimestamp ? `
+                        <span class="text-slate-400">Created:</span>
+                        <span class="text-white">${this.formatTimestamp(migration.creationTimestamp)}</span>
+                    ` : ''}
+
+                    ${migration.startTimestamp ? `
+                        <span class="text-slate-400">Started:</span>
+                        <span class="text-white">${this.formatTimestamp(migration.startTimestamp)}</span>
+                    ` : ''}
+
+                    ${migration.endTimestamp ? `
+                        <span class="text-slate-400">Completed:</span>
+                        <span class="text-white">${this.formatTimestamp(migration.endTimestamp)}</span>
+                    ` : ''}
+                </div>
+
+                <!-- Warning indicators -->
+                ${migration.targetPod && !migration.targetPodExists ? `
+                    <div class="mt-2 p-2 bg-yellow-900/30 border border-yellow-700/30 rounded text-xs">
+                        <span class="text-yellow-300">⚠️ Target pod missing or not ready</span>
+                    </div>
+                ` : ''}
+
+                ${migration.conditions && migration.conditions.length > 0 ? `
+                    <div class="mt-2">
+                        <div class="text-slate-400 text-xs mb-1">Conditions:</div>
+                        ${migration.conditions.map(condition => `
+                            <div class="text-xs ${condition.status === 'True' ? 'text-green-400' : 'text-red-400'}">
+                                • ${condition.type}: ${condition.status}
+                                ${condition.reason ? ` (${condition.reason})` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+
+                <!-- Migration method if available -->
+                ${migration.method ? `
+                    <div class="mt-2 text-xs">
+                        <span class="text-slate-400">Method:</span>
+                        <span class="text-white">${migration.method}</span>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    },
+
+    formatTimestamp(timestamp) {
+        if (!timestamp) return 'N/A';
+        try {
+            const date = new Date(timestamp);
+            return date.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+        } catch (e) {
+            return timestamp;
+        }
+    },
+
+    renderCompactReplicas(vmData) {
+        if (!vmData.replicaInfo || vmData.replicaInfo.length === 0) {
+            return '';
+        }
+
+        return `
+            <div class="bg-slate-700 rounded p-3">
+                <h3 class="font-medium mb-2">Replicas (${vmData.replicaInfo.length})</h3>
+                <div class="space-y-2 max-h-40 overflow-y-auto text-sm">
+                    ${vmData.replicaInfo.map(replica => `
+                        <div class="flex justify-between items-center text-xs">
+                            <div>
+                                <div class="text-white">${replica.nodeId}</div>
+                                <div class="text-slate-400">${replica.storageIP}:${replica.port}</div>
+                            </div>
+                            <span class="px-1 py-0.5 rounded text-xs ${replica.active ? 'bg-green-700 text-green-200' : 'bg-slate-600 text-slate-300'}">
+                                ${replica.currentState}
+                            </span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    },
+
+    // Utility methods
+    getCompactVMMetrics(vm) {
+        let node = 'N/A';
+        let phase = 'Unknown';
+        let ipAddress = null;
+
+        if (vm.vmiInfo && vm.vmiInfo.length > 0) {
+            const vmi = vm.vmiInfo[0];
+            node = vmi.nodeName || node;
+            phase = vmi.phase || phase;
+            
+            if (vmi.interfaces && vmi.interfaces.length > 0) {
+                const goodInterface = vmi.interfaces.find(iface => 
+                    iface.ipAddress && 
+                    iface.ipAddress !== '127.0.0.1' &&
+                    !iface.interfaceName?.match(/(^lo|^lxc|cilium|flannel)/i)
+                );
+                if (goodInterface) {
+                    ipAddress = goodInterface.ipAddress;
+                }
+            }
+        }
+
+        if (node === 'N/A' && vm.podInfo && vm.podInfo.length > 0) {
+            node = vm.podInfo[0].nodeId || vm.podInfo[0].nodeName || node;
+        }
+
+        return { node, phase, ipAddress };
+    },
+
+    getSeverityColor(severity) {
+        const colorMap = {
+            'error': 'red-400',
+            'critical': 'red-400',
+            'warning': 'yellow-400',
+            'info': 'blue-400'
+        };
+        return colorMap[severity] || 'yellow-400';
+    },
+
+    getVMStatusBadge(status) {
+        const statusMap = {
+            'running': 'bg-green-700 text-green-200',
+            'stopped': 'bg-slate-600 text-slate-300',
+            'starting': 'bg-yellow-700 text-yellow-200',
+            'stopping': 'bg-orange-700 text-orange-200',
+            'error': 'bg-red-700 text-red-200',
+            'failed': 'bg-red-700 text-red-200',
+            'paused': 'bg-blue-700 text-blue-200'
+        };
+        return statusMap[status?.toLowerCase()] || 'bg-slate-600 text-slate-300';
+    },
+
+    getNodeStatusBadge(nodeData) {
+        const status = this.getNodeStatus(nodeData);
+        if (status === 'Ready') return 'bg-green-700 text-green-200';
+        return 'bg-red-700 text-red-200';
+    },
+
+    // Keep existing utility methods
+    analyzeNodeHealth(nodeData) {
+        let issues = [];
+        let warnings = [];
+
+        if (nodeData.kubernetesInfo?.conditions) {
+            nodeData.kubernetesInfo.conditions.forEach(condition => {
+                if (condition.type === 'Ready' && condition.status !== 'True') {
+                    issues.push('Node not ready');
+                }
+                if (['MemoryPressure', 'DiskPressure', 'PIDPressure'].includes(condition.type) && condition.status === 'True') {
+                    warnings.push(`${condition.type} detected`);
+                }
+            });
+        }
+
+        if (nodeData.longhornInfo?.disks) {
+            const unschedulableDisks = nodeData.longhornInfo.disks.filter(d => !d.isSchedulable).length;
+            if (unschedulableDisks > 0) {
+                warnings.push(`${unschedulableDisks} disk${unschedulableDisks > 1 ? 's' : ''} not schedulable`);
+            }
+        }
+
+        return { issues, warnings };
+    },
+
+    getNodeStatus(nodeData) {
+        const k8sReady = nodeData.kubernetesInfo?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
+        if (k8sReady) return 'Ready';
+        return 'Not Ready';
+    },
+
+    parseStorageSize(sizeStr) {
+        if (!sizeStr || sizeStr === '0') return 0;
+        const numValue = parseFloat(sizeStr);
+        return isNaN(numValue) ? 0 : numValue;
+    },
+
+    formatBytes(bytes) {
+        if (!bytes || bytes === 0) return '0B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const base = 1024;
+        const i = Math.floor(Math.log(bytes) / Math.log(base));
+        return `${parseFloat((bytes / Math.pow(base, i)).toFixed(1))}${units[i]}`;
+    },
+
+    parseMemoryToBytes(memoryStr) {
+        if (!memoryStr) return 0;
+        const match = memoryStr.match(/^(\d+)(\w+)$/);
+        if (!match) return 0;
+        
+        const value = parseInt(match[1]);
+        const unit = match[2].toLowerCase();
+        
+        const unitMultipliers = {
+            'ki': 1024,
+            'mi': 1024 * 1024,
+            'gi': 1024 * 1024 * 1024,
+            'ti': 1024 * 1024 * 1024 * 1024
+        };
+        
+        return value * (unitMultipliers[unit] || 1);
+    },
+
+    renderEnhancedVolumeAttachment(attachmentData) {
+        if (!attachmentData || typeof attachmentData !== 'object') {
+            return `
+                <div class="p-4 bg-slate-800/30 rounded-lg">
+                    <h4 class="font-medium text-slate-200 mb-4 flex items-center gap-2">
+                        <span>🔗</span> Volume Attachment Status
+                    </h4>
+                    <div class="text-center py-4 text-slate-400">No attachment information available</div>
+                </div>
+            `;
+        }
+
+        const ticketIds = Object.keys(attachmentData);
+        
+        if (ticketIds.length === 0) {
+            return `
+                <div class="p-4 bg-slate-800/30 rounded-lg">
+                    <h4 class="font-medium text-slate-200 mb-4 flex items-center gap-2">
+                        <span>🔗</span> Volume Attachment Status
+                    </h4>
+                    <div class="text-center py-4 text-slate-400">No attachment tickets found</div>
+                </div>
+            `;
+        }
+
+        // Generate ticket HTML
+        const ticketHTML = ticketIds.map(ticketId => {
+            const statusTicket = attachmentData[ticketId];
+            const satisfied = statusTicket?.satisfied || false;
+            const conditions = statusTicket?.conditions || [];
+            const generation = statusTicket?.generation || 0;
+            const shortTicketId = ticketId.length > 20 ? ticketId.substring(0, 20) + '...' : ticketId;
+            
+            const conditionsHTML = conditions.map(condition => {
+                const conditionSatisfied = condition.status === 'True';
+                const conditionType = condition.type || 'Unknown';
+                let formattedTime = 'Unknown';
+                
+                if (condition.lastTransitionTime) {
+                    try {
+                        const date = new Date(condition.lastTransitionTime);
+                        formattedTime = date.toLocaleDateString() + ', ' + date.toLocaleTimeString();
+                    } catch (e) {
+                        formattedTime = condition.lastTransitionTime;
+                    }
+                }
+                
+                return `
+                    <div class="flex items-center justify-between p-2 bg-slate-800/50 rounded">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full ${conditionSatisfied ? 'bg-green-500' : 'bg-red-500'}"></span>
+                            <span class="text-sm text-slate-200">${conditionType}</span>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs ${conditionSatisfied ? 'text-green-400' : 'text-red-400'} font-medium">
+                                ${conditionSatisfied ? 'True' : 'False'}
+                            </div>
+                            <div class="text-xs text-slate-400">${formattedTime}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            return `
+                <div class="bg-slate-800/40 rounded p-3 border ${satisfied ? 'border-green-500/30' : 'border-red-500/30'}">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="${satisfied ? 'text-green-400' : 'text-red-400'}">${satisfied ? '✅' : '⏳'}</span>
+                            <span class="text-sm text-slate-200">Ticket ${shortTicketId}</span>
+                        </div>
+                        <span class="px-2 py-1 text-xs rounded ${satisfied ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">
+                            ${satisfied ? 'SATISFIED' : 'PENDING'}
+                        </span>
+                    </div>
+                    <div class="text-xs text-slate-400 mb-2">ID: <code class="bg-slate-800 px-1 rounded">${ticketId}</code></div>
+                    ${conditions.length > 0 ? `<div class="space-y-1">${conditionsHTML}</div>` : ''}
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="p-4 bg-slate-800/30 rounded-lg">
+                <div class="flex items-center justify-between mb-4">
+                    <h4 class="font-medium text-slate-200 flex items-center gap-2">
+                        <span>🔗</span> Volume Attachment Status
+                    </h4>
+                    <span class="text-sm text-slate-400">${ticketIds.length} tickets</span>
+                </div>
+                <div class="space-y-3">${ticketHTML}</div>
+            </div>
+        `;
+    },
+
+    getStorageStatusBadge(status) {
+        const statusMap = {
+            'Bound': 'bg-green-700/80 text-green-200',
+            'Pending': 'bg-yellow-700/80 text-yellow-200',
+            'Lost': 'bg-red-700/80 text-red-200'
+        };
+        return statusMap[status] || 'bg-slate-600/80 text-slate-200';
+    },
+
+    getStatusBadgeClass(status) {
+        const statusMap = {
+            'Running': 'bg-green-700/80 text-green-200',
+            'Pending': 'bg-yellow-700/80 text-yellow-200',
+            'Failed': 'bg-red-700/80 text-red-200',
+            'Succeeded': 'bg-green-700/80 text-green-200'
+        };
+        return statusMap[status] || 'bg-slate-600/80 text-slate-200';
+    },
+
+    parseStorageToBytes(storageStr) {
+        if (!storageStr) return 0;
+        
+        // Handle both string and number inputs
+        if (typeof storageStr === 'number') {
+            return storageStr;
+        }
+        
+        // Handle formatted strings like "5.77 TB", "660.13 GB", etc.
+        const match = storageStr.toString().match(/^(\d+(?:\.\d+)?)\s*([A-Za-z]+)$/);
+        if (!match) {
+            return 0;
+        }
+        
+        const value = parseFloat(match[1]);
+        const unit = match[2].toLowerCase();
+        
+        const unitMultipliers = {
+            'b': 1,
+            'kb': 1000,
+            'mb': 1000 * 1000,
+            'gb': 1000 * 1000 * 1000,
+            'tb': 1000 * 1000 * 1000 * 1000,
+            'pb': 1000 * 1000 * 1000 * 1000 * 1000,
+            'ki': 1024,
+            'mi': 1024 * 1024,
+            'gi': 1024 * 1024 * 1024,
+            'ti': 1024 * 1024 * 1024 * 1024,
+            'pi': 1024 * 1024 * 1024 * 1024 * 1024
+        };
+        
+        return value * (unitMultipliers[unit] || 1);
+    },
+
+    renderEnhancedVolumeAttachment(attachmentData) {
+        if (!attachmentData || typeof attachmentData !== 'object') {
+            return `
+                <div class="p-4 bg-slate-800/30 rounded-lg">
+                    <h4 class="font-medium text-slate-200 mb-4 flex items-center gap-2">
+                        <span>🔗</span> Volume Attachment Status
+                    </h4>
+                    <div class="text-center py-4 text-slate-400">No attachment information available</div>
+                </div>
+            `;
+        }
+
+        const ticketIds = Object.keys(attachmentData);
+        
+        if (ticketIds.length === 0) {
+            return `
+                <div class="p-4 bg-slate-800/30 rounded-lg">
+                    <h4 class="font-medium text-slate-200 mb-4 flex items-center gap-2">
+                        <span>🔗</span> Volume Attachment Status
+                    </h4>
+                    <div class="text-center py-4 text-slate-400">No attachment tickets found</div>
+                </div>
+            `;
+        }
+
+        // Generate ticket HTML
+        const ticketHTML = ticketIds.map(ticketId => {
+            const statusTicket = attachmentData[ticketId];
+            const satisfied = statusTicket?.satisfied || false;
+            const conditions = statusTicket?.conditions || [];
+            const generation = statusTicket?.generation || 0;
+            const shortTicketId = ticketId.length > 20 ? ticketId.substring(0, 20) + '...' : ticketId;
+            
+            const conditionsHTML = conditions.map(condition => {
+                const conditionSatisfied = condition.status === 'True';
+                const conditionType = condition.type || 'Unknown';
+                let formattedTime = 'Unknown';
+                
+                if (condition.lastTransitionTime) {
+                    try {
+                        const date = new Date(condition.lastTransitionTime);
+                        formattedTime = date.toLocaleDateString() + ', ' + date.toLocaleTimeString();
+                    } catch (e) {
+                        formattedTime = condition.lastTransitionTime;
+                    }
+                }
+                
+                return `
+                    <div class="flex items-center justify-between p-2 bg-slate-800/50 rounded">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full ${conditionSatisfied ? 'bg-green-500' : 'bg-red-500'}"></span>
+                            <span class="text-sm text-slate-200">${conditionType}</span>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs ${conditionSatisfied ? 'text-green-400' : 'text-red-400'} font-medium">
+                                ${conditionSatisfied ? 'True' : 'False'}
+                            </div>
+                            <div class="text-xs text-slate-400">${formattedTime}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            return `
+                <div class="bg-slate-800/40 rounded p-3 border ${satisfied ? 'border-green-500/30' : 'border-red-500/30'}">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="${satisfied ? 'text-green-400' : 'text-red-400'}">${satisfied ? '✅' : '⏳'}</span>
+                            <span class="text-sm text-slate-200">Ticket ${shortTicketId}</span>
+                        </div>
+                        <span class="px-2 py-1 text-xs rounded ${satisfied ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">
+                            ${satisfied ? 'SATISFIED' : 'PENDING'}
+                        </span>
+                    </div>
+                    <div class="text-xs text-slate-400 mb-2">ID: <code class="bg-slate-800 px-1 rounded">${ticketId}</code></div>
+                    ${conditions.length > 0 ? `<div class="space-y-1">${conditionsHTML}</div>` : ''}
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="p-4 bg-slate-800/30 rounded-lg">
+                <div class="flex items-center justify-between mb-4">
+                    <h4 class="font-medium text-slate-200 flex items-center gap-2">
+                        <span>🔗</span> Volume Attachment Status
+                    </h4>
+                    <span class="text-sm text-slate-400">${ticketIds.length} tickets</span>
+                </div>
+                <div class="space-y-3">${ticketHTML}</div>
+            </div>
+        `;
+    },
+
+    renderEnhancedCompute(vmData) {
+        // Get VMI info - check multiple possible data sources
+        const vmiInfo = vmData.vmiInfo && vmData.vmiInfo.length > 0 ? vmData.vmiInfo[0] : null;
+        const podInfo = vmData.podInfo && vmData.podInfo.length > 0 ? vmData.podInfo[0] : null;
+        
+        // Extract CPU and Memory from different possible locations
+        let cpuCores = 'N/A';
+        let memory = 'N/A';
+        
+        if (vmiInfo) {
+            // Memory: Use memoryInfo fields that actually exist
+            memory = (vmiInfo.memoryInfo && vmiInfo.memoryInfo.guestCurrent) ||
+                    (vmiInfo.memoryInfo && vmiInfo.memoryInfo.guestRequested) ||
+                    (vmiInfo.memoryInfo && vmiInfo.memoryInfo.guestAtBoot) || 'N/A';
+            
+            // CPU: Use the new CPU topology fields from the updated backend
+            const coresFromCurrentTopology = vmiInfo.currentCPUTopology && vmiInfo.currentCPUTopology.cores;
+            const coresFromDomain = vmiInfo.cpuDomain && vmiInfo.cpuDomain.cores;
+            
+            if (coresFromCurrentTopology) {
+                cpuCores = `${coresFromCurrentTopology} cores`;
+            } else if (coresFromDomain) {
+                cpuCores = `${coresFromDomain} cores`;
+            } else {
+                cpuCores = 'N/A';
+            }
+        }
+        
+        const vmiName = vmiInfo && vmiInfo.name ? vmiInfo.name : vmData.name || 'N/A';
+        const vmiPhase = vmiInfo && vmiInfo.phase ? vmiInfo.phase : vmData.phase || 'N/A';
+        const nodeName = (vmiInfo && vmiInfo.nodeName) || (podInfo && (podInfo.nodeName || podInfo.nodeId)) || vmData.nodeName || 'N/A';
+        
+        // Pod IP: Check multiple possible sources including VMI interfaces
+        const podIP = (podInfo && podInfo.podIP) || 
+                     (podInfo && podInfo.ip) || 
+                     (vmiInfo && vmiInfo.interfaces && vmiInfo.interfaces[0] && vmiInfo.interfaces[0].ipAddress) ||
+                     'N/A';
+        
+        return `
+            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-6">
+                <div class="flex items-center gap-3 mb-6">
+                    <span class="text-xl">💻</span>
+                    <h2 class="text-xl font-semibold text-white">Compute Resources</h2>
+                </div>
+                
+                <!-- Resource Summary Cards -->
+                <div class="grid grid-cols-2 gap-6 mb-6">
+                    <div class="bg-slate-800/60 rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-blue-400 mb-1">${cpuCores}</div>
+                        <div class="text-sm text-slate-400 uppercase tracking-wide">CPU</div>
+                    </div>
+                    <div class="bg-slate-800/60 rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-green-400 mb-1">${memory}</div>
+                        <div class="text-sm text-slate-400 uppercase tracking-wide">Memory</div>
+                    </div>
+                </div>
+
+                <!-- Virtual Machine Instance Details -->
+                <div class="mb-6">
+                    <h3 class="text-lg font-medium text-white mb-4 flex items-center gap-2">
+                        <span class="w-2 h-2 bg-blue-400 rounded-full"></span>
+                        Instance Details
+                    </h3>
+                    <div class="bg-slate-800/40 rounded-lg p-4">
+                        <div class="grid grid-cols-1 gap-3">
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-400 font-medium">Phase</span>
+                                <span class="px-3 py-1 rounded-full text-xs font-medium ${vmiPhase === 'Running' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}">${vmiPhase}</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-400 font-medium">Node</span>
+                                <span class="text-slate-200 font-mono">${nodeName}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pod Details -->
+                <div>
+                    <h3 class="text-lg font-medium text-white mb-4 flex items-center gap-2">
+                        <span class="w-2 h-2 bg-purple-400 rounded-full"></span>
+                        Pod Information
+                    </h3>
+                    ${podInfo ? `
+                        <div class="bg-slate-800/40 rounded-lg p-4">
+                            <div class="grid grid-cols-1 gap-3">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-400 font-medium">Pod Name</span>
+                                    <span class="text-purple-300 font-mono text-sm bg-slate-700 px-2 py-1 rounded">${vmData.podName || 'N/A'}</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-400 font-medium">Node</span>
+                                    <span class="text-slate-200 font-mono">${podInfo.nodeId || podInfo.nodeName || 'N/A'}</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-400 font-medium">Status</span>
+                                    <span class="px-3 py-1 rounded-full text-xs font-medium ${(podInfo.status || podInfo.phase) === 'Running' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}">${podInfo.status || podInfo.phase || 'N/A'}</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-400 font-medium">IP Address</span>
+                                    <span class="text-green-300 font-mono bg-slate-700 px-2 py-1 rounded">${podIP}</span>
+                                </div>
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="bg-slate-800/40 rounded-lg p-4">
+                            <div class="text-center py-4 text-slate-400">No pod information available</div>
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
+    },
+
+    renderEnhancedMigration(vmData) {
+                    `}
+                </div>
+            </div>
+        `;
+    },
+
+    renderEnhancedMigration(vmimInfo, vmiInfo) {
+        console.log('VMIM Info for migration:', vmimInfo); // Debug log
+        const migration = vmimInfo && vmimInfo.length > 0 ? vmimInfo[0] : null;
+        
+        if (!migration) {
+            return `
+                <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                    <div class="flex items-center gap-2 mb-4">
+                        <span class="text-lg">🔄</span>
+                        <h2 class="text-lg font-medium text-white">Migration</h2>
+                    </div>
+                    <div class="text-center py-4 text-slate-400">No migration information available</div>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-lg">🔄</span>
+                    <h2 class="text-lg font-medium text-white">Migration</h2>
+                </div>
+                
+                <div class="space-y-3">
+                    <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                        <span class="text-slate-400">Status:</span>
+                        <span class="text-slate-300">${migration.migrationState || migration.phase || 'N/A'}</span>
+                        
+                        <span class="text-slate-400">Source:</span>
+                        <span class="text-blue-300 font-mono">${migration.sourceNode || 'N/A'}</span>
+                        
+                        <span class="text-slate-400">Target:</span>
+                        <span class="text-green-300 font-mono">${migration.targetNode || 'N/A'}</span>
+                        
+                        ${migration.startTimestamp ? `
+                            <span class="text-slate-400">Started:</span>
+                            <span class="text-slate-300">${new Date(migration.startTimestamp).toLocaleString()}</span>
+                        ` : ''}
+                        
+                        ${migration.endTimestamp ? `
+                            <span class="text-slate-400">Completed:</span>
+                            <span class="text-slate-300">${new Date(migration.endTimestamp).toLocaleString()}</span>
+                        ` : ''}
+                        
+                        ${migration.targetPodStatus ? `
+                            <span class="text-slate-400">Target Pod:</span>
+                            <span class="text-slate-300">${migration.targetPodStatus}</span>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    renderVMErrors(errors) {
+        if (!errors || errors.length === 0) {
+            return '';
+        }
+
+        return `
+            <div class="bg-red-900/20 border border-red-600/30 rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-lg">⚠️</span>
+                    <h2 class="text-lg font-medium text-white">Issues (${errors.length})</h2>
+                </div>
+                <div class="space-y-2">
+                    ${errors.map(error => `
+                        <div class="border border-red-600/50 rounded p-3">
+                            <div class="flex justify-between items-start mb-1">
+                                <span class="text-red-300 font-medium text-sm">${error.type}</span>
+                                <span class="px-2 py-1 text-xs rounded bg-red-700/80 text-red-200">${error.severity}</span>
+                            </div>
+                            <div class="text-sm text-slate-300">${error.message}</div>
+                            <div class="text-xs text-slate-400 mt-1">Resource: ${error.resource}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    },
+
+    renderEnhancedVMStorage(vmData) {
+        return `
+            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-lg">💾</span>
+                    <h2 class="text-lg font-medium text-white">Storage</h2>
+                </div>
+                
+                <div class="space-y-4">
+                    <!-- Storage Summary -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="text-center">
+                            <div class="text-lg font-bold text-blue-400">${vmData.storageClass || 'N/A'}</div>
+                            <div class="text-xs text-slate-400">Storage Class</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-lg font-bold ${vmData.pvcStatus === 'Bound' ? 'text-green-400' : 'text-yellow-400'}">${vmData.pvcStatus || 'Unknown'}</div>
+                            <div class="text-xs text-slate-400">PVC Status</div>
+                        </div>
+                    </div>
+
+                    <!-- Volume Details -->
+                    ${vmData.volumeName ? `
+                        <div class="border border-slate-600 rounded p-3">
+                            <div class="text-sm font-medium text-white mb-2">Volume Details</div>
+                            <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
+                                <span class="text-slate-400">Volume:</span>
+                                <div class="flex items-center gap-2">
+                                    <code class="text-blue-300 bg-slate-700/80 px-2 py-1 rounded font-mono text-xs break-all">${vmData.volumeName}</code>
+                                    <button onclick="navigator.clipboard.writeText('${vmData.volumeName}'); this.textContent='✓'; setTimeout(() => this.textContent='📋', 1500)" 
+                                            class="text-slate-400 hover:text-white transition-colors" title="Copy volume name">📋</button>
+                                </div>
+                                
+                                <span class="text-slate-400">Claim:</span>
+                                <div class="flex items-center gap-2">
+                                    <code class="text-green-300 bg-slate-700/80 px-2 py-1 rounded font-mono text-xs break-all">${vmData.claimNames || 'N/A'}</code>
+                                    ${vmData.claimNames ? `<button onclick="navigator.clipboard.writeText('${vmData.claimNames}'); this.textContent='✓'; setTimeout(() => this.textContent='📋', 1500)" 
+                                            class="text-slate-400 hover:text-white transition-colors" title="Copy claim name">📋</button>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    },
+
+    renderEnhancedStorageReplicas(vmData) {
+        const replicas = vmData.replicaInfo || [];
+        
+        if (replicas.length === 0) {
+            return `
+                <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                    <div class="flex items-center gap-2 mb-4">
+                        <span class="text-lg">🔄</span>
+                        <h2 class="text-lg font-medium text-white">Storage Replicas (0)</h2>
+                    </div>
+                    <div class="text-center py-4 text-slate-400">No replica information available</div>
+                </div>
+            `;
+        }
+
+        const runningReplicas = replicas.filter(r => r.currentState === 'running').length;
+
+        return `
+            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-lg">🔄</span>
+                    <h2 class="text-lg font-medium text-white">Storage Replicas (${replicas.length})</h2>
+                </div>
+                
+                <!-- Replica Summary -->
+                <div class="grid grid-cols-3 gap-4 mb-4 text-center">
+                    <div>
+                        <div class="text-lg font-bold text-blue-400">${replicas.length}</div>
+                        <div class="text-xs text-slate-400">Total</div>
+                    </div>
+                    <div>
+                        <div class="text-lg font-bold text-green-400">${runningReplicas}</div>
+                        <div class="text-xs text-slate-400">Running</div>
+                    </div>
+                    <div>
+                        <div class="text-lg font-bold text-yellow-400">${replicas.filter(r => r.active).length}</div>
+                        <div class="text-xs text-slate-400">Active</div>
+                    </div>
+                </div>
+
+                <!-- Replica Details -->
+                <div class="space-y-2">
+                    ${replicas.map(replica => `
+                        <div class="border border-slate-600 rounded p-3">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full ${replica.currentState === 'running' ? 'bg-green-400' : 'bg-gray-400'}"></span>
+                                    <span class="text-white font-medium text-sm">${replica.name}</span>
+                                </div>
+                                <span class="px-2 py-1 text-xs rounded ${replica.currentState === 'running' ? 'bg-green-700/80 text-green-200' : 'bg-slate-600/80 text-slate-200'}">${replica.currentState}</span>
+                            </div>
+                            <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                                <span class="text-slate-400">Node:</span>
+                                <span class="text-blue-300 font-mono">${replica.nodeId}</span>
+                                
+                                <span class="text-slate-400">Started:</span>
+                                <span class="text-slate-300">${replica.started ? 'Yes' : 'No'}</span>
+                                
+                                <span class="text-slate-400">Active:</span>
+                                <span class="text-slate-300">${replica.active ? 'Yes' : 'No'}</span>
+                                
+                                ${replica.storageIP ? `
+                                    <span class="text-slate-400">Storage IP:</span>
+                                    <span class="text-green-300 font-mono">${replica.storageIP}:${replica.port || 'N/A'}</span>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    },
+
+    expandReplicas(diskName, encodedReplicaData) {
+        try {
+            const replicaEntries = JSON.parse(decodeURIComponent(encodedReplicaData));
+            const diskElement = document.querySelector(`[data-disk-name="${diskName}"]`);
+            
+            if (!diskElement) {
+                console.error('Disk element not found for:', diskName);
+                return;
+            }
+            
+            // Find the replicas container within this disk
+            const replicasContainer = diskElement.querySelector('.replicas-container');
+            if (!replicasContainer) {
+                console.error('Replicas container not found for:', diskName);
+                return;
+            }
+            
+            // Generate HTML for all replicas
+            const allReplicasHtml = replicaEntries.map(([replicaName, sizeBytes]) => `
+                <div class="flex justify-between items-center py-1 text-xs">
+                    <span class="text-slate-400 font-mono">${replicaName}</span>
+                    <span class="text-slate-300 font-medium ml-2">${this.formatBytes(sizeBytes)}</span>
+                </div>
+            `).join('');
+            
+            // Replace the container content
+            replicasContainer.innerHTML = allReplicasHtml;
+            
+        } catch (error) {
+            console.error('Error expanding replicas:', error);
+        }
+    }
 };

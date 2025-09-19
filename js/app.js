@@ -1,6 +1,8 @@
 // Main application initialization
 class HarvesterDashboardApp {
     constructor() {
+        // Store globally for access by other modules
+        window.app = this;
         this.init();
     }
     
@@ -13,29 +15,116 @@ class HarvesterDashboardApp {
 
     async startDataFetching() {
         try {
+            ViewManager.updateUpgradeStatus('info', 'Connecting to server...');
+            
             const response = await fetch('/data');
+            
+            // Check if the response is ok
+            if (!response.ok) {
+                throw new Error(`Server error: ${response.status} ${response.statusText}`);
+            }
+            
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server returned non-JSON response');
+            }
+            
             const data = await response.json();
             AppState.updateData(data);
+            // Note: upgrade status will be updated by displayUpgradeInfo method
             
             // Set up automatic refresh every 30 seconds
             setInterval(async () => {
                 try {
                     const response = await fetch('/data');
+                    
+                    if (!response.ok) {
+                        console.warn(`Auto-refresh failed: ${response.status} ${response.statusText}`);
+                        ViewManager.updateUpgradeStatus('warning', 'Connection issues - retrying...');
+                        return;
+                    }
+                    
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        console.warn('Auto-refresh failed: Non-JSON response');
+                        ViewManager.updateUpgradeStatus('warning', 'Server response error - retrying...');
+                        return;
+                    }
+                    
                     const data = await response.json();
                     AppState.updateData(data);
+                    // Note: upgrade status will be updated by displayUpgradeInfo method
                 } catch (error) {
-                    console.error('Auto-refresh failed:', error);
+                    console.warn('Auto-refresh failed:', error.message);
+                    ViewManager.updateUpgradeStatus('warning', 'Connection lost - retrying...');
                 }
             }, 30000);
             
         } catch (error) {
             console.error('Initial data fetch failed:', error);
-            ViewManager.updateUpgradeStatus('error', 'Failed to load data');
+            
+            // Provide user-friendly error messages based on error type
+            let userMessage = 'Unable to connect to server';
+            
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                userMessage = 'Server is not responding - please check if the backend is running';
+            } else if (error.message.includes('500')) {
+                userMessage = 'Server error - please check backend logs';
+            } else if (error.message.includes('404')) {
+                userMessage = 'Data endpoint not found - check server configuration';
+            } else if (error.message.includes('JSON')) {
+                userMessage = 'Server returned invalid data format';
+            }
+            
+            ViewManager.updateUpgradeStatus('error', userMessage);
+            
+            // Show helpful guidance in the dashboard
+            this.showConnectionError(userMessage);
+        }
+    }
+    
+    showConnectionError(message) {
+        const dashboard = document.getElementById('dashboard');
+        if (dashboard) {
+            dashboard.innerHTML = `
+                <div class="text-center py-12">
+                    <div class="bg-red-900/20 border border-red-500/30 rounded-lg p-8 max-w-md mx-auto">
+                        <div class="text-6xl mb-4">⚠️</div>
+                        <h2 class="text-xl font-semibold text-red-400 mb-3">Connection Error</h2>
+                        <p class="text-slate-300 mb-6">${message}</p>
+                        
+                        <div class="space-y-2 text-sm text-slate-400 mb-6">
+                            <div>• Check if the Harvester Navigator backend is running</div>
+                            <div>• Verify the server is accessible on port 8080</div>
+                            <div>• Check network connectivity</div>
+                        </div>
+                        
+                        <button id="retry-connection" 
+                                class="bg-slate-700 hover:bg-slate-600 px-6 py-2 rounded-lg text-sm transition-colors">
+                            <span>🔄</span> Retry Connection
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            // Add retry functionality
+            const retryButton = document.getElementById('retry-connection');
+            if (retryButton) {
+                retryButton.addEventListener('click', () => {
+                    retryButton.innerHTML = '<span class="animate-spin">🔄</span> Connecting...';
+                    retryButton.disabled = true;
+                    
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                });
+            }
         }
     }
     
     bindEvents() {
-        const container = document.querySelector('.container.mx-auto');
+        const container = document.querySelector('.max-w-screen-2xl') || document.body;
         if (!container) return; // Safety check
 
         container.addEventListener('click', (event) => {
@@ -43,8 +132,11 @@ class HarvesterDashboardApp {
             const button = event.target.closest('button');
             if (!button) return; // Exit if the click wasn't on or inside a button
 
+            console.log('Button clicked:', button.id); // Debug log
+
             switch (button.id) {
                 case 'back-button':
+                    console.log('Back button clicked, calling ViewManager.showDashboard()');
                     ViewManager.showDashboard();
                     break;
                 case 'back-from-all-issues':
@@ -65,6 +157,17 @@ class HarvesterDashboardApp {
                     break;
             }
         });
+
+        // Direct event listener for back button as backup
+        const backButton = document.getElementById('back-button');
+        if (backButton) {
+            backButton.addEventListener('click', (event) => {
+                console.log('Direct back button click handler triggered');
+                event.preventDefault();
+                event.stopPropagation();
+                ViewManager.showDashboard();
+            });
+        }
     }
 
     async handleRefresh() {
@@ -79,21 +182,54 @@ class HarvesterDashboardApp {
         refreshIcon.style.animation = 'spin 1s linear infinite';
         
         try {
-            await DataFetcher.refresh();
+            ViewManager.updateUpgradeStatus('info', 'Refreshing data...');
+            
+            const response = await fetch('/data');
+            
+            if (!response.ok) {
+                throw new Error(`Server error: ${response.status} ${response.statusText}`);
+            }
+            
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server returned non-JSON response');
+            }
+            
+            const data = await response.json();
+            AppState.updateData(data);
+            
             // Success feedback
             refreshIcon.textContent = '✅';
+            // Note: upgrade status will be updated by displayUpgradeInfo method
+            
             setTimeout(() => {
                 refreshIcon.textContent = '🔄';
                 refreshIcon.style.animation = '';
             }, 1000);
+            
         } catch (error) {
+            console.error('Manual refresh failed:', error);
+            
             // Error feedback
             refreshIcon.textContent = '❌';
+            
+            // Provide user-friendly error message
+            let userMessage = 'Refresh failed';
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                userMessage = 'Server not responding';
+            } else if (error.message.includes('500')) {
+                userMessage = 'Server error occurred';
+            } else if (error.message.includes('JSON')) {
+                userMessage = 'Invalid server response';
+            }
+            
+            ViewManager.updateUpgradeStatus('error', userMessage);
+            
             setTimeout(() => {
                 refreshIcon.textContent = '🔄';
                 refreshIcon.style.animation = '';
             }, 2000);
-            console.error('Manual refresh failed:', error);
+            
         } finally {
             // Re-enable button
             refreshBtn.disabled = false;
@@ -116,212 +252,172 @@ class HarvesterDashboardApp {
     }
     
     displayUpgradeInfo(upgradeInfo) {
-    const currentVersion = upgradeInfo.version || 'Unknown';
-    const previousVersion = upgradeInfo.previousVersion || 'Unknown';
-    const upgradeTime = upgradeInfo.upgradeTime || 'Unknown';
-    const state = upgradeInfo.state || 'Unknown';
-    
-    let timeDisplay = 'Unknown';
-    if (upgradeTime !== 'Unknown') {
-        timeDisplay = Utils.formatTimestamp(upgradeTime);
-    }
-
-    let stateColor = 'text-slate-300';
-    let stateIcon = '📋';
-    
-    switch (state.toLowerCase()) {
-        case 'succeeded':
-            stateColor = 'text-green-400';
-            stateIcon = '✓';
-            break;
-        case 'failed':
-            stateColor = 'text-red-400';
-            stateIcon = '✗';
-            break;
-        case 'upgrading':
-        case 'upgradingsystemservices':
-        case 'upgradingnodes':
-            stateColor = 'text-yellow-400';
-            stateIcon = '⟳';
-            break;
-    }
-
-    // Process node statuses from existing data
-    const nodeStatuses = upgradeInfo.nodeStatuses || {};
-    const nodeCount = Object.keys(nodeStatuses).length;
-    let nodeStatusHtml = '';
-    
-    if (nodeCount > 0) {
-        // Count nodes by status
-        const statusCounts = {};
-        Object.values(nodeStatuses).forEach(status => {
-            statusCounts[status] = (statusCounts[status] || 0) + 1;
-        });
+        const currentVersion = upgradeInfo.version || 'Unknown';
+        const previousVersion = upgradeInfo.previousVersion || 'Unknown';
+        const upgradeTime = upgradeInfo.upgradeTime || 'Unknown';
+        const state = upgradeInfo.state || 'Unknown';
+        const nodeStatuses = upgradeInfo.nodeStatuses || {};
         
-        // Generate badges for each status type
-        const badges = Object.entries(statusCounts).map(([status, count]) => {
-            console.log('Processing top status:', status); // Debug log
-            let icon = '?';
-            let color = 'text-slate-400';
-            
-            // Map your node status strings to icons and colors (same as detailed view)
-            const lowerStatus = status.toLowerCase();
-            if (lowerStatus.includes('pre-drain')) {
-                icon = '⏳';
-                color = 'text-orange-400';
-            } else if (lowerStatus.includes('succeeded')) {
-                icon = '✓';
-                color = 'text-green-400';
-            } else if (lowerStatus.includes('images preloaded')) {
-                icon = '📦';
-                color = 'text-blue-400';
-            } else if (lowerStatus.includes('upgrading') || lowerStatus.includes('rebooting')) {
-                icon = '○';
-                color = 'text-yellow-400';
-            } else if (lowerStatus.includes('failed') || lowerStatus.includes('error')) {
-                icon = '✗';
-                color = 'text-red-400';
-            }
-            
-            console.log('Top icon for', status, ':', icon); // Debug log
-            
-            return `<span class="inline-flex items-center gap-1 px-2 py-1 bg-slate-800/50 rounded-full text-xs">
-                      <span class="${color}">${icon}</span>
-                      <span class="text-slate-300">${count}</span>
-                    </span>`;
-        }).join('');
-        
-        nodeStatusHtml = `
-            <span class="text-slate-400">•</span>
-            <span class="text-slate-400">Nodes:</span>
-            <div class="flex items-center gap-1">${badges}</div>
-        `;
-    }
-
-    const upgradeHtml = `
-        <div class="flex flex-col items-center justify-center gap-3 text-sm">
-            <div class="flex flex-col sm:flex-row items-center justify-center gap-2">
-                <div class="flex items-center gap-2">
-                    <span class="${stateColor}">${stateIcon}</span>
-                    <span class="text-slate-400">Version:</span>
-                    <span class="font-mono text-blue-300">${previousVersion}</span>
-                    <span class="text-slate-400">→</span>
-                    <span class="font-mono text-green-300 font-semibold">${currentVersion}</span>
-                </div>
-                <div class="flex items-center gap-2">
-                    <span class="text-slate-400">•</span>
-                    <span class="text-slate-400">Upgraded:</span>
-                    <span class="text-slate-300">${timeDisplay}</span>
-                </div>
-            </div>
-            <div class="flex flex-col sm:flex-row items-center justify-center gap-2">
-                <div class="flex items-center gap-2">
-                    <span class="text-slate-400">Status:</span>
-                    <span class="${stateColor} font-medium">${state}</span>
-                </div>
-                ${nodeStatusHtml}
-            </div>
-            ${nodeCount > 0 ? `
-                <button 
-                    id="toggle-node-details" 
-                    class="text-xs text-blue-400 hover:text-blue-300 underline cursor-pointer"
-                    onclick="this.nextElementSibling.classList.toggle('hidden'); this.textContent = this.textContent.includes('Show') ? 'Hide Node Details' : 'Show Node Details'"
-                >
-                    Show Node Details
-                </button>
-                <div id="node-upgrade-details" class="hidden w-full max-w-4xl">
-                    ${this.generateNodeDetailsGrid(nodeStatuses)}
-                </div>
-            ` : ''}
-        </div>
-    `;
-    
-    document.getElementById('upgrade-status').innerHTML = upgradeHtml;
-}
-
-// Helper function to generate detailed node view
-generateNodeDetailsGrid(nodeStatuses) {
-    const nodeEntries = Object.entries(nodeStatuses);
-    
-    if (nodeEntries.length === 0) {
-        return '<p class="text-slate-400 text-center py-4">No node status information available</p>';
-    }
-
-    // Group nodes by status for better organization
-    const statusGroups = {};
-    nodeEntries.forEach(([nodeName, status]) => {
-        if (!statusGroups[status]) {
-            statusGroups[status] = [];
+        let timeDisplay = 'Unknown';
+        if (upgradeTime !== 'Unknown') {
+            timeDisplay = Utils.formatTimestamp(upgradeTime);
         }
-        statusGroups[status].push(nodeName);
-    });
 
-    const groupsHtml = Object.entries(statusGroups)
-        .sort((a, b) => b[1].length - a[1].length) // Sort by count
-        .map(([status, nodes]) => {
-            let icon = '❓';
-            let color = 'text-slate-400';
-            let bgClass = 'bg-slate-800/30';
-            let borderClass = 'border-slate-700/50';
-            
-            // Map your status strings to visual styling
-            const lowerStatus = status.toLowerCase();
-            console.log('Status mapping:', status, '→', lowerStatus); // Debug log
-            
-            if (lowerStatus.includes('pre-drain')) {
-                icon = '⏳'; color = 'text-orange-400'; 
-                bgClass = 'bg-orange-500/10'; borderClass = 'border-orange-500/30';
-            } else if (lowerStatus.includes('succeeded')) {
-                icon = '✅'; color = 'text-green-400';
-                bgClass = 'bg-green-500/10'; borderClass = 'border-green-500/30';
-            } else if (lowerStatus.includes('images preloaded')) {
-                icon = '📦'; color = 'text-blue-400';
-                bgClass = 'bg-blue-500/10'; borderClass = 'border-blue-500/30';
-            } else if (lowerStatus.includes('upgrading') || lowerStatus.includes('rebooting')) {
-                icon = '🔄'; color = 'text-yellow-400';
-                bgClass = 'bg-yellow-500/10'; borderClass = 'border-yellow-500/30';
-            } else if (lowerStatus.includes('failed') || lowerStatus.includes('error')) {
-                icon = '❌'; color = 'text-red-400';
-                bgClass = 'bg-red-500/10'; borderClass = 'border-red-500/30';
-            }
-            
-            console.log('Final icon for', status, ':', icon); // Debug log
-            
-            const nodesHtml = nodes.map(nodeName => `
-                <div class="${bgClass} border ${borderClass} px-3 py-2 rounded">
-                    <div class="font-mono text-sm text-slate-200">${nodeName}</div>
-                    <div class="text-xs text-slate-400 flex items-center gap-1">
-                        <span class="${color}">${icon}</span>
-                        ${status}
-                    </div>
-                </div>
-            `).join('');
+        let stateColor = 'text-slate-300';
+        let stateIcon = '📋';
+        
+        switch (state.toLowerCase()) {
+            case 'succeeded':
+                stateColor = 'text-green-400';
+                stateIcon = '✅';
+                break;
+            case 'failed':
+                stateColor = 'text-red-400';
+                stateIcon = '❌';
+                break;
+            case 'upgrading':
+            case 'upgradingsystemservices':
+            case 'upgradingnodes':
+                stateColor = 'text-yellow-400';
+                stateIcon = '🔄';
+                break;
+        }
 
-            return `
-                <div class="mb-4">
-                    <div class="flex items-center gap-2 mb-3 pb-2 border-b border-slate-700/50">
-                        <span class="${color} text-lg">${icon}</span>
-                        <span class="font-semibold text-slate-200">${status}</span>
-                        <span class="bg-slate-700 text-slate-300 text-xs px-2 py-1 rounded-full">${nodes.length} node${nodes.length !== 1 ? 's' : ''}</span>
+        // Calculate detailed node status breakdown
+        let nodeStatusDetails = '';
+        if (Object.keys(nodeStatuses).length > 0) {
+            const statusGroups = {};
+            
+            // Group nodes by their status
+            Object.entries(nodeStatuses).forEach(([nodeName, nodeInfo]) => {
+                // Handle both string status and object with state property
+                const status = typeof nodeInfo === 'string' ? nodeInfo : nodeInfo.state;
+                if (!statusGroups[status]) {
+                    statusGroups[status] = [];
+                }
+                statusGroups[status].push(nodeName);
+            });
+            
+            const totalNodes = Object.keys(nodeStatuses).length;
+            
+            // Create detailed status breakdown with node cards (like original UI)
+            const nodeStatusCards = [];
+            
+            // Order matters - show progression from success to stuck states
+            const statusOrder = [
+                { key: 'Succeeded', icon: '✅', color: 'text-green-400', bgColor: 'bg-green-900/20 border-green-600/30' },
+                { key: 'Images preloaded', icon: '📦', color: 'text-blue-400', bgColor: 'bg-blue-900/20 border-blue-600/30' },
+                { key: 'Pre-draining', icon: '🔄', color: 'text-yellow-400', bgColor: 'bg-yellow-900/20 border-yellow-600/30' },
+                { key: 'Draining', icon: '⏳', color: 'text-orange-400', bgColor: 'bg-orange-900/20 border-orange-600/30' },
+                { key: 'Upgrading', icon: '⚡', color: 'text-purple-400', bgColor: 'bg-purple-900/20 border-purple-600/30' },
+                { key: 'Failed', icon: '❌', color: 'text-red-400', bgColor: 'bg-red-900/20 border-red-600/30' }
+            ];
+            
+            statusOrder.forEach(({ key, icon, color, bgColor }) => {
+                if (statusGroups[key] && statusGroups[key].length > 0) {
+                    const count = statusGroups[key].length;
+                    const nodeList = statusGroups[key];
+                    
+                    nodeStatusCards.push(`
+                        <div class="mb-4">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="${color}">${icon}</span>
+                                <span class="text-white font-medium">${key}</span>
+                                <span class="text-slate-400">${count} node${count > 1 ? 's' : ''}</span>
+                            </div>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                ${nodeList.map(nodeName => `
+                                    <div class="border ${bgColor} rounded-lg p-2 text-center">
+                                        <div class="text-sm font-medium text-white">${nodeName}</div>
+                                        <div class="text-xs ${color}">${key}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `);
+                }
+            });
+            
+            // Add any unknown statuses
+            Object.entries(statusGroups).forEach(([status, nodes]) => {
+                if (!statusOrder.find(s => s.key === status)) {
+                    nodeStatusCards.push(`
+                        <div class="mb-4">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="text-slate-300">❓</span>
+                                <span class="text-white font-medium">${status}</span>
+                                <span class="text-slate-400">${nodes.length} node${nodes.length > 1 ? 's' : ''}</span>
+                            </div>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                ${nodes.map(nodeName => `
+                                    <div class="border bg-slate-700/50 border-slate-600/50 rounded-lg p-2 text-center">
+                                        <div class="text-sm font-medium text-white">${nodeName}</div>
+                                        <div class="text-xs text-slate-300">${status}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `);
+                }
+            });
+            
+            nodeStatusDetails = `
+                <div id="node-status-details" class="mt-4 pt-4 border-t border-slate-600" style="display: none;">
+                    <div class="text-sm mb-3">
+                        <span class="text-slate-200 font-medium">Node Upgrade Status (${totalNodes} total):</span>
                     </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                        ${nodesHtml}
-                    </div>
+                    ${nodeStatusCards.join('')}
                 </div>
             `;
-        }).join('');
+        }
 
-    return `
-        <div class="bg-slate-800/20 border border-slate-700/30 rounded-lg p-4 mt-2">
-            <h4 class="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2">
-                <span>🖥️</span>
-                Node Upgrade Status (${nodeEntries.length} total)
-            </h4>
-            ${groupsHtml}
-        </div>
-    `;
-}
+        // Enhanced header display with toggle for detailed node status
+        const upgradeHtml = `
+            <div class="bg-slate-700 p-3 rounded border border-yellow-400">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="${stateColor} text-lg">${stateIcon}</span>
+                    <span class="text-slate-200 font-medium">Version:</span>
+                    <span class="font-mono text-blue-300 bg-slate-800 px-2 py-1 rounded">${previousVersion}</span>
+                    <span class="text-yellow-400 font-bold">→</span>
+                    <span class="font-mono text-green-300 font-semibold bg-slate-800 px-2 py-1 rounded">${currentVersion}</span>
+                    <span class="text-slate-400">•</span>
+                    <span class="text-slate-200 font-medium">Upgraded:</span>
+                    <span class="text-slate-200 bg-slate-800 px-2 py-1 rounded">${timeDisplay}</span>
+                    <button onclick="window.app.toggleNodeDetails()" class="text-blue-400 hover:text-blue-300 text-sm ml-2">
+                        <span id="node-details-toggle">Show Node Details</span>
+                    </button>
+                </div>
+                ${nodeStatusDetails}
+            </div>
+        `;
+        
+        const statusElement = document.getElementById('upgrade-status');
+        if (statusElement) {
+            statusElement.innerHTML = upgradeHtml;
+            
+            // Add enhanced styling to the container
+            const upgradeContainer = document.getElementById('upgrade-info');
+            if (upgradeContainer) {
+                upgradeContainer.style.backgroundColor = '#1e293b';
+                upgradeContainer.style.border = '2px solid #3b82f6';
+                upgradeContainer.style.padding = '8px';
+                upgradeContainer.style.borderRadius = '8px';
+                upgradeContainer.style.minHeight = '80px';
+                upgradeContainer.style.maxWidth = '100%';
+            }
+        }
+    }
 
+    toggleNodeDetails() {
+        const details = document.getElementById('node-status-details');
+        const toggle = document.getElementById('node-details-toggle');
+        
+        if (details && toggle) {
+            const isHidden = details.style.display === 'none';
+            details.style.display = isHidden ? 'block' : 'none';
+            toggle.textContent = isHidden ? 'Hide Node Details' : 'Show Node Details';
+        }
+    }
 }
 
 // Initialize app when DOM is ready

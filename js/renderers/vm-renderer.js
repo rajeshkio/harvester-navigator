@@ -1,110 +1,225 @@
-// VM UI rendering
+// Refined VM Table Renderer - Consistent Badges and Perfect Alignment
 const VMRenderer = {
     render(vms, issues) {
         const container = document.getElementById('vm-list');
         container.innerHTML = '';
         
+        // Update VM count
+        const vmCountElement = document.getElementById('vm-count');
+        if (vmCountElement) {
+            vmCountElement.textContent = vms ? vms.length : 0;
+        }
+        
         if (!vms || vms.length === 0) {
-            container.innerHTML = '<p class="text-slate-400 col-span-full text-center py-4">No virtual machines found.</p>';
+            container.innerHTML = '<div class="text-center py-8 text-slate-400">No virtual machines found</div>';
             return;
         }
         
-        // Update global issues counter
-        const allRealIssues = AppState.getAllRealIssues();
-      //  this.updateGlobalIssuesCounter(allRealIssues.length);
+        // Create the table structure
+        const table = document.createElement('table');
+        table.className = 'w-full text-sm';
         
+        // Create table header with center-aligned status columns
+        table.innerHTML = `
+            <thead>
+                <tr class="border-b border-slate-600 text-slate-300">
+                    <th class="text-left py-3 px-4 font-medium text-base">Name</th>
+                    <th class="text-center py-3 px-4 font-medium text-base">Status</th>
+                    <th class="text-center py-3 px-4 font-medium text-base">Issues</th>
+                    <th class="text-left py-3 px-4 font-medium text-base">Node</th>
+                    <th class="text-left py-3 px-4 font-medium text-base">IP Address</th>
+                    <th class="text-left py-3 px-4 font-medium text-base">Phase</th>
+                    <th class="text-center py-3 px-4 font-medium text-base">Storage</th>
+                </tr>
+            </thead>
+            <tbody id="vm-table-body" class="divide-y divide-slate-700">
+            </tbody>
+        `;
+        
+        container.appendChild(table);
+        
+        const tbody = document.getElementById('vm-table-body');
+        
+        // Create table rows for each VM
         vms.forEach(vm => {
-            const vmCard = this.createVMCard(vm);
-            container.appendChild(vmCard);
+            const vmRow = this.createVMTableRow(vm);
+            tbody.appendChild(vmRow);
         });
     },
     
-    createVMCard(vm) {
+    createVMTableRow(vm) {
         const status = vm.printableStatus || 'Unknown';
         const realIssueCount = AppState.countRealIssues(vm.errors);
+        const vmMetrics = this.getVMMetrics(vm);
+        const migrationInfo = this.getMigrationInfo(vm.vmimInfo);
         
-        let storageInfo = '';
-        if (vm.errors && vm.errors.length > 0) {
-            const storageBackend = vm.errors.find(error => 
-                error.severity === 'info' && error.type === 'info'
-            );
-            if (storageBackend && storageBackend.resource !== 'driver.longhorn.io') {
-                storageInfo = `<div class="text-xs text-blue-300 mb-1">📦 ${Utils.getStorageBackendDisplayName(storageBackend.resource)}</div>`;
-            }
-        }
-
-        // Check for active migrations
-        let migrationInfo = '';
-        if (vm.vmimInfo && vm.vmimInfo.length > 0) {
-            const activeMigration = vm.vmimInfo.find(vmim => 
-                ['Running', 'Scheduling', 'Scheduled', 'PreparingTarget', 'TargetReady'].includes(vmim.phase)
-            );
+        const row = document.createElement('tr');
+        row.className = 'hover:bg-slate-700/30 cursor-pointer transition-colors';
+        
+        row.innerHTML = `
+            <!-- VM Name -->
+            <td class="py-3 px-4">
+                <div>
+                    <div class="font-medium text-white text-base">${vm.name}</div>
+                    <div class="text-sm text-slate-400">${vm.namespace}</div>
+                    ${migrationInfo.isActive ? `
+                        <div class="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-yellow-900/30 text-yellow-300 text-sm rounded">
+                            <span class="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse"></span>
+                            Migration: ${migrationInfo.phase}
+                        </div>
+                    ` : ''}
+                </div>
+            </td>
             
-            if (activeMigration) {
-                const migrationIcon = this.getMigrationIcon(activeMigration.phase);
-                const phaseColor = this.getMigrationColor(activeMigration.phase);
+            <!-- Status - Centered with consistent badge styling -->
+            <td class="py-3 px-4 text-center">
+                <div class="flex flex-col items-center gap-1">
+                    <span class="px-2 py-1 text-sm font-medium rounded ${this.getStatusBadgeClass(status)}">
+                        ${status}
+                    </span>
+                    ${vm.vmStatusReason ? `
+                        <div class="text-sm text-slate-400 max-w-24 truncate" title="${vm.vmStatusReason}">
+                            ${vm.vmStatusReason}
+                        </div>
+                    ` : ''}
+                </div>
+            </td>
+            
+            <!-- Issues - Centered with softened "No issues" -->
+            <td class="py-3 px-4 text-center">
+                ${realIssueCount > 0 ? `
+                    <span class="px-2 py-1 text-sm font-medium rounded bg-red-700/80 text-red-200">
+                        ${realIssueCount} issue${realIssueCount > 1 ? 's' : ''}
+                    </span>
+                ` : `
+                    <span class="px-2 py-1 text-sm rounded bg-slate-700/50 text-slate-400">
+                        No issues
+                    </span>
+                `}
+            </td>
+            
+            <!-- Node -->
+            <td class="py-3 px-4">
+                <span class="text-white font-medium text-base">${vmMetrics.node}</span>
+                ${migrationInfo.isActive && migrationInfo.targetNode ? `
+                    <div class="text-sm text-yellow-400 mt-1">
+                        → ${migrationInfo.targetNode}
+                    </div>
+                ` : ''}
+            </td>
+            
+            <!-- IP Address -->
+            <td class="py-3 px-4">
+                ${vmMetrics.ipAddress ? `
+                    <span class="font-mono text-white text-sm">${vmMetrics.ipAddress}</span>
+                ` : `
+                    <span class="text-slate-500 text-sm">No IP</span>
+                `}
+            </td>
+            
+            <!-- Phase -->
+            <td class="py-3 px-4">
+                <span class="text-white text-base">${vmMetrics.phase}</span>
+            </td>
+            
+            <!-- Storage - Centered with consistent badge styling -->
+            <td class="py-3 px-4 text-center">
+                <div class="flex flex-col items-center gap-1">
+                    ${vm.pvcStatus ? `
+                        <span class="px-2 py-1 text-sm font-medium rounded ${this.getStorageStatusClass(vm.pvcStatus)}">
+                            ${vm.pvcStatus}
+                        </span>
+                    ` : `
+                        <span class="px-2 py-1 text-sm rounded bg-slate-700/50 text-slate-400">N/A</span>
+                    `}
+                    ${vm.storageClass ? `
+                        <div class="text-slate-400 text-sm">${vm.storageClass}</div>
+                    ` : ''}
+                </div>
+            </td>
+        `;
+        
+        // Add click handler for VM details
+        row.addEventListener('click', () => ViewManager.showVMDetail(vm.name));
+        
+        return row;
+    },
+
+    getVMMetrics(vm) {
+        let node = 'N/A';
+        let phase = 'Unknown';
+        let ipAddress = null;
+
+        if (vm.vmiInfo && vm.vmiInfo.length > 0) {
+            const vmi = vm.vmiInfo[0];
+            node = vmi.nodeName || node;
+            phase = vmi.phase || phase;
+            
+            if (vmi.interfaces && vmi.interfaces.length > 0) {
+                // Enhanced IP address detection
+                const prioritizedInterfaces = vmi.interfaces
+                    .filter(iface => iface.ipAddress && iface.ipAddress !== '127.0.0.1')
+                    .sort((a, b) => {
+                        // Prioritize non-system interfaces
+                        const aIsSystem = a.interfaceName?.match(/(^lo|^lxc|cilium|flannel|cni)/i);
+                        const bIsSystem = b.interfaceName?.match(/(^lo|^lxc|cilium|flannel|cni)/i);
+                        
+                        if (aIsSystem && !bIsSystem) return 1;
+                        if (!aIsSystem && bIsSystem) return -1;
+                        return 0;
+                    });
                 
-                // Show target pod validation if it failed
-                const podError = activeMigration.targetPod && !activeMigration.targetPodExists ? 
-                    ' ⚠️' : '';
-                
-                migrationInfo = `<div class="text-xs ${phaseColor} mb-1 flex items-center gap-1">
-                    <span>${migrationIcon}</span>
-                    <span>Migration: ${activeMigration.phase}${podError}</span>
-                </div>`;
-            } else {
-                // Check for recent failed migration
-                const failedMigration = vm.vmimInfo.find(vmim => vmim.phase === 'Failed');
-                if (failedMigration) {
-                    migrationInfo = `<div class="text-xs text-red-400 mb-1 flex items-center gap-1">
-                        <span>❌</span>
-                        <span>Migration: Failed</span>
-                    </div>`;
+                if (prioritizedInterfaces.length > 0) {
+                    ipAddress = prioritizedInterfaces[0].ipAddress;
                 }
             }
         }
-        
-        const card = document.createElement('div');
-        card.className = `bg-slate-800/50 p-3 rounded-md cursor-pointer hover:bg-slate-700/50 transition-colors fade-in status-${status.toLowerCase()}`;
-        card.innerHTML = `
-            <h3 class="font-bold text-base text-slate-200 truncate mb-1">${vm.name}</h3>
-            <div class="text-xs text-slate-400 mb-2">${vm.namespace}</div>
-            ${storageInfo}
-            ${migrationInfo}
-            <div class="text-sm mb-2">
-                <span class="text-slate-400">Status:</span> 
-                <span class="${Utils.getStatusColorClass(status)} font-medium">${status}</span>
-            </div>
-            ${realIssueCount > 0 ? `<div class="text-xs text-red-400">⚠️ ${realIssueCount} issue${realIssueCount > 1 ? 's' : ''} detected</div>` : ''}
-        `;
-        card.onclick = () => ViewManager.showVMDetail(vm.name);
-        
-        return card;
+
+        if (node === 'N/A' && vm.podInfo && vm.podInfo.length > 0) {
+            node = vm.podInfo[0].nodeId || vm.podInfo[0].nodeName || node;
+        }
+
+        return { node, phase, ipAddress };
     },
 
-    getMigrationIcon(phase) {
-        switch(phase) {
-            case 'Running': return '🔄';
-            case 'Scheduling': return '⏳';
-            case 'Scheduled': return '📋';
-            case 'PreparingTarget': return '🔧';
-            case 'TargetReady': return '✅';
-            case 'Failed': return '❌';
-            case 'Succeeded': return '🎉';
-            default: return '📦';
+    getMigrationInfo(vmimInfo) {
+        if (!vmimInfo || vmimInfo.length === 0) {
+            return { isActive: false };
         }
+
+        const latestMigration = vmimInfo[vmimInfo.length - 1];
+        const isActive = ['Running', 'Scheduling', 'Scheduled', 'PreparingTarget', 'TargetReady'].includes(latestMigration.phase);
+        
+        return {
+            isActive,
+            phase: latestMigration.phase,
+            sourceNode: latestMigration.sourceNode,
+            targetNode: latestMigration.targetNode
+        };
     },
 
-    getMigrationColor(phase) {
-        switch(phase) {
-            case 'Running': return 'text-yellow-400';
-            case 'Scheduling': return 'text-blue-400';
-            case 'Scheduled': return 'text-blue-400';
-            case 'PreparingTarget': return 'text-purple-400';
-            case 'TargetReady': return 'text-green-400';
-            case 'Failed': return 'text-red-400';
-            case 'Succeeded': return 'text-green-400';
-            default: return 'text-slate-400';
-        }
+    getStatusBadgeClass(status) {
+        const statusMap = {
+            'running': 'bg-green-700/80 text-green-200',
+            'stopped': 'bg-slate-600/80 text-slate-200', 
+            'starting': 'bg-yellow-700/80 text-yellow-200',
+            'stopping': 'bg-orange-700/80 text-orange-200',
+            'error': 'bg-red-700/80 text-red-200',
+            'failed': 'bg-red-700/80 text-red-200',
+            'paused': 'bg-blue-700/80 text-blue-200',
+            'bound': 'bg-green-700/80 text-green-200',
+            'pending': 'bg-yellow-700/80 text-yellow-200',
+            'lost': 'bg-red-700/80 text-red-200'
+        };
+        return statusMap[status?.toLowerCase()] || 'bg-slate-600/80 text-slate-200';
+    },
+
+    getStorageStatusClass(status) {
+        const statusMap = {
+            'bound': 'bg-green-700/80 text-green-200',
+            'pending': 'bg-yellow-700/80 text-yellow-200',
+            'lost': 'bg-red-700/80 text-red-200'
+        };
+        return statusMap[status?.toLowerCase()] || 'bg-slate-600/80 text-slate-200';
     }
 };
