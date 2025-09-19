@@ -277,8 +277,6 @@ func (h *HealthChecker) checkErrorPods(ctx context.Context) models.HealthCheckRe
 			if h.isPodInError(pod) {
 				podError := h.createPodError(pod)
 				podErrors = append(podErrors, podError)
-
-				// Keep old format for compatibility
 				errorPods = append(errorPods, fmt.Sprintf("%s/%s (%s)",
 					pod.Namespace, pod.Name, pod.Status.Phase))
 			}
@@ -296,22 +294,16 @@ func (h *HealthChecker) checkErrorPods(ctx context.Context) models.HealthCheckRe
 		result.Status = "passed"
 		result.Message = "All system pods are OK"
 	}
-	fmt.Printf("DEBUG: Found %d error pods, %d podErrors\n", len(errorPods), len(podErrors))
-	for i, pe := range podErrors {
-		fmt.Printf("DEBUG: PodError %d: %s/%s - %s (%s)\n", i, pe.Namespace, pe.Name, pe.Phase, pe.ErrorState)
-	}
 
 	return result
 }
 
 // Simple check for pod errors
 func (h *HealthChecker) isPodInError(pod corev1.Pod) bool {
-	//	fmt.Printf("DEBUG: Checking pod %s/%s - Phase: %s\n", pod.Namespace, pod.Name, pod.Status.Phase)
 	if pod.Status.Phase == "Failed" || pod.Status.Phase == "Unknown" {
 		return true
 	}
 
-	// Long-running pending pods (more than 5 minutes old)
 	if pod.Status.Phase == "Pending" {
 		if time.Since(pod.CreationTimestamp.Time) > 5*time.Minute {
 			return true
@@ -348,7 +340,6 @@ func (h *HealthChecker) isPodInError(pod corev1.Pod) bool {
 	}
 
 	if pod.Status.Phase != "Running" && pod.Status.Phase != "Succeeded" {
-		//	fmt.Printf("DEBUG: Found error pod: %s/%s - %s\n", pod.Namespace, pod.Name, pod.Status.Phase)
 		return true
 	}
 
@@ -379,14 +370,10 @@ func (h *HealthChecker) getPodErrorState(pod corev1.Pod) string {
 	// Check container states for specific errors
 	for _, container := range pod.Status.ContainerStatuses {
 		if container.State.Waiting != nil && container.State.Waiting.Reason != "" {
-			//	fmt.Printf("DEBUG: Container %s waiting: %s\n", container.Name, container.State.Waiting.Reason)
-
 			return container.State.Waiting.Reason
 		}
 		if container.RestartCount > 50 && h.hasRecentRestarts(container) {
 			restartInfo := fmt.Sprintf("HighRestarts(%d)", container.RestartCount)
-			//	fmt.Printf("DEBUG: Container %s high restarts: %s\n", container.Name, restartInfo)
-
 			return restartInfo
 		}
 	}
@@ -395,17 +382,14 @@ func (h *HealthChecker) getPodErrorState(pod corev1.Pod) string {
 	for _, container := range pod.Status.InitContainerStatuses {
 		if container.State.Waiting != nil && container.State.Waiting.Reason != "" {
 			initReason := fmt.Sprintf("Init:%s", container.State.Waiting.Reason)
-			//		fmt.Printf("DEBUG: Init container %s: %s\n", container.Name, initReason)
 			return initReason
 		}
 	}
 
 	// Fall back to pod reason or phase
 	if pod.Status.Reason != "" {
-		//	fmt.Printf("DEBUG: Pod reason: %s\n", pod.Status.Reason)
 		return pod.Status.Reason
 	}
-	//	fmt.Printf("DEBUG: Falling back to phase: %s\n", pod.Status.Phase)
 	return string(pod.Status.Phase)
 }
 

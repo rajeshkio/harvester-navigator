@@ -23,14 +23,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// DataFetcher handles efficient data fetching with batching and caching
 type DataFetcher struct {
 	client        *kubernetes.Clientset
 	batchFetcher  *batch.BatchFetcher
 	volumeService *volume.VolumeService
 }
 
-// CreateDataFetcher creates a data fetcher
 func CreateDataFetcher(clientset *kubernetes.Clientset) *DataFetcher {
 	return &DataFetcher{
 		client:        clientset,
@@ -39,22 +37,19 @@ func CreateDataFetcher(clientset *kubernetes.Clientset) *DataFetcher {
 	}
 }
 
-// fetchFullClusterData efficiently fetches all cluster data using batch operations
 func (df *DataFetcher) fetchFullClusterData() (models.FullClusterData, error) {
 	var allData models.FullClusterData
 	start := time.Now()
 
-	log.Println("🚀 Starting cluster data fetch...")
+	log.Println("Starting cluster data fetch...")
 
-	// Step 1: Run health checks (quick operation)
 	log.Println("Running health checks...")
 	healthChecker := health.CreateHealthChecker(df.client)
 	healthSummary := healthChecker.RunAllChecks(context.Background())
 	allData.HealthChecks = healthSummary
-	log.Printf("✅ Health checks completed: %d passed, %d failed, %d warnings",
+	log.Printf("Health checks completed: %d passed, %d failed, %d warnings",
 		healthSummary.PassedChecks, healthSummary.FailedChecks, healthSummary.WarningChecks)
 
-	// Step 2: Fetch node data (parallel with VMs)
 	var nodeWg sync.WaitGroup
 	nodeWg.Add(1)
 	go func() {
@@ -64,7 +59,6 @@ func (df *DataFetcher) fetchFullClusterData() (models.FullClusterData, error) {
 		}
 	}()
 
-	// Step 3: Fetch upgrade info (quick operation, parallel)
 	nodeWg.Add(1)
 	go func() {
 		defer nodeWg.Done()
@@ -73,12 +67,11 @@ func (df *DataFetcher) fetchFullClusterData() (models.FullClusterData, error) {
 			log.Printf("Warning: could not fetch upgrade information: %v", err)
 		} else {
 			allData.UpgradeInfo = upgradeInfo
-			log.Printf("✅ Upgrade info: %s -> %s (%s)",
+			log.Printf("Upgrade info: %s -> %s (%s)",
 				upgradeInfo.PreviousVersion, upgradeInfo.Version, upgradeInfo.State)
 		}
 	}()
 
-	// Step 4: Fetch VM data optimized
 	vmData, err := df.fetchVMData()
 	if err != nil {
 		log.Printf("Error fetching VM data: %v", err)
@@ -86,11 +79,10 @@ func (df *DataFetcher) fetchFullClusterData() (models.FullClusterData, error) {
 	}
 	allData.VMs = vmData
 
-	// Wait for node and upgrade data
 	nodeWg.Wait()
 
 	elapsed := time.Since(start)
-	log.Printf("🎉 Cluster data fetch completed in %v", elapsed)
+	log.Printf("Cluster data fetch completed in %v", elapsed)
 	return allData, nil
 }
 
@@ -154,7 +146,7 @@ func (df *DataFetcher) fetchNodeData(allData *models.FullClusterData) error {
 		}
 
 		allData.Nodes = mergedNodes
-		log.Printf("✅ Successfully merged node data for %d nodes.", len(mergedNodes))
+		log.Printf("Successfully merged node data for %d nodes.", len(mergedNodes))
 	}
 
 	return nil
@@ -162,16 +154,13 @@ func (df *DataFetcher) fetchNodeData(allData *models.FullClusterData) error {
 
 // fetchVMData fetches VM data using batch operations
 func (df *DataFetcher) fetchVMData() ([]models.VMInfo, error) {
-	log.Println("🔥 Fetching VM data with batch processing...")
+	log.Println("Fetching VM data with batch processing...")
 
-	// Step 1: Fetch all VM metadata
 	vmList, err := vm.FetchAllVMData(df.client, "apis/kubevirt.io/v1", "", "virtualmachines")
 	if err != nil {
 		return nil, err
 	}
 	log.Printf("Found %d VMs. Processing with batch operations...", len(vmList))
-
-	// Step 2: Extract PVC requirements from VMs
 	var pvcRequests []batch.PVCRequest
 	vmToPVC := make(map[int]string) // VM index to PVC name mapping
 
@@ -205,21 +194,18 @@ func (df *DataFetcher) fetchVMData() ([]models.VMInfo, error) {
 
 	log.Printf("Identified %d PVCs to fetch for VMs", len(pvcRequests))
 
-	// Step 3: Batch fetch all volume details
 	volumeDetails, err := df.volumeService.BatchFetchVolumeDetails(pvcRequests)
 	if err != nil {
 		log.Printf("Warning: Batch volume fetch failed: %v", err)
 		volumeDetails = make(map[string]*volume.VolumeDetails)
 	}
 
-	// Step 4: Batch fetch pod information for PVCs
 	podMapping, err := df.volumeService.GetPodFromVolumeBatch(pvcRequests)
 	if err != nil {
 		log.Printf("Warning: Batch pod fetch failed: %v", err)
 		podMapping = make(map[string]string)
 	}
 
-	// Step 5: Process VMs with batched data
 	vmInfos := make([]models.VMInfo, 0, len(vmList))
 	var wg sync.WaitGroup
 	var vmMutex sync.Mutex
@@ -252,7 +238,7 @@ func (df *DataFetcher) fetchVMData() ([]models.VMInfo, error) {
 	}
 
 	wg.Wait()
-	log.Printf("✅ Processed %d VMs with batch operations", len(vmInfos))
+	log.Printf("Processed %d VMs with batch operations", len(vmInfos))
 	return vmInfos, nil
 }
 
@@ -301,15 +287,10 @@ func (df *DataFetcher) processVMWithBatchedData(
 		if vmInfo.VolumeName != "" {
 			paths := getDefaultResourcePaths(namespace)
 			lhvaData, err := lhva.FetchLHVAData(df.client, vmInfo.VolumeName, paths.LHVAPath, "longhorn-system", "volumeattachments")
-			if err != nil {
-				fmt.Printf("Could not fetch LHVA for volume %s: %v\n", vmInfo.VolumeName, err)
-			} else {
+			if err == nil {
 				lhvaStatus, err := lhva.ParseLHVAStatus(lhvaData)
-				if err != nil {
-					fmt.Printf("Could not parse LHVA status for volume %s: %v\n", vmInfo.VolumeName, err)
-				} else {
+				if err == nil {
 					vmInfo.AttachmentTicketsRaw = lhvaStatus
-					//		fmt.Printf("✅ Attachmentticketstatuses for %s: %v\n", vmInfo.VolumeName, lhvaStatus)
 				}
 			}
 		}

@@ -9,7 +9,6 @@ class HarvesterDashboardApp {
     init() {
         this.bindEvents();
         this.subscribeToStateChanges();
-        // WebSocketManager.connect(); // Removed - using HTTP instead
         this.startDataFetching();
     }
 
@@ -40,14 +39,12 @@ class HarvesterDashboardApp {
                     const response = await fetch('/data');
                     
                     if (!response.ok) {
-                        console.warn(`Auto-refresh failed: ${response.status} ${response.statusText}`);
                         ViewManager.updateUpgradeStatus('warning', 'Connection issues - retrying...');
                         return;
                     }
                     
                     const contentType = response.headers.get('content-type');
                     if (!contentType || !contentType.includes('application/json')) {
-                        console.warn('Auto-refresh failed: Non-JSON response');
                         ViewManager.updateUpgradeStatus('warning', 'Server response error - retrying...');
                         return;
                     }
@@ -56,13 +53,11 @@ class HarvesterDashboardApp {
                     AppState.updateData(data);
                     // Note: upgrade status will be updated by displayUpgradeInfo method
                 } catch (error) {
-                    console.warn('Auto-refresh failed:', error.message);
                     ViewManager.updateUpgradeStatus('warning', 'Connection lost - retrying...');
                 }
             }, 30000);
             
         } catch (error) {
-            console.error('Initial data fetch failed:', error);
             
             // Provide user-friendly error messages based on error type
             let userMessage = 'Unable to connect to server';
@@ -130,13 +125,10 @@ class HarvesterDashboardApp {
         container.addEventListener('click', (event) => {
             // Find the closest button if a click happens on an element inside a button
             const button = event.target.closest('button');
-            if (!button) return; // Exit if the click wasn't on or inside a button
-
-            console.log('Button clicked:', button.id); // Debug log
+            if (!button) return;
 
             switch (button.id) {
                 case 'back-button':
-                    console.log('Back button clicked, calling ViewManager.showDashboard()');
                     ViewManager.showDashboard();
                     break;
                 case 'back-from-all-issues':
@@ -162,7 +154,6 @@ class HarvesterDashboardApp {
         const backButton = document.getElementById('back-button');
         if (backButton) {
             backButton.addEventListener('click', (event) => {
-                console.log('Direct back button click handler triggered');
                 event.preventDefault();
                 event.stopPropagation();
                 ViewManager.showDashboard();
@@ -208,7 +199,6 @@ class HarvesterDashboardApp {
             }, 1000);
             
         } catch (error) {
-            console.error('Manual refresh failed:', error);
             
             // Error feedback
             refreshIcon.textContent = '❌';

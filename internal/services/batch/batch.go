@@ -186,8 +186,6 @@ func (c *APICache) Size() int {
 
 // BatchFetchLonghornResources fetches all Longhorn resources in batch
 func (bf *BatchFetcher) BatchFetchLonghornResources() (map[string]map[string]interface{}, error) {
-	log.Println("Batch fetching Longhorn resources...")
-
 	requests := []BatchRequest{
 		{
 			ID:        "volumes",
@@ -226,7 +224,6 @@ func (bf *BatchFetcher) BatchFetchLonghornResources() (map[string]map[string]int
 		result[resp.ID] = resp.Data
 	}
 
-	log.Printf("Successfully batch fetched %d Longhorn resource types", len(result))
 	return result, nil
 }
 

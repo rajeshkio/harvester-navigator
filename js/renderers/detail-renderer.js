@@ -85,22 +85,12 @@ const DetailRenderer = {
     },
 
     renderEnhancedResources(nodeData) {
-        console.log('Node data for resources:', nodeData); // Debug log
-        
         const k8sInfo = nodeData.kubernetesInfo;
         const cpu = k8sInfo?.capacity?.cpu || '0';
         const memoryBytes = k8sInfo?.capacity?.memory ? this.parseMemoryToBytes(k8sInfo.capacity.memory) : 0;
         const memory = this.formatBytes(memoryBytes);
         
-        // Debug multiple possible paths for attached volumes
-        console.log('Volumes debug:', {
-            'k8sInfo?.status?.volumesAttached': k8sInfo?.status?.volumesAttached,
-            'k8sInfo?.volumesAttached': k8sInfo?.volumesAttached,
-            'nodeData?.volumesAttached': nodeData?.volumesAttached,
-            'nodeData?.status?.volumesAttached': nodeData?.status?.volumesAttached
-        });
-        
-        // Try multiple possible paths for attached volumes - DEBUG shows it's at k8sInfo.volumesAttached
+        // Try multiple possible paths for attached volumes
         const attachedVolumes = k8sInfo?.volumesAttached?.length || 0;
         
         return `
@@ -171,8 +161,6 @@ const DetailRenderer = {
     },
 
     renderEnhancedStorage(disks) {
-        console.log('Storage disks data:', disks); // Debug log
-        
         if (!disks || disks.length === 0) {
             return `
                 <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
@@ -191,7 +179,6 @@ const DetailRenderer = {
         // Calculate total replica count correctly (count entries, not sum bytes)
         const totalReplicas = disks.reduce((sum, disk) => {
             const replicaCount = Object.keys(disk.scheduledReplicas || {}).length;
-            console.log(`Disk ${disk.name || disk.path}: ${replicaCount} replicas`); // Debug log
             return sum + replicaCount;
         }, 0);
 
@@ -221,7 +208,6 @@ const DetailRenderer = {
                 <!-- Disk Details -->
                 <div class="space-y-3">
                     ${disks.map(disk => {
-                        console.log('Rendering disk:', disk); // Debug log
                         return this.renderDiskDetail(disk);
                     }).join('')}
                 </div>
@@ -233,22 +219,11 @@ const DetailRenderer = {
         // Extract readable disk name from path
         const diskName = this.getDiskDisplayName(disk.path);
         
-        // Debug logging to see the actual data structure
-        console.log('Disk detail data:', {
-            path: disk.path,
-            storageScheduled: disk.storageScheduled,
-            storageMaximum: disk.storageMaximum,
-            storageAvailable: disk.storageAvailable,
-            scheduledReplicas: disk.scheduledReplicas
-        });
-        
         // Parse storage information correctly - check both locations
         const usedBytes = this.parseStorageToBytes(disk.storageScheduled || '0');
         const totalBytes = this.parseStorageToBytes(disk.storageMaximum || '0');
         const availableBytes = this.parseStorageToBytes(disk.storageAvailable || '0');
         const usagePercent = totalBytes > 0 ? Math.round((usedBytes / totalBytes) * 100) : 0;
-        
-        console.log('Parsed storage:', { usedBytes, totalBytes, availableBytes, usagePercent }); // Debug
         
         // Count actual replicas and get their details
         const replicaEntries = Object.entries(disk.scheduledReplicas || {});
@@ -330,8 +305,6 @@ const DetailRenderer = {
 
     // Remove the shortenReplicaName method since we're showing full names now
     showAllReplicas(diskName) {
-        // This would be implemented to show a modal or expand the list
-        console.log('Show all replicas for disk:', diskName);
     },
 
     renderQuickCommands(nodeName) {
@@ -1415,7 +1388,6 @@ const DetailRenderer = {
     },
 
     renderEnhancedMigration(vmimInfo, vmiInfo) {
-        console.log('VMIM Info for migration:', vmimInfo); // Debug log
         const migration = vmimInfo && vmimInfo.length > 0 ? vmimInfo[0] : null;
         
         if (!migration) {

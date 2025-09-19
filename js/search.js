@@ -23,12 +23,10 @@ class UniversalSearch {
         this.clearButton = document.getElementById('clear-search');
 
         if (!this.searchInput) {
-            console.warn('Search input not found - search functionality disabled');
             return;
         }
 
         this.bindEvents();
-        console.log('Universal search initialized');
     }
 
     bindEvents() {
@@ -92,12 +90,6 @@ class UniversalSearch {
 
         // Wait for data to be loaded
         const vms = AppState.data.vms;
-        console.log('Search data check:', { 
-            hasAppState: !!AppState, 
-            hasData: !!AppState.data, 
-            vmsCount: vms ? vms.length : 0,
-            query: query 
-        });
         
         if (!vms || vms.length === 0) {
             this.showStatus('Loading data...', 'text-yellow-400');

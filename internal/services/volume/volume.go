@@ -192,7 +192,6 @@ func extractPVDetails(pvData map[string]interface{}, volumeDetails *VolumeDetail
 	return nil
 }
 
-// fetchLonghornVolumeDetails attempts to get additional details from Longhorn API
 func fetchLonghornVolumeDetails(client *kubernetes.Clientset, volumeName string) (map[string]interface{}, error) {
 	volumeRaw, err := client.RESTClient().Get().
 		AbsPath("apis/longhorn.io/v1beta2").

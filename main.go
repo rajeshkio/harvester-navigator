@@ -18,22 +18,18 @@ import (
 
 func determineKubeconfigPath() (string, string, error) {
 	if kubeconfigEnv := os.Getenv("KUBECONFIG"); kubeconfigEnv != "" {
-		// KUBECONFIG can contain multiple paths separated by : (Linux/macOS) or ; (Windows)
-		// We'll use the first valid one
 		separator := ":"
-		if os.PathSeparator == '\\' { // Windows
+		if os.PathSeparator == '\\' {
 			separator = ";"
 		}
 
 		paths := strings.Split(kubeconfigEnv, separator)
 		for i, path := range paths {
-			// Clean up any whitespace
 			path = strings.TrimSpace(path)
 			if path == "" {
 				continue
 			}
 
-			// Expand ~ to home directory if needed
 			if strings.HasPrefix(path, "~/") {
 				if home, err := os.UserHomeDir(); err == nil {
 					path = filepath.Join(home, path[2:])
@@ -46,7 +42,6 @@ func determineKubeconfigPath() (string, string, error) {
 			}
 		}
 
-		// If KUBECONFIG is set but no valid files found, that's worth noting
 		log.Printf("Warning: KUBECONFIG environment variable is set to '%s' but no valid files found", kubeconfigEnv)
 	}
 
@@ -60,7 +55,6 @@ func determineKubeconfigPath() (string, string, error) {
 		return simPath, "Harvester simulator location (~/.sim/admin.kubeconfig)", nil
 	}
 
-	// Priority 4: Check current directory for common kubeconfig names
 	currentDir, _ := os.Getwd()
 	commonNames := []string{"kubeconfig", "admin.kubeconfig", "config"}
 
@@ -77,7 +71,6 @@ func determineKubeconfigPath() (string, string, error) {
 		"  3. Current directory (kubeconfig, admin.kubeconfig, config)", simPath)
 }
 
-// validateKubeconfig performs basic validation on the kubeconfig file
 func validateKubeconfig(path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -92,7 +85,6 @@ func validateKubeconfig(path string) error {
 		return fmt.Errorf("kubeconfig file is empty")
 	}
 
-	// Check if file is readable
 	file, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("cannot read kubeconfig file: %w", err)
@@ -143,10 +135,8 @@ func getDefaultResourcePaths(namespace string) models.ResourcePaths {
 
 func handleData(clientset *kubernetes.Clientset) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("Data request from %s", r.RemoteAddr)
 		start := time.Now()
 
-		// Use optimized data fetching
 		dataFetcher := CreateDataFetcher(clientset)
 		data, err := dataFetcher.fetchFullClusterData()
 		if err != nil {
@@ -173,24 +163,24 @@ func main() {
 	if err := validateKubeconfig(kubeconfigPath); err != nil {
 		log.Fatalf("Error: Invalid kubeconfig file at %s: %v", kubeconfigPath, err)
 	}
-	log.Printf("✅ Using kubeconfig: %s", kubeconfigPath)
-	log.Printf("📍 Source: %s", source)
+	log.Printf("Using kubeconfig: %s", kubeconfigPath)
+	log.Printf("Source: %s", source)
 
 	clientset, err := kubeclient.CreateClient(kubeconfigPath)
 	if err != nil {
 		log.Fatalf("Error creating Kubernetes client: %v", err)
 	}
-	log.Println("✅ Kubernetes client initialized.")
+	log.Println("Kubernetes client initialized.")
 	serverVersion, err := clientset.Discovery().ServerVersion()
 	if err != nil {
 		log.Printf("Warning: Could not retrieve server version (connectivity issue?): %v", err)
 	} else {
-		log.Printf("✅ Connected to Kubernetes cluster (version: %s)", serverVersion.String())
+		log.Printf("Connected to Kubernetes cluster (version: %s)", serverVersion.String())
 	}
 	logStorageBackends(clientset)
 	http.Handle("/", http.FileServer(http.Dir(".")))
 	http.HandleFunc("/data", handleData(clientset))
-	log.Println("🚀 Backend server started. Open http://localhost:8080 in your browser.")
+	log.Println("Backend server started. Open http://localhost:8080 in your browser.")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

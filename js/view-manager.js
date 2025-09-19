@@ -8,21 +8,15 @@ const ViewManager = {
     },
     issueSort: 'time-desc',
     showDashboard() {
-        console.log('ViewManager.showDashboard called');
         this.hideAllViews();
         document.getElementById('dashboard').classList.remove('hidden');
         this.currentView = 'dashboard';
-        console.log('Dashboard should now be visible');
     },
     
     showNodeDetail(nodeName) {
-        console.log('ViewManager.showNodeDetail called with:', nodeName);
-        console.log('Available nodes:', AppState.data.nodes);
-        
         // Find the node data using the nested structure
         const nodeData = AppState.data.nodes.find(n => {
             const name = n.longhornInfo ? n.longhornInfo.name : (n.name || '');
-            console.log('Checking node:', name, 'against:', nodeName);
             return name === nodeName;
         });
         
@@ -34,16 +28,12 @@ const ViewManager = {
             return;
         }
         
-        console.log('Found node data:', nodeData);
-        
         const detailHTML = DetailRenderer.renderNodeDetail(nodeData, AppState.issues);
         document.getElementById('detail-view').innerHTML = detailHTML;
         
         this.hideAllViews();
         document.getElementById('detail-view-container').classList.remove('hidden');
         this.currentView = 'node-detail';
-        
-        console.log('Node detail view should now be visible');
     },
     
     showVMDetail(vmName) {
