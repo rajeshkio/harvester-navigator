@@ -315,9 +315,9 @@ const DetailRenderer = {
                 icon: '🔄'
             },
             {
-                title: 'Check System Logs',
-                command: `journalctl -u rke2-server`,
-                icon: '📋'
+                title: 'List All Replicas on Node',
+                command: `kubectl get replicas.longhorn.io -n longhorn-system -l longhornnode=${nodeName}`,
+                icon: '🔄'
             },
             {
                 title: 'Node Describe',
@@ -325,8 +325,18 @@ const DetailRenderer = {
                 icon: '🔍'
             },
             {
-                title: 'Check Disk Usage',
-                command: `kubectl exec -n longhorn-system $(kubectl get pod -n longhorn-system -l app=longhorn-manager --field-selector spec.nodeName=${nodeName} -o jsonpath='{.items[0].metadata.name}') -- df -h`,
+                title: 'List Instance Managers on Node',
+                command: `kubectl get instancemanager -n longhorn-system -l longhorn.io/node=${nodeName}`,
+                icon: '⚙️'
+            },
+            {
+                title: 'List All Volumes (check nodeID column)',
+                command: `kubectl get volumes.longhorn.io -n longhorn-system -o wide`,
+                icon: '📀'
+            },
+            {
+                title: 'Check Storage Resources by Node',
+                command: `echo '=== ENGINES ==='; kubectl get engines.longhorn.io -n longhorn-system -l longhornnode=${nodeName}; echo ''; echo '=== REPLICAS ==='; kubectl get replicas.longhorn.io -n longhorn-system -l longhornnode=${nodeName}; echo ''; echo '=== INSTANCE MANAGERS ==='; kubectl get instancemanager -n longhorn-system -l longhorn.io/node=${nodeName}`,
                 icon: '💾'
             }
         ];
