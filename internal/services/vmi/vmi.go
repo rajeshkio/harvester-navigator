@@ -287,19 +287,19 @@ func extractCPUTopology(vmiData map[string]interface{}, vmiStatus map[string]int
 					if cpuRaw, ok := domain["cpu"]; ok {
 						if cpu, ok := cpuRaw.(map[string]interface{}); ok {
 							cpuDomain := &types.CPUDomain{}
-							
+
 							if coresRaw, ok := cpu["cores"]; ok {
 								if cores, ok := coresRaw.(float64); ok {
 									cpuDomain.Cores = int(cores)
 								}
 							}
-							
+
 							if modelRaw, ok := cpu["model"]; ok {
 								if model, ok := modelRaw.(string); ok {
 									cpuDomain.Model = model
 								}
 							}
-							
+
 							vmiInfo.CPUDomain = cpuDomain
 						}
 					}

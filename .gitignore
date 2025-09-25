@@ -4,3 +4,95 @@
 *.code-workspace
 *.bak
 *kubeconfig*
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+harvesterNavigator
+dist/
+build/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+node_modules/
+
+# Go workspace file
+go.work
+
+# Environment files (CRITICAL - NEVER COMMIT THESE)
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+*.env
+
+# Configuration files with secrets
+config.yaml
+config.json
+secrets.yaml
+credentials.json
+
+# Certificate files
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Log files
+*.log
+logs/
+log/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Kubernetes secrets
+*-secret.yaml
+*-secrets.yaml
+kube-config
+kubeconfig
+
+# Docker
+docker-compose.override.yml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Backup files
+*.bak
+*.backup
+
+# Archive files
+*.zip
+*.tar.gz
+*.rar

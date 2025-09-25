@@ -1,5 +1,6 @@
 // Compact Detail Renderer - Dense Layout with Fixed Issues
 const DetailRenderer = {
+    
     renderNodeDetail(nodeData) {
         if (!nodeData) {
             return '<div class="text-center py-8 text-slate-400">Node data not available</div>';
@@ -39,11 +40,14 @@ const DetailRenderer = {
                             ${this.renderEnhancedHealth(nodeData, healthSummary)}
                             ${this.renderEnhancedResources(nodeData)}
                             ${this.renderEnhancedSystem(nodeData)}
+                            ${this.renderEnhancedPDBHealth(nodeData)}
+                            
                         </div>
 
                         <!-- Right Column -->
                         <div class="space-y-6">
                             ${this.renderEnhancedStorage(nodeData.longhornInfo ? nodeData.longhornInfo.disks : [])}
+
                             ${this.renderQuickCommands(nodeName)}
                         </div>
                     </div>
@@ -213,6 +217,36 @@ const DetailRenderer = {
                 </div>
             </div>
         `;
+    },
+
+    getSeverityBadge(severity) {
+        const badges = {
+            'critical': 'bg-red-700/80 text-red-200',
+            'high': 'bg-orange-700/80 text-orange-200', 
+            'medium': 'bg-yellow-700/80 text-yellow-200',
+            'low': 'bg-blue-700/80 text-blue-200'
+        };
+        return badges[severity] || 'bg-slate-700/80 text-slate-200';
+    },
+
+    getSeverityBackground(severity) {
+        const backgrounds = {
+            'critical': 'bg-red-900/20 border-red-600/30',
+            'high': 'bg-orange-900/20 border-orange-600/30',
+            'medium': 'bg-yellow-900/20 border-yellow-600/30',  
+            'low': 'bg-blue-900/20 border-blue-600/30'
+        };
+        return backgrounds[severity] || 'bg-slate-700/50';
+    },
+
+    getSeverityTextColor(severity) {
+        const colors = {
+            'critical': 'text-red-300',
+            'high': 'text-orange-300',
+            'medium': 'text-yellow-300',
+            'low': 'text-blue-300'
+        };
+        return colors[severity] || 'text-slate-300';
     },
 
     renderDiskDetail(disk) {
@@ -1628,5 +1662,91 @@ const DetailRenderer = {
         } catch (error) {
             console.error('Error expanding replicas:', error);
         }
+    },
+    renderEnhancedPDBHealth(nodeData) {
+    const pdbHealth = nodeData.pdbHealthStatus;
+    console.log('Node:', nodeData.longhornInfo?.name || nodeData.kubernetesInfo?.name);
+    console.log('PDB Health Status:', pdbHealth);
+    console.log('Has Issues:', pdbHealth?.hasIssues);
+    console.log('Issue Count:', pdbHealth?.issueCount);
+    console.log('Issues Array:', pdbHealth?.issues);
+    if (!pdbHealth || !pdbHealth.hasIssues) {
+        return `
+            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-lg">🛡️</span>
+                    <h2 class="text-lg font-medium text-white">Pod Disruption Budget Health</h2>
+                </div>
+                <div class="text-center py-4">
+                    <div class="text-green-400 text-lg font-medium mb-2">✅ All PDBs Healthy</div>
+                    <div class="text-slate-400 text-sm">No PDB issues detected</div>
+                </div>
+            </div>
+        `;
     }
+
+    return `
+        <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+            <div class="flex items-center gap-2 mb-4">
+                <span class="text-lg">🛡️</span>
+                <h2 class="text-lg font-medium text-white">Pod Disruption Budget Health</h2>    
+                <span class="px-2 py-1 text-xs rounded ${this.getSeverityBadge(pdbHealth.severity)}">
+                    ${pdbHealth.severity.toUpperCase()}
+                </span>
+            </div>
+            
+            <!-- PDB Issues Summary -->
+            <div class="mb-4 p-3 rounded ${this.getSeverityBackground(pdbHealth.severity)}">
+                <div class="text-lg font-medium text-white mb-2">
+                    ${pdbHealth.issueCount} PDB Issue${pdbHealth.issueCount > 1 ? 's' : ''} Detected
+                </div>
+                <div class="text-sm ${this.getSeverityTextColor(pdbHealth.severity)}">
+                    ${pdbHealth.canSafelyDelete ? '✅ Safe to fix - volumes are healthy' : '⚠️ Exercise caution - some volumes may be degraded'}
+                </div>
+            </div>
+
+            <!-- Issue Details -->
+            <div class="space-y-3">
+                ${pdbHealth.issues.map(issue => `
+                    <div class="border border-slate-600 rounded-lg p-3">
+                        <div class="flex justify-between items-start mb-2">
+                            <h4 class="font-medium text-white">${issue.pdbName}</h4>
+                            <span class="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300">${issue.issueType.replace(/_/g, ' ')}</span>
+                        </div>
+                        <p class="text-sm text-slate-300 mb-3">${issue.description}</p>
+                        
+                        ${issue.expectedNode !== issue.actualNode && issue.actualNode ? `
+                            <div class="text-xs text-slate-400 mb-2">
+                                Expected: ${issue.expectedNode} → Actual: ${issue.actualNode}
+                            </div>
+                        ` : ''}
+                        
+                        ${issue.staleEngines && issue.staleEngines.length > 0 ? `
+                            <div class="text-xs text-slate-400 mb-2">
+                                Stale engines: ${issue.staleEngines.slice(0, 3).join(', ')}${issue.staleEngines.length > 3 ? ` (+${issue.staleEngines.length - 3} more)` : ''}
+                            </div>
+                        ` : ''}
+                        
+                        <!-- Fix Command -->
+                        <div class="mt-3 bg-slate-800/60 rounded p-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs font-medium text-slate-300">Fix Command:</span>
+                                <button onclick="Utils.copyToClipboard('${issue.resolution.match(/kubectl[^"]+/)?.[0] || issue.resolution}')" 
+                                        class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs">
+                                    📋 Copy
+                                </button>
+                            </div>
+                            <code class="text-xs text-green-300 font-mono">${issue.resolution}</code>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <!-- Last Checked -->
+            <div class="mt-4 pt-3 border-t border-slate-600 text-xs text-slate-400">
+                Last checked: ${Utils.formatTimestamp(pdbHealth.lastChecked)}
+            </div>
+        </div>
+     `;
+    },
 };

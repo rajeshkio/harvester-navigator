@@ -13,7 +13,9 @@ import (
 	kubeclient "github.com/rk280392/harvesterNavigator/internal/client"
 	models "github.com/rk280392/harvesterNavigator/internal/models"
 	"github.com/rk280392/harvesterNavigator/internal/services/volume"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 func determineKubeconfigPath() (string, string, error) {
@@ -133,11 +135,17 @@ func getDefaultResourcePaths(namespace string) models.ResourcePaths {
 	}
 }
 
-func handleData(clientset *kubernetes.Clientset) http.HandlerFunc {
+func handleData(clientset *kubernetes.Clientset, config *rest.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		dataFetcher := CreateDataFetcher(clientset)
+		dynamicClient, err := dynamic.NewForConfig(config)
+		if err != nil {
+			log.Printf("Warning: Could not create dynamic client: %v", err)
+			http.Error(w, "Failed to create dynamic client", http.StatusInternalServerError)
+			return
+		}
+		dataFetcher := CreateDataFetcher(clientset, dynamicClient)
 		data, err := dataFetcher.fetchFullClusterData()
 		if err != nil {
 			log.Printf("Error: %v", err)
@@ -166,11 +174,16 @@ func main() {
 	log.Printf("Using kubeconfig: %s", kubeconfigPath)
 	log.Printf("Source: %s", source)
 
-	clientset, err := kubeclient.CreateClient(kubeconfigPath)
+	config, err := kubeclient.GetConfig(kubeconfigPath)
+	if err != nil {
+		log.Fatalf("Error creating Kubernetes config: %v", err)
+	}
+	clientset, err := kubeclient.CreateClientWithConfig(config)
 	if err != nil {
 		log.Fatalf("Error creating Kubernetes client: %v", err)
 	}
 	log.Println("Kubernetes client initialized.")
+
 	serverVersion, err := clientset.Discovery().ServerVersion()
 	if err != nil {
 		log.Printf("Warning: Could not retrieve server version (connectivity issue?): %v", err)
@@ -178,8 +191,10 @@ func main() {
 		log.Printf("Connected to Kubernetes cluster (version: %s)", serverVersion.String())
 	}
 	logStorageBackends(clientset)
+
 	http.Handle("/", http.FileServer(http.Dir(".")))
-	http.HandleFunc("/data", handleData(clientset))
+	http.HandleFunc("/data", handleData(clientset, config))
+
 	log.Println("Backend server started. Open http://localhost:8080 in your browser.")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatalf("Failed to start server: %v", err)

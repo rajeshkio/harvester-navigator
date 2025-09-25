@@ -19,7 +19,11 @@ const ViewManager = {
             const name = n.longhornInfo ? n.longhornInfo.name : (n.name || '');
             return name === nodeName;
         });
-        
+        if (nodeName === 'ettenheim-harv02') {
+        console.log('Found node data for harv02:', nodeData);
+        console.log('PDB Health:', nodeData?.pdbHealthStatus);
+    }
+    
         if (!nodeData) {
             console.error('Node not found:', nodeName);
             console.error('Available node names:', AppState.data.nodes.map(n => 
