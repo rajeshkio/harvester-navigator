@@ -9,7 +9,7 @@ on:
       - 'go.sum'
   
   push:
-    branches: [main]
+    branches: [main]    # Only trigger from main branch
     tags:
       - 'v*.*'
       - 'v*.*.*'
@@ -65,7 +65,7 @@ jobs:
   go-release:
     name: Go Release
     runs-on: ubuntu-latest
-    # This job only runs when a new tag is pushed (from any branch)
+    # This job only runs when a tag is pushed from main branch (strictly enforced)  
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     
   # Grant write permissions for the job to create the release
