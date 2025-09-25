@@ -48,7 +48,7 @@ jobs:
       uses: golangci/golangci-lint-action@v5
       with:
         version: latest 
-        args: --timeout=5m
+        args: --out-format=colored-line-number --timeout=5m
    
 
     - name: Build Go code
@@ -90,13 +90,43 @@ jobs:
       id: get_version
       run: echo "VERSION=$(echo ${GITHUB_REF#refs/tags/})" >> $GITHUB_OUTPUT
       
-    - name: Build Go binary with version
-      # The -ldflags flag injects the version into the binary.
-      # You must have a variable named `version` in your Go code for this to work.
-      # For example: `var version string`
+    - name: Build Go binaries for multiple platforms
       run: |
         echo "Building harvesterNavigator with version: ${{ steps.get_version.outputs.VERSION }}"
-        go build -o harvesterNavigator -ldflags "-X 'main.version=${{ steps.get_version.outputs.VERSION }}'" .
+        
+        # Create binaries directory
+        mkdir -p binaries
+        
+        # Build for Linux (amd64)
+        GOOS=linux GOARCH=amd64 go build -o binaries/harvesterNavigator-linux-amd64 \
+          -ldflags "-s -w -X 'main.version=${{ steps.get_version.outputs.VERSION }}'" .
+        
+        # Build for Linux (arm64)  
+        GOOS=linux GOARCH=arm64 go build -o binaries/harvesterNavigator-linux-arm64 \
+          -ldflags "-s -w -X 'main.version=${{ steps.get_version.outputs.VERSION }}'" .
+          
+        # Build for macOS (amd64)
+        GOOS=darwin GOARCH=amd64 go build -o binaries/harvesterNavigator-darwin-amd64 \
+          -ldflags "-s -w -X 'main.version=${{ steps.get_version.outputs.VERSION }}'" .
+          
+        # Build for macOS (arm64 - Apple Silicon)
+        GOOS=darwin GOARCH=arm64 go build -o binaries/harvesterNavigator-darwin-arm64 \
+          -ldflags "-s -w -X 'main.version=${{ steps.get_version.outputs.VERSION }}'" .
+          
+        # Build for Windows (amd64)
+        GOOS=windows GOARCH=amd64 go build -o binaries/harvesterNavigator-windows-amd64.exe \
+          -ldflags "-s -w -X 'main.version=${{ steps.get_version.outputs.VERSION }}'" .
+          
+        # List what we built
+        echo "Built binaries:"
+        ls -la binaries/
+        
+        # Generate checksums for security
+        cd binaries
+        sha256sum * > checksums.txt
+        echo "Checksums generated:"
+        cat checksums.txt
+        cd ..
 
     - name: Create GitHub Release
       id: create_release
@@ -105,10 +135,38 @@ jobs:
         # The tag name becomes the release tag.
         tag_name: ${{ steps.get_version.outputs.VERSION }}
         # The `name` input is what will be displayed as the release title on GitHub.
-        # You can customize this title. For example: "Harvester Navigator v1.1"
-        name: HarvesterNavigator-${{ steps.get_version.outputs.VERSION }}
-        # The name of the binary to upload as a release asset.
-        files: harvesterNavigator
+        name: "Harvester Navigator ${{ steps.get_version.outputs.VERSION }}"
+        # Add release notes
+        body: |
+          ## Harvester Navigator ${{ steps.get_version.outputs.VERSION }}
+          
+          ### Download Instructions
+          Choose the binary for your platform:
+          - **Linux (x64)**: `harvesterNavigator-linux-amd64`
+          - **Linux (ARM64)**: `harvesterNavigator-linux-arm64`  
+          - **macOS (Intel)**: `harvesterNavigator-darwin-amd64`
+          - **macOS (Apple Silicon)**: `harvesterNavigator-darwin-arm64`
+          - **Windows**: `harvesterNavigator-windows-amd64.exe`
+          
+          ### Usage
+          ```bash
+          # Make executable (Linux/macOS)
+          chmod +x harvesterNavigator-*
+          
+          # Run with default port 8080
+          ./harvesterNavigator-linux-amd64
+          
+          # Run with custom port
+          ./harvesterNavigator-linux-amd64 -port 9090
+          
+          # Show version
+          ./harvesterNavigator-linux-amd64 -version
+          ```
+          
+          ### Verification
+          Verify your download using the checksums in `checksums.txt`.
+        # The name of the binaries to upload as release assets.
+        files: binaries/*
         # The prerelease flag can be set to true if your version tag indicates a prerelease.
         prerelease: false
       env:
