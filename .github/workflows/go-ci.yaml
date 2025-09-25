@@ -65,7 +65,7 @@ jobs:
   go-release:
     name: Go Release
     runs-on: ubuntu-latest
-    # This job only runs when a new tag is pushed.
+    # This job only runs when a new tag is pushed (from any branch)
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     
   # Grant write permissions for the job to create the release
