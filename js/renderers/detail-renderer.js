@@ -1,4 +1,4 @@
-// Compact Detail Renderer - Dense Layout with Fixed Issues
+// Compact Detail Renderer - Dense Layout with Consolidated Health Issues
 const DetailRenderer = {
     
     renderNodeDetail(nodeData) {
@@ -6,10 +6,30 @@ const DetailRenderer = {
             return '<div class="text-center py-8 text-slate-400">Node data not available</div>';
         }
 
+        let healthSummary;
+        try {
+            healthSummary = this.analyzeNodeHealth(nodeData);
+        } catch (error) {
+            healthSummary = {
+                issues: [],
+                warnings: ['Health analysis failed'],
+                overallHealthy: false,
+                summary: 'Health check unavailable due to error'
+            };
+        }
+
+        if (!healthSummary || typeof healthSummary !== 'object') {
+            healthSummary = {
+                issues: [],
+                warnings: [],
+                overallHealthy: true,
+                summary: 'Health status unknown'
+            };
+        }
+
         const nodeName = nodeData.longhornInfo?.name || nodeData.kubernetesInfo?.name || 'Unknown Node';
-        const healthSummary = this.analyzeNodeHealth(nodeData);
         const lastUpdated = new Date().toLocaleString();
-        
+                
         return `
             <div class="bg-slate-800 rounded-lg">
                 <div class="p-4 border-b border-slate-700">
@@ -38,14 +58,11 @@ const DetailRenderer = {
                             ${this.renderHealth(nodeData, healthSummary)}
                             ${this.renderResources(nodeData)}
                             ${this.renderSystem(nodeData)}
-                            ${this.renderPDBHealth(nodeData)}
-                            
                         </div>
 
                         <!-- Right Column -->
                         <div class="space-y-6">
                             ${this.renderStorage(nodeData.longhornInfo ? nodeData.longhornInfo.disks : [])}
-
                             ${this.renderQuickCommands(nodeName)}
                         </div>
                     </div>
@@ -67,6 +84,8 @@ const DetailRenderer = {
     },
 
     renderHealth(nodeData, healthSummary) {
+
+
         return `
             <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                 <div class="flex items-center gap-2 mb-4">
@@ -78,12 +97,144 @@ const DetailRenderer = {
                         <span class="text-2xl">${healthSummary.overallHealthy ? '✅' : '❌'}</span>
                         <div>
                             <div class="font-medium text-white">${healthSummary.overallHealthy ? 'All Systems Healthy' : 'Issues Detected'}</div>
-                            <div class="text-sm text-slate-400">${healthSummary.summary}</div>
+                            <div class="text-sm text-slate-400">${healthSummary.summary || 'Status information unavailable'}</div>
                         </div>
                     </div>
+
+                    ${healthSummary.issues.length > 0 ? `
+                        <div class="space-y-2">
+                            ${healthSummary.issues.map(issue => `
+                                <div class="flex items-start gap-2 p-2 bg-red-900/20 border border-red-600/30 rounded">
+                                    <span class="text-red-400 mt-0.5">•</span>
+                                    <div class="flex-1">
+                                        <div class="text-red-300 text-sm font-medium">${issue.type}</div>
+                                        <div class="text-red-200 text-xs">${issue.message}</div>
+                                    </div>
+                                    <span class="px-2 py-0.5 text-xs rounded ${this.getSeverityBadge(issue.severity)}">${issue.severity.toUpperCase()}</span>
+                                </div>
+                            `).join('')}
+                            
+                            <!-- View Issues Link -->
+                            <div class="pt-2 border-t border-slate-600">
+                                <button onclick="ViewManager.showAllIssuesView(); window.scrollTo(0, 0);" 
+                                        class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                                    <span>🔍</span>
+                                    View All Issues Details
+                                </button>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${healthSummary.warnings.length > 0 ? `
+                        <div class="space-y-2">
+                            ${healthSummary.warnings.map(warning => `
+                                <div class="flex items-start gap-2 p-2 bg-yellow-900/20 border border-yellow-600/30 rounded">
+                                    <span class="text-yellow-400 mt-0.5">•</span>
+                                    <div class="flex-1">
+                                        <div class="text-yellow-300 text-sm">${warning}</div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
                 </div>
             </div>
         `;
+    },
+
+    analyzeNodeHealth(nodeData) {
+        
+        let issues = [];
+        let warnings = [];
+        let overallHealthy = true;
+        let summary = '';
+
+        try {
+            // Kubernetes health checks
+            if (nodeData && nodeData.kubernetesInfo && nodeData.kubernetesInfo.conditions && Array.isArray(nodeData.kubernetesInfo.conditions)) {
+                nodeData.kubernetesInfo.conditions.forEach((condition, index) => {
+                    
+                    if (condition && condition.type === 'Ready' && condition.status !== 'True') {
+                        issues.push({
+                            type: 'Node Not Ready',
+                            message: 'Kubernetes node is not in Ready state',
+                            severity: 'critical'
+                        });
+                    }
+                    
+                    if (condition && ['MemoryPressure', 'DiskPressure', 'PIDPressure'].includes(condition.type) && condition.status === 'True') {
+                        warnings.push(`${condition.type} detected`);
+                    }
+                });
+            }
+            // Storage health checks
+            if (nodeData && nodeData.longhornInfo && nodeData.longhornInfo.disks && Array.isArray(nodeData.longhornInfo.disks)) {
+                const unschedulableDisks = nodeData.longhornInfo.disks.filter(d => d && !d.isSchedulable).length;
+                if (unschedulableDisks > 0) {
+                    warnings.push(`${unschedulableDisks} disk${unschedulableDisks > 1 ? 's' : ''} not schedulable`);
+                }
+            }
+            // PDB health checks
+            if (nodeData && nodeData.pdbHealthStatus && nodeData.pdbHealthStatus.hasIssues) {
+                const pdbHealth = nodeData.pdbHealthStatus;
+                
+                if (pdbHealth.issues && Array.isArray(pdbHealth.issues)) {
+                    pdbHealth.issues.forEach((issue, index) => {                        
+                        // Safe string handling
+                        const issueType = (issue && issue.issueType && typeof issue.issueType === 'string') 
+                            ? issue.issueType.replace(/_/g, ' ') 
+                            : 'PDB Issue';
+                        
+                        const description = (issue && issue.description && typeof issue.description === 'string') 
+                            ? issue.description 
+                            : 'Configuration issue detected';
+                            
+                        issues.push({
+                            type: 'Pod Disruption Budget',
+                            message: `${issueType} - ${description}`,
+                            severity: (pdbHealth.severity && typeof pdbHealth.severity === 'string') ? pdbHealth.severity : 'medium',
+                            canFix: Boolean(pdbHealth.canSafelyDelete),
+                            lastChecked: pdbHealth.lastChecked
+                        });
+                        
+                    });
+                }
+            }
+
+        } catch (error) {
+            console.error('Error in health analysis:', error);
+            console.error('Error stack:', error.stack);
+            warnings.push('Health analysis encountered an error');
+        }
+        
+        overallHealthy = issues.length === 0 && warnings.length === 0;
+
+        if (overallHealthy) {
+            summary = 'All systems operational';
+        } else {
+            const parts = [];
+            if (issues.length > 0) {
+                parts.push(`${issues.length} issue${issues.length > 1 ? 's' : ''}`);
+            }
+            if (warnings.length > 0) {
+                parts.push(`${warnings.length} warning${warnings.length > 1 ? 's' : ''}`);
+            }
+            summary = parts.length > 0 ? parts.join(', ') : 'Issues detected';
+        }
+
+        const result = { issues, warnings, overallHealthy, summary };
+        
+        return result;
+    },
+
+    getSeverityBadge(severity) {
+        const badges = {
+            'critical': 'bg-red-700/80 text-red-200',
+            'high': 'bg-orange-700/80 text-orange-200', 
+            'medium': 'bg-yellow-700/80 text-yellow-200',
+            'low': 'bg-blue-700/80 text-blue-200'
+        };
+        return badges[severity] || 'bg-slate-700/80 text-slate-200';
     },
 
     renderResources(nodeData) {
@@ -217,36 +368,6 @@ const DetailRenderer = {
         `;
     },
 
-    getSeverityBadge(severity) {
-        const badges = {
-            'critical': 'bg-red-700/80 text-red-200',
-            'high': 'bg-orange-700/80 text-orange-200', 
-            'medium': 'bg-yellow-700/80 text-yellow-200',
-            'low': 'bg-blue-700/80 text-blue-200'
-        };
-        return badges[severity] || 'bg-slate-700/80 text-slate-200';
-    },
-
-    getSeverityBackground(severity) {
-        const backgrounds = {
-            'critical': 'bg-red-900/20 border-red-600/30',
-            'high': 'bg-orange-900/20 border-orange-600/30',
-            'medium': 'bg-yellow-900/20 border-yellow-600/30',  
-            'low': 'bg-blue-900/20 border-blue-600/30'
-        };
-        return backgrounds[severity] || 'bg-slate-700/50';
-    },
-
-    getSeverityTextColor(severity) {
-        const colors = {
-            'critical': 'text-red-300',
-            'high': 'text-orange-300',
-            'medium': 'text-yellow-300',
-            'low': 'text-blue-300'
-        };
-        return colors[severity] || 'text-slate-300';
-    },
-
     renderDiskDetail(disk) {
         // Extract readable disk name from path
         const diskName = this.getDiskDisplayName(disk.path);
@@ -335,10 +456,6 @@ const DetailRenderer = {
         }
     },
 
-    // Remove the shortenReplicaName method since we're showing full names now
-    showAllReplicas(diskName) {
-    },
-
     renderQuickCommands(nodeName) {
         const commands = [
             {
@@ -400,168 +517,117 @@ const DetailRenderer = {
         `;
     },
 
-    renderCompactKPIs(nodeData) {
-        const k8sInfo = nodeData.kubernetesInfo;
-        if (!k8sInfo) return '';
-        
-        const cpuCores = k8sInfo.capacity?.cpu || '0';
-        const memoryTotalKi = k8sInfo.capacity?.memory ? parseInt(k8sInfo.capacity.memory.replace('Ki', '')) : 0;
-        const memoryTotal = (memoryTotalKi / 1024 / 1024).toFixed(1);
-        const diskCount = nodeData.longhornInfo?.disks?.length || 0;
-        const schedulableDisks = nodeData.longhornInfo?.disks?.filter(d => d.isSchedulable).length || 0;
-        
-        return `
-            <div class="bg-slate-700 rounded p-3">
-                <h3 class="font-medium mb-2">Resources</h3>
-                <div class="space-y-2 text-sm">
-                    <div class="flex justify-between">
-                        <span class="text-slate-400">CPU:</span>
-                        <span class="text-white">${cpuCores} cores</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-slate-400">Memory:</span>
-                        <span class="text-white">${memoryTotal} GB</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-slate-400">Disks:</span>
-                        <span class="text-white">${schedulableDisks}/${diskCount} active</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-slate-400">Pods:</span>
-                        <span class="text-white">${nodeData.runningPods || 0}</span>
-                    </div>
-                </div>
-            </div>
-        `;
+    // Keep existing utility methods
+    getNodeStatusBadge(nodeData) {
+        const status = this.getNodeStatus(nodeData);
+        if (status === 'Ready') return 'bg-green-700 text-green-200';
+        return 'bg-red-700 text-red-200';
     },
 
-    renderCompactHealth(nodeData, healthSummary) {
-        const hasIssues = healthSummary.issues.length > 0 || healthSummary.warnings.length > 0;
-        
-        return `
-            <div class="bg-slate-700 rounded p-3">
-                <h3 class="font-medium mb-2">Health</h3>
-                ${hasIssues ? `
-                    <div class="space-y-1 text-sm">
-                        ${healthSummary.issues.map(issue => `
-                            <div class="text-red-400">• ${issue}</div>
-                        `).join('')}
-                        ${healthSummary.warnings.map(warning => `
-                            <div class="text-yellow-400">• ${warning}</div>
-                        `).join('')}
-                    </div>
-                ` : `
-                    <div class="text-green-400 text-sm">✓ All systems operational</div>
-                `}
-            </div>
-        `;
+    getNodeStatus(nodeData) {
+        const k8sReady = nodeData.kubernetesInfo?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
+        if (k8sReady) return 'Ready';
+        return 'Not Ready';
     },
 
-    renderCompactStorage(disks) {
-        if (!disks || disks.length === 0) {
-            return `
-                <div class="bg-slate-700 rounded p-3">
-                    <h3 class="font-medium mb-2">Storage</h3>
-                    <div class="text-slate-400 text-sm">No storage disks</div>
-                </div>
-            `;
+    parseStorageSize(sizeStr) {
+        if (!sizeStr || sizeStr === '0') return 0;
+        const numValue = parseFloat(sizeStr);
+        return isNaN(numValue) ? 0 : numValue;
+    },
+
+    formatBytes(bytes) {
+        if (!bytes || bytes === 0) return '0B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const base = 1024;
+        const i = Math.floor(Math.log(bytes) / Math.log(base));
+        return `${parseFloat((bytes / Math.pow(base, i)).toFixed(1))}${units[i]}`;
+    },
+
+    parseMemoryToBytes(memoryStr) {
+        if (!memoryStr) return 0;
+        const match = memoryStr.match(/^(\d+)(\w+)$/);
+        if (!match) return 0;
+        
+        const value = parseInt(match[1]);
+        const unit = match[2].toLowerCase();
+        
+        const unitMultipliers = {
+            'ki': 1024,
+            'mi': 1024 * 1024,
+            'gi': 1024 * 1024 * 1024,
+            'ti': 1024 * 1024 * 1024 * 1024
+        };
+        
+        return value * (unitMultipliers[unit] || 1);
+    },
+
+    parseStorageToBytes(storageStr) {
+        if (!storageStr) return 0;
+        
+        // Handle both string and number inputs
+        if (typeof storageStr === 'number') {
+            return storageStr;
         }
-
-        return `
-            <div class="bg-slate-700 rounded p-3">
-                <h3 class="font-medium mb-2">Storage (${disks.length})</h3>
-                <div class="space-y-2 max-h-48 overflow-y-auto">
-                    ${disks.map(disk => this.renderCompactDisk(disk)).join('')}
-                </div>
-            </div>
-        `;
+        
+        // Handle formatted strings like "5.77 TB", "660.13 GB", etc.
+        const match = storageStr.toString().match(/^(\d+(?:\.\d+)?)\s*([A-Za-z]+)$/);
+        if (!match) {
+            return 0;
+        }
+        
+        const value = parseFloat(match[1]);
+        const unit = match[2].toLowerCase();
+        
+        const unitMultipliers = {
+            'b': 1,
+            'kb': 1000,
+            'mb': 1000 * 1000,
+            'gb': 1000 * 1000 * 1000,
+            'tb': 1000 * 1000 * 1000 * 1000,
+            'pb': 1000 * 1000 * 1000 * 1000 * 1000,
+            'ki': 1024,
+            'mi': 1024 * 1024,
+            'gi': 1024 * 1024 * 1024,
+            'ti': 1024 * 1024 * 1024 * 1024,
+            'pi': 1024 * 1024 * 1024 * 1024 * 1024
+        };
+        
+        return value * (unitMultipliers[unit] || 1);
     },
 
-    renderCompactDisk(disk) {
-        const capacity = this.parseStorageSize(disk.storageMaximum);
-        const available = this.parseStorageSize(disk.storageAvailable);
-        const used = capacity - available;
-        const utilizationPercent = capacity > 0 ? ((used / capacity) * 100).toFixed(0) : 0;
-        const replicaCount = Object.keys(disk.scheduledReplicas || {}).length;
-        const isSchedulable = disk.isSchedulable === true;
-        
-        let diskName = disk.name || 'Unknown';
-        if (!diskName || diskName === 'Unknown') {
-            const path = disk.path || '';
-            if (path.includes('/')) {
-                const pathParts = path.split('/');
-                diskName = pathParts[pathParts.length - 1] || 'Unknown';
+    expandReplicas(diskName, encodedReplicaData) {
+        try {
+            const replicaEntries = JSON.parse(decodeURIComponent(encodedReplicaData));
+            const diskElement = document.querySelector(`[data-disk-name="${diskName}"]`);
+            
+            if (!diskElement) {
+                console.error('Disk element not found for:', diskName);
+                return;
             }
+            
+            // Find the replicas container within this disk
+            const replicasContainer = diskElement.querySelector('.replicas-container');
+            if (!replicasContainer) {
+                return;
+            }
+            
+            // Generate HTML for all replicas
+            const allReplicasHtml = replicaEntries.map(([replicaName, sizeBytes]) => `
+                <div class="flex justify-between items-center py-1 text-xs">
+                    <span class="text-slate-400 font-mono">${replicaName}</span>
+                    <span class="text-slate-300 font-medium ml-2">${this.formatBytes(sizeBytes)}</span>
+                </div>
+            `).join('');
+            
+            // Replace the container content
+            replicasContainer.innerHTML = allReplicasHtml;
+            
+        } catch (error) {
+            console.error('Error expanding replicas:', error);
         }
-        if (diskName.length > 15) diskName = diskName.substring(0, 12) + '...';
-        
-        return `
-            <div class="border border-slate-600 rounded p-2">
-                <div class="flex justify-between items-center mb-1">
-                    <span class="text-white text-xs font-medium">${diskName}</span>
-                    <span class="px-1 py-0.5 text-xs rounded ${isSchedulable ? 'bg-green-700 text-green-200' : 'bg-yellow-700 text-yellow-200'}">
-                        ${isSchedulable ? 'Active' : 'Inactive'}
-                    </span>
-                </div>
-                
-                <div class="grid grid-cols-3 gap-2 text-xs text-center mb-2">
-                    <div>
-                        <div class="text-white font-medium">${this.formatBytes(capacity)}</div>
-                        <div class="text-slate-400">Total</div>
-                    </div>
-                    <div>
-                        <div class="text-white font-medium">${this.formatBytes(available)}</div>
-                        <div class="text-slate-400">Free</div>
-                    </div>
-                    <div>
-                        <div class="text-white font-medium">${replicaCount}</div>
-                        <div class="text-slate-400">Replicas</div>
-                    </div>
-                </div>
-
-                <div>
-                    <div class="flex justify-between text-xs text-slate-400 mb-1">
-                        <span>Usage</span>
-                        <span>${utilizationPercent}%</span>
-                    </div>
-                    <div class="w-full bg-slate-600 rounded-full h-1">
-                        <div class="bg-slate-400 h-1 rounded-full" style="width: ${Math.min(utilizationPercent, 100)}%"></div>
-                    </div>
-                </div>
-            </div>
-        `;
     },
-
-    renderCompactSystem(nodeData) {
-        const k8sInfo = nodeData.kubernetesInfo;
-        
-        return `
-            <div class="bg-slate-700 rounded p-3">
-                <h3 class="font-medium mb-2">System Info</h3>
-                <div class="space-y-2 text-sm">
-                    ${k8sInfo?.internalIP ? `
-                        <div class="flex justify-between">
-                            <span class="text-slate-400">IP:</span>
-                            <span class="text-white font-mono text-xs">${k8sInfo.internalIP}</span>
-                        </div>
-                    ` : ''}
-                    ${k8sInfo?.nodeInfo?.osImage ? `
-                        <div class="flex justify-between">
-                            <span class="text-slate-400">OS:</span>
-                            <span class="text-white text-xs">${k8sInfo.nodeInfo.osImage}</span>
-                        </div>
-                    ` : ''}
-                    ${k8sInfo?.nodeInfo?.kernelVersion ? `
-                        <div class="flex justify-between">
-                            <span class="text-slate-400">Kernel:</span>
-                            <span class="text-white font-mono text-xs">${k8sInfo.nodeInfo.kernelVersion}</span>
-                        </div>
-                    ` : ''}
-                </div>
-            </div>
-        `;
-    },
-
+    
     renderVMDetail(vmData) {
         if (!vmData) {
             return '<div class="text-center py-8 text-slate-400">VM data not available</div>';
@@ -1003,31 +1069,7 @@ const DetailRenderer = {
         return 'bg-red-700 text-red-200';
     },
 
-    // Keep existing utility methods
-    analyzeNodeHealth(nodeData) {
-        let issues = [];
-        let warnings = [];
-
-        if (nodeData.kubernetesInfo?.conditions) {
-            nodeData.kubernetesInfo.conditions.forEach(condition => {
-                if (condition.type === 'Ready' && condition.status !== 'True') {
-                    issues.push('Node not ready');
-                }
-                if (['MemoryPressure', 'DiskPressure', 'PIDPressure'].includes(condition.type) && condition.status === 'True') {
-                    warnings.push(`${condition.type} detected`);
-                }
-            });
-        }
-
-        if (nodeData.longhornInfo?.disks) {
-            const unschedulableDisks = nodeData.longhornInfo.disks.filter(d => !d.isSchedulable).length;
-            if (unschedulableDisks > 0) {
-                warnings.push(`${unschedulableDisks} disk${unschedulableDisks > 1 ? 's' : ''} not schedulable`);
-            }
-        }
-
-        return { issues, warnings };
-    },
+    // Duplicate analyzeNodeHealth method removed - using the detailed version above
 
     getNodeStatus(nodeData) {
         const k8sReady = nodeData.kubernetesInfo?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
@@ -1651,60 +1693,5 @@ const DetailRenderer = {
         } catch (error) {
             console.error('Error expanding replicas:', error);
         }
-    },
-    renderPDBHealth(nodeData) {
-    const pdbHealth = nodeData.pdbHealthStatus;
-    
-    if (!pdbHealth || !pdbHealth.hasIssues) {
-        return `
-            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-3">
-                <div class="flex items-center gap-2">
-                    <span class="text-lg">🛡️</span>
-                    <h3 class="text-sm font-medium text-white">Pod Disruption Budget</h3>
-                    <span class="px-2 py-1 text-xs rounded bg-green-700/80 text-green-200">HEALTHY</span>
-                </div>
-            </div>
-        `;
-    }
-
-    const nodeName = nodeData.longhornInfo?.name || nodeData.kubernetesInfo?.name;
-    const firstIssue = pdbHealth.issues[0];
-    
-    return `
-        <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-3">
-            <div class="flex items-center justify-between mb-3">
-                <div class="flex items-center gap-2">
-                    <span class="text-lg">🛡️</span>
-                    <h3 class="text-sm font-medium text-white">Pod Disruption Budget</h3>
-                    <span class="px-2 py-1 text-xs rounded ${this.getSeverityBadge(pdbHealth.severity)}">
-                        ${pdbHealth.severity.toUpperCase()}
-                    </span>
-                </div>
-            </div>
-            
-            <div class="text-sm text-slate-300 mb-2">
-                ${pdbHealth.issueCount} issue${pdbHealth.issueCount > 1 ? 's' : ''} detected
-            </div>
-            
-            <div class="text-xs text-slate-400 mb-3">
-                ${firstIssue?.issueType.replace(/_/g, ' ') || 'PDB configuration issues'}
-            </div>
-            
-            <div class="text-xs ${pdbHealth.canSafelyDelete ? 'text-green-400' : 'text-yellow-400'} mb-3">
-                ${pdbHealth.canSafelyDelete ? '✅ Safe to fix - volumes are healthy' : '⚠️ Exercise caution - verify volume health first'}
-            </div>
-            
-            <div class="flex gap-2">
-                <button onclick="ViewManager.showAllIssuesView(); window.scrollTo(0, 0);" 
-                        class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-medium">
-                    View in Issues
-                </button>
-            </div>
-
-            <div class="mt-4 pt-3 border-t border-slate-600 text-xs text-slate-400">
-                Last checked: ${Utils.formatTimestamp(pdbHealth.lastChecked)}
-            </div>
-        </div>
-     `;
     },
 };
