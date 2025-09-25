@@ -219,7 +219,10 @@ func main() {
 				return
 			}
 			w.Header().Set("Content-Type", "text/html")
-			w.Write(data)
+			if _, err := w.Write(data); err != nil {
+				log.Printf("Failed to write response: %v", err)
+				return
+			}
 			return
 		}
 
