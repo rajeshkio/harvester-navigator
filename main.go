@@ -1,8 +1,11 @@
 package main
 
 import (
+	"embed"
 	"encoding/json"
+	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -17,6 +20,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
+
+//go:embed index.html js/* styles/*
+var staticFiles embed.FS
+
+var version = "dev"
 
 func determineKubeconfigPath() (string, string, error) {
 	if kubeconfigEnv := os.Getenv("KUBECONFIG"); kubeconfigEnv != "" {
@@ -163,7 +171,16 @@ func handleData(clientset *kubernetes.Clientset, config *rest.Config) http.Handl
 	}
 }
 func main() {
-	log.Println("Starting Harvester Navigator Backend...")
+	port := flag.String("port", "8080", "Port to run the server on")
+	showVersion := flag.Bool("version", false, "Show version and exit")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("Harvester Navigator %s\n", version)
+		os.Exit(0)
+	}
+
+	log.Printf("Starting Harvester Navigator Backend (version: %s)...", version)
 	kubeconfigPath, source, err := determineKubeconfigPath()
 	if err != nil {
 		log.Fatalf("Error: %v", err)
@@ -171,6 +188,7 @@ func main() {
 	if err := validateKubeconfig(kubeconfigPath); err != nil {
 		log.Fatalf("Error: Invalid kubeconfig file at %s: %v", kubeconfigPath, err)
 	}
+
 	log.Printf("Using kubeconfig: %s", kubeconfigPath)
 	log.Printf("Source: %s", source)
 
@@ -192,11 +210,38 @@ func main() {
 	}
 	logStorageBackends(clientset)
 
-	http.Handle("/", http.FileServer(http.Dir(".")))
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			// Serve index.html for root requests
+			data, err := staticFiles.ReadFile("index.html")
+			if err != nil {
+				http.Error(w, "File not found", http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html")
+			w.Write(data)
+			return
+		}
+
+		// Let other paths fall through to the file server
+		http.NotFound(w, r)
+	})
+
+	// Serve JS files
+	jsFS, _ := fs.Sub(staticFiles, "js")
+	http.Handle("/js/", http.StripPrefix("/js/", http.FileServer(http.FS(jsFS))))
+
+	// Serve CSS files
+	stylesFS, _ := fs.Sub(staticFiles, "styles")
+	http.Handle("/styles/", http.StripPrefix("/styles/", http.FileServer(http.FS(stylesFS))))
+
+	// Your existing data handler stays the same
 	http.HandleFunc("/data", handleData(clientset, config))
 
-	log.Println("Backend server started. Open http://localhost:8080 in your browser.")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	serverAddr := ":" + *port
+	log.Printf("Backend server started on port %s. Open http://localhost:%s in your browser.", *port, *port)
+
+	if err := http.ListenAndServe(serverAddr, nil); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
