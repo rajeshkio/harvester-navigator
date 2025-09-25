@@ -99,7 +99,8 @@ type VolumeAttachment struct {
 type NodeWithMetrics struct {
 	NodeInfo            `json:"longhornInfo"`
 	*KubernetesNodeInfo `json:"kubernetesInfo,omitempty"`
-	RunningPods         int `json:"runningPods"`
+	RunningPods         int              `json:"runningPods"`
+	PDBHealthStatus     *PDBHealthStatus `json:"pdbHealthStatus,omitempty"`
 }
 
 type VMError struct {
@@ -308,6 +309,55 @@ type HealthCheckSummary struct {
 	Results       []HealthCheckResult `json:"results"`
 }
 
+// PDBHealthStatus represents the overall PDB health for a node
+type PDBHealthStatus struct {
+	NodeName        string           `json:"nodeName"`
+	HasIssues       bool             `json:"hasIssues"`
+	IssueCount      int              `json:"issueCount"`
+	Issues          []PDBIssueDetail `json:"issues"`
+	CanSafelyDelete bool             `json:"canSafelyDelete"`
+	Severity        string           `json:"severity"` // critical, high, medium, low
+	LastChecked     time.Time        `json:"lastChecked"`
+}
+
+type PDBIssueDetail struct {
+	PDBName         string   `json:"pdbName"`
+	IssueType       string   `json:"issueType"`       // "node_mismatch", "phantom_engines", "stale_reference"
+	Description     string   `json:"description"`     // Human-readable issue description
+	ExpectedNode    string   `json:"expectedNode"`    // Node PDB thinks it's protecting
+	ActualNode      string   `json:"actualNode"`      // Where IM actually is
+	StaleEngines    []string `json:"phantomEngines"`  // Engines IM claims but don't exist
+	AffectedVolumes []string `json:"affectedVolumes"` // Volume names that might be affected
+	Resolution      string   `json:"resolution"`      // How to fix this issue
+	SafetyCheck     bool     `json:"safetyCheck"`     // Whether it's safe to delete this PDB
+}
+
+// PDBInfo holds cluster-wide PDB information for analysis
+type PDBInfo struct {
+	PDBs             []PDBDetail           `json:"pdbs"`
+	InstanceManagers []InstanceManagerInfo `json:"instanceManagers"`
+	TotalIssues      int                   `json:"totalIssues"`
+	NodesWithIssues  []string              `json:"nodesWithIssues"`
+}
+
+type PDBDetail struct {
+	Name         string            `json:"name"`
+	Namespace    string            `json:"namespace"`
+	NodeName     string            `json:"nodeName"` // From spec.selector.matchLabels
+	Labels       map[string]string `json:"labels"`
+	MinAvailable int32             `json:"minAvailable"`
+	CreatedAt    time.Time         `json:"createdAt"`
+}
+
+type InstanceManagerInfo struct {
+	Name      string    `json:"name"`
+	Namespace string    `json:"namespace"`
+	NodeID    string    `json:"nodeID"`  // spec.nodeID - where it actually runs
+	Engines   []string  `json:"engines"` // from status.instanceEngines
+	Type      string    `json:"type"`    // "engine" or "replica"
+	State     string    `json:"state"`   // running, stopped, etc
+	CreatedAt time.Time `json:"createdAt"`
+}
 type PodError struct {
 	Name                string           `json:"name"`
 	Namespace           string           `json:"namespace"`

@@ -13,6 +13,7 @@ import (
 	"github.com/rk280392/harvesterNavigator/internal/services/health"
 	"github.com/rk280392/harvesterNavigator/internal/services/lhva"
 	"github.com/rk280392/harvesterNavigator/internal/services/node"
+	"github.com/rk280392/harvesterNavigator/internal/services/pdb"
 	"github.com/rk280392/harvesterNavigator/internal/services/pod"
 	"github.com/rk280392/harvesterNavigator/internal/services/replicas"
 	"github.com/rk280392/harvesterNavigator/internal/services/upgrade"
@@ -20,20 +21,25 @@ import (
 	"github.com/rk280392/harvesterNavigator/internal/services/vmi"
 	"github.com/rk280392/harvesterNavigator/internal/services/vmim"
 	"github.com/rk280392/harvesterNavigator/internal/services/volume"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 )
 
 type DataFetcher struct {
 	client        *kubernetes.Clientset
+	dynamicClient dynamic.Interface
 	batchFetcher  *batch.BatchFetcher
 	volumeService *volume.VolumeService
+	pdbChecker    *pdb.HealthChecker
 }
 
-func CreateDataFetcher(clientset *kubernetes.Clientset) *DataFetcher {
+func CreateDataFetcher(clientset *kubernetes.Clientset, dynamicClient dynamic.Interface) *DataFetcher {
 	return &DataFetcher{
 		client:        clientset,
+		dynamicClient: dynamicClient,
 		batchFetcher:  batch.CreateBatchFetcher(clientset),
 		volumeService: volume.CreateVolumeService(clientset),
+		pdbChecker:    pdb.NewHealthChecker(clientset, dynamicClient),
 	}
 }
 
@@ -131,6 +137,14 @@ func (df *DataFetcher) fetchNodeData(allData *models.FullClusterData) error {
 			log.Printf("Successfully fetched pod counts for %d nodes.", len(podCounts))
 		}
 
+		log.Println("Checking PDB health for all nodes...")
+		pdbHealthResults, err := df.pdbChecker.CheckAllNodesPDB()
+		if err != nil {
+			log.Printf("Warning: Could not perform PDB health checks: %v", err)
+			pdbHealthResults = make(map[string]*models.PDBHealthStatus)
+		} else {
+			log.Printf("PDB health checks completed for %d nodes", len(pdbHealthResults))
+		}
 		// Merge node data
 		mergedNodes := make([]models.NodeWithMetrics, len(parsedLonghornNodes))
 		for i, longhornNode := range parsedLonghornNodes {
@@ -142,8 +156,14 @@ func (df *DataFetcher) fetchNodeData(allData *models.FullClusterData) error {
 					nodeWithMetrics.RunningPods = podCount
 				}
 			}
+			if pdbHealth, exists := pdbHealthResults[longhornNode.Name]; exists {
+				nodeWithMetrics.PDBHealthStatus = pdbHealth
+				log.Printf("DEBUG: Attached PDB health to node %s (has issues: %t, issue count: %d)",
+					longhornNode.Name, pdbHealth.HasIssues, pdbHealth.IssueCount)
+			}
 			mergedNodes[i] = nodeWithMetrics
 		}
+		log.Println("Checking PDB health for all nodes...")
 
 		allData.Nodes = mergedNodes
 		log.Printf("Successfully merged node data for %d nodes.", len(mergedNodes))

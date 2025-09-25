@@ -20,14 +20,6 @@ const ViewManager = {
             return name === nodeName;
         });
         
-        if (!nodeData) {
-            console.error('Node not found:', nodeName);
-            console.error('Available node names:', AppState.data.nodes.map(n => 
-                n.longhornInfo ? n.longhornInfo.name : (n.name || 'unnamed')
-            ));
-            return;
-        }
-        
         const detailHTML = DetailRenderer.renderNodeDetail(nodeData, AppState.issues);
         document.getElementById('detail-view').innerHTML = detailHTML;
         
@@ -41,7 +33,7 @@ const ViewManager = {
         if (!vmData) return;
         
         const detailHTML = DetailRenderer.renderVMDetail(vmData);
-        document.getElementById('detail-view').innerHTML = detailHTML;
+        document.getElementById('detail-view').innerHTML = detailHTML;  
         
         this.hideAllViews();
         document.getElementById('detail-view-container').classList.remove('hidden');

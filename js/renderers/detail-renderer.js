@@ -1,5 +1,6 @@
 // Compact Detail Renderer - Dense Layout with Fixed Issues
 const DetailRenderer = {
+    
     renderNodeDetail(nodeData) {
         if (!nodeData) {
             return '<div class="text-center py-8 text-slate-400">Node data not available</div>';
@@ -11,7 +12,6 @@ const DetailRenderer = {
         
         return `
             <div class="bg-slate-800 rounded-lg">
-                <!-- Enhanced Header with Last Updated -->
                 <div class="p-4 border-b border-slate-700">
                     <div class="flex justify-between items-start">
                         <div>
@@ -30,20 +30,22 @@ const DetailRenderer = {
                     </div>
                 </div>
 
-                <!-- Enhanced Layout with System Details -->
                 <div class="p-6">
                     <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
                         
                         <!-- Left Column -->
                         <div class="space-y-6">
-                            ${this.renderEnhancedHealth(nodeData, healthSummary)}
-                            ${this.renderEnhancedResources(nodeData)}
-                            ${this.renderEnhancedSystem(nodeData)}
+                            ${this.renderHealth(nodeData, healthSummary)}
+                            ${this.renderResources(nodeData)}
+                            ${this.renderSystem(nodeData)}
+                            ${this.renderPDBHealth(nodeData)}
+                            
                         </div>
 
                         <!-- Right Column -->
                         <div class="space-y-6">
-                            ${this.renderEnhancedStorage(nodeData.longhornInfo ? nodeData.longhornInfo.disks : [])}
+                            ${this.renderStorage(nodeData.longhornInfo ? nodeData.longhornInfo.disks : [])}
+
                             ${this.renderQuickCommands(nodeName)}
                         </div>
                     </div>
@@ -64,7 +66,7 @@ const DetailRenderer = {
         }).join(' ');
     },
 
-    renderEnhancedHealth(nodeData, healthSummary) {
+    renderHealth(nodeData, healthSummary) {
         return `
             <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                 <div class="flex items-center gap-2 mb-4">
@@ -84,7 +86,7 @@ const DetailRenderer = {
         `;
     },
 
-    renderEnhancedResources(nodeData) {
+    renderResources(nodeData) {
         const k8sInfo = nodeData.kubernetesInfo;
         const cpu = k8sInfo?.capacity?.cpu || '0';
         const memoryBytes = k8sInfo?.capacity?.memory ? this.parseMemoryToBytes(k8sInfo.capacity.memory) : 0;
@@ -128,7 +130,7 @@ const DetailRenderer = {
         `;
     },
 
-    renderEnhancedSystem(nodeData) {
+    renderSystem(nodeData) {
         const k8sInfo = nodeData.kubernetesInfo;
         const nodeInfo = k8sInfo?.nodeInfo || {};
         
@@ -160,7 +162,7 @@ const DetailRenderer = {
         `;
     },
 
-    renderEnhancedStorage(disks) {
+    renderStorage(disks) {
         if (!disks || disks.length === 0) {
             return `
                 <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
@@ -213,6 +215,36 @@ const DetailRenderer = {
                 </div>
             </div>
         `;
+    },
+
+    getSeverityBadge(severity) {
+        const badges = {
+            'critical': 'bg-red-700/80 text-red-200',
+            'high': 'bg-orange-700/80 text-orange-200', 
+            'medium': 'bg-yellow-700/80 text-yellow-200',
+            'low': 'bg-blue-700/80 text-blue-200'
+        };
+        return badges[severity] || 'bg-slate-700/80 text-slate-200';
+    },
+
+    getSeverityBackground(severity) {
+        const backgrounds = {
+            'critical': 'bg-red-900/20 border-red-600/30',
+            'high': 'bg-orange-900/20 border-orange-600/30',
+            'medium': 'bg-yellow-900/20 border-yellow-600/30',  
+            'low': 'bg-blue-900/20 border-blue-600/30'
+        };
+        return backgrounds[severity] || 'bg-slate-700/50';
+    },
+
+    getSeverityTextColor(severity) {
+        const colors = {
+            'critical': 'text-red-300',
+            'high': 'text-orange-300',
+            'medium': 'text-yellow-300',
+            'low': 'text-blue-300'
+        };
+        return colors[severity] || 'text-slate-300';
     },
 
     renderDiskDetail(disk) {
@@ -541,7 +573,6 @@ const DetailRenderer = {
         
         return `
             <div class="bg-slate-800 rounded-lg">
-                <!-- Enhanced Header with VM Details -->
                 <div class="p-6 border-b border-slate-700">
                     <div class="flex justify-between items-start">
                         <div>
@@ -576,22 +607,21 @@ const DetailRenderer = {
                     </div>
                 </div>
 
-                <!-- Enhanced Layout with All Details -->
                 <div class="p-6">
                     <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
                         
                         <!-- Left Column: Compute & Migration -->
                         <div class="space-y-6">
-                            ${this.renderEnhancedCompute(vmData)}
-                            ${this.renderEnhancedMigration(vmData.vmimInfo || [], vmData.vmiInfo)}
+                            ${this.renderCompute(vmData)}
+                            ${this.renderMigration(vmData.vmimInfo || [], vmData.vmiInfo)}
                             ${this.renderVMErrors(vmData.errors || [])}
                         </div>
 
                         <!-- Right Column: Storage & Replicas -->
                         <div class="space-y-6">
-                            ${this.renderEnhancedVMStorage(vmData)}
-                            ${this.renderEnhancedVolumeAttachment(vmData.attachmentTicketsRaw)}
-                            ${this.renderEnhancedStorageReplicas(vmData)}
+                            ${this.renderVMStorage(vmData)}
+                            ${this.renderVolumeAttachment(vmData.attachmentTicketsRaw)}
+                            ${this.renderStorageReplicas(vmData)}
                         </div>
                     </div>
                 </div>
@@ -1037,7 +1067,7 @@ const DetailRenderer = {
         return value * (unitMultipliers[unit] || 1);
     },
 
-    renderEnhancedVolumeAttachment(attachmentData) {
+    renderVolumeAttachment(attachmentData) {
         if (!attachmentData || typeof attachmentData !== 'object') {
             return `
                 <div class="p-4 bg-slate-800/30 rounded-lg">
@@ -1183,7 +1213,7 @@ const DetailRenderer = {
         return value * (unitMultipliers[unit] || 1);
     },
 
-    renderEnhancedVolumeAttachment(attachmentData) {
+    renderVolumeAttachment(attachmentData) {
         if (!attachmentData || typeof attachmentData !== 'object') {
             return `
                 <div class="p-4 bg-slate-800/30 rounded-lg">
@@ -1276,7 +1306,7 @@ const DetailRenderer = {
         `;
     },
 
-    renderEnhancedCompute(vmData) {
+    renderCompute(vmData) {
         // Get VMI info - check multiple possible data sources
         const vmiInfo = vmData.vmiInfo && vmData.vmiInfo.length > 0 ? vmData.vmiInfo[0] : null;
         const podInfo = vmData.podInfo && vmData.podInfo.length > 0 ? vmData.podInfo[0] : null;
@@ -1390,14 +1420,8 @@ const DetailRenderer = {
         `;
     },
 
-    renderEnhancedMigration(vmData) {
-                    `}
-                </div>
-            </div>
-        `;
-    },
-
-    renderEnhancedMigration(vmimInfo, vmiInfo) {
+ 
+    renderMigration(vmimInfo, vmiInfo) {
         const migration = vmimInfo && vmimInfo.length > 0 ? vmimInfo[0] : null;
         
         if (!migration) {
@@ -1477,7 +1501,7 @@ const DetailRenderer = {
         `;
     },
 
-    renderEnhancedVMStorage(vmData) {
+    renderVMStorage(vmData) {
         return `
             <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                 <div class="flex items-center gap-2 mb-4">
@@ -1524,7 +1548,7 @@ const DetailRenderer = {
         `;
     },
 
-    renderEnhancedStorageReplicas(vmData) {
+    renderStorageReplicas(vmData) {
         const replicas = vmData.replicaInfo || [];
         
         if (replicas.length === 0) {
@@ -1610,7 +1634,6 @@ const DetailRenderer = {
             // Find the replicas container within this disk
             const replicasContainer = diskElement.querySelector('.replicas-container');
             if (!replicasContainer) {
-                console.error('Replicas container not found for:', diskName);
                 return;
             }
             
@@ -1628,5 +1651,60 @@ const DetailRenderer = {
         } catch (error) {
             console.error('Error expanding replicas:', error);
         }
+    },
+    renderPDBHealth(nodeData) {
+    const pdbHealth = nodeData.pdbHealthStatus;
+    
+    if (!pdbHealth || !pdbHealth.hasIssues) {
+        return `
+            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">🛡️</span>
+                    <h3 class="text-sm font-medium text-white">Pod Disruption Budget</h3>
+                    <span class="px-2 py-1 text-xs rounded bg-green-700/80 text-green-200">HEALTHY</span>
+                </div>
+            </div>
+        `;
     }
+
+    const nodeName = nodeData.longhornInfo?.name || nodeData.kubernetesInfo?.name;
+    const firstIssue = pdbHealth.issues[0];
+    
+    return `
+        <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-3">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">🛡️</span>
+                    <h3 class="text-sm font-medium text-white">Pod Disruption Budget</h3>
+                    <span class="px-2 py-1 text-xs rounded ${this.getSeverityBadge(pdbHealth.severity)}">
+                        ${pdbHealth.severity.toUpperCase()}
+                    </span>
+                </div>
+            </div>
+            
+            <div class="text-sm text-slate-300 mb-2">
+                ${pdbHealth.issueCount} issue${pdbHealth.issueCount > 1 ? 's' : ''} detected
+            </div>
+            
+            <div class="text-xs text-slate-400 mb-3">
+                ${firstIssue?.issueType.replace(/_/g, ' ') || 'PDB configuration issues'}
+            </div>
+            
+            <div class="text-xs ${pdbHealth.canSafelyDelete ? 'text-green-400' : 'text-yellow-400'} mb-3">
+                ${pdbHealth.canSafelyDelete ? '✅ Safe to fix - volumes are healthy' : '⚠️ Exercise caution - verify volume health first'}
+            </div>
+            
+            <div class="flex gap-2">
+                <button onclick="ViewManager.showAllIssuesView(); window.scrollTo(0, 0);" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-medium">
+                    View in Issues
+                </button>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-slate-600 text-xs text-slate-400">
+                Last checked: ${Utils.formatTimestamp(pdbHealth.lastChecked)}
+            </div>
+        </div>
+     `;
+    },
 };

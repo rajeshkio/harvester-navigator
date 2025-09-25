@@ -360,8 +360,6 @@ class HarvesterDashboardApp {
                 </div>
             `;
         }
-
-        // Enhanced header display with toggle for detailed node status
         const upgradeHtml = `
             <div class="bg-slate-700 p-3 rounded border border-yellow-400">
                 <div class="flex items-center gap-2 flex-wrap">
@@ -385,7 +383,6 @@ class HarvesterDashboardApp {
         if (statusElement) {
             statusElement.innerHTML = upgradeHtml;
             
-            // Add enhanced styling to the container
             const upgradeContainer = document.getElementById('upgrade-info');
             if (upgradeContainer) {
                 upgradeContainer.style.backgroundColor = '#1e293b';
