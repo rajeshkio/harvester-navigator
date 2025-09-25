@@ -96,6 +96,34 @@ const IssueDetector = {
                 resourceName: nodeName
             }));
         }
+
+        const pdbHealth = node.pdbHealthStatus;
+        if (pdbHealth && pdbHealth.hasIssues) {
+            pdbHealth.issues.forEach(pdbIssue => {
+                issues.push(this.createIssue({
+                    id: `pdb-${pdbIssue.issueType}-${nodeName}-${pdbIssue.pdbName}`,
+                    title: `PDB ${pdbIssue.issueType.replace(/_/g, ' ')}`,
+                    severity: pdbHealth.severity,
+                    category: 'Pod Disruption Budget',
+                    description: pdbIssue.description,
+                    affectedResource: `PDB: ${pdbIssue.pdbName}`,
+                    resourceType: 'pdb',
+                    resourceName: pdbIssue.pdbName,
+                    nodeName: nodeName,
+                    pdbIssueType: pdbIssue.issueType,
+                    pdbDetails: {
+                        expectedNode: pdbIssue.expectedNode,
+                        actualNode: pdbIssue.actualNode,
+                        staleEngines: pdbIssue.staleEngines,
+                        affectedVolumes: pdbIssue.affectedVolumes,
+                        resolution: pdbIssue.resolution,
+                        safetyCheck: pdbIssue.safetyCheck,
+                        canSafelyDelete: pdbHealth.canSafelyDelete,
+                        lastChecked: pdbHealth.lastChecked
+                    }
+                }));
+            });
+        }
     },
     processHealthCheckResults(healthChecks, issues) {
     healthChecks.forEach(check => {
@@ -548,6 +576,43 @@ const IssueDetector = {
                     expectedOutput: 'Node should show Ready status',
                     description: 'Check basic node status and availability'
                 }
+            ],
+            'pdb': [
+                {
+                    id: 'check-pdb-node-reference',
+                    title: 'Verify PDB Node Reference',
+                    command: `kubectl get pdb ${resourceName} -n longhorn-system -o yaml | yq '.spec.selector.matchLabels."longhorn.io/node"'`,
+                    expectedOutput: 'Should show the node name this PDB claims to protect',
+                    description: 'Check which node this PDB is configured to protect'
+                },
+                {
+                    id: 'check-instance-manager-location',
+                    title: 'Check Instance Manager Actual Location',
+                    command: `kubectl get instancemanager ${resourceName} -n longhorn-system -o yaml | yq '.spec.nodeID'`,
+                    expectedOutput: 'Should show where the instance manager actually runs',
+                    description: 'Verify the actual node where instance manager is located'
+                },
+                {
+                    id: 'check-claimed-engines',
+                    title: 'List Engines Claimed by Instance Manager',
+                    command: `kubectl get instancemanager ${resourceName} -n longhorn-system -o jsonpath='{.status.instanceEngines}' | jq 'keys[]'`,
+                    expectedOutput: 'List of engine names the IM thinks it manages',
+                    description: 'See what engines this instance manager claims to manage'
+                },
+                {
+                    id: 'verify-engine-existence',
+                    title: 'Verify Engines Actually Exist',
+                    command: `kubectl get engines.longhorn.io -n longhorn-system`,
+                    expectedOutput: 'List of actual engine resources',
+                    description: 'Compare with step 3 to find phantom engines'
+                },
+                {
+                    id: 'check-volume-health',
+                    title: 'Verify Volume Health Before Fix',
+                    command: `kubectl get volumes -n longhorn-system -o yaml | yq '.items[] | select(.status.state == "attached")| .status.robustness'`,
+                    expectedOutput: 'All outputs should be "healthy"',
+                    description: 'Ensure all volumes are healthy before PDB deletion'
+                }
             ]
         };
         return steps[issueType] || [];
@@ -601,6 +666,36 @@ const IssueDetector = {
                     command: `# SSH to node and run: sudo systemctl restart rke2-server`,
                     description: 'Restart RKE2 server service on the affected node',
                     warning: 'This will temporarily disrupt workloads on the node'
+                }
+            ],
+            'pdb': [
+                {
+                    id: 'backup-pdb-config',
+                    title: 'Backup PDB Configuration',
+                    command: `kubectl get pdb ${resourceName} -n longhorn-system -o yaml > pdb-${resourceName}-backup.yaml`,
+                    description: 'Save current PDB configuration before deletion',
+                    warning: 'Keep this backup in case rollback is needed'
+                },
+                {
+                    id: 'delete-problematic-pdb',
+                    title: 'Delete Problematic PDB',
+                    command: `kubectl delete pdb ${resourceName} -n longhorn-system`,
+                    description: 'Remove the misconfigured PDB - Longhorn will recreate it correctly',
+                    warning: 'Only run this if volume health verification passed'
+                },
+                {
+                    id: 'verify-pdb-recreation',
+                    title: 'Verify PDB Recreation',
+                    command: `kubectl get pdb -n longhorn-system | grep ${resourceName.split('-').slice(0, 3).join('-')}`,
+                    description: 'Check that Longhorn recreated the PDB with correct configuration',
+                    expectedOutput: 'Should show new PDB with same name pattern within 30 seconds'
+                },
+                {
+                    id: 'confirm-node-draining',
+                    title: 'Test Node Draining (Optional)',
+                    command: `kubectl drain <node-name> --dry-run=client --ignore-daemonsets`,
+                    description: 'Test if node can be drained now (dry run)',
+                    warning: 'Only run if this issue was blocking an upgrade'
                 }
             ]
         };

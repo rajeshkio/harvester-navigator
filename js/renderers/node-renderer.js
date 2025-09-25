@@ -110,7 +110,23 @@ const NodeRenderer = {
                 </div>
             </div>
         `;
-        
+        const pdbHealth = node.pdbHealthStatus;
+        let pdbIndicator = '';
+        if (pdbHealth && pdbHealth.hasIssues) {
+        const severityClass = pdbHealth.severity === 'critical' ? 'text-red-400' : 
+                         pdbHealth.severity === 'high' ? 'text-orange-400' : 
+                         pdbHealth.severity === 'medium' ? 'text-yellow-400' : 'text-blue-400';
+    
+        pdbIndicator = `
+            <div class="pt-2 border-t border-slate-600 mt-3">
+                <div class="${severityClass} text-sm font-medium flex items-center gap-1">
+                    <span>⚠️</span>
+                    PDB: ${pdbHealth.issueCount} issue${pdbHealth.issueCount > 1 ? 's' : ''}
+                    <span class="text-xs px-1 py-0.5 rounded ${this.getSeverityBadge(pdbHealth.severity)}">${pdbHealth.severity.toUpperCase()}</span>
+                </div>
+            </div>
+        `;
+    }
         card.addEventListener('click', () => ViewManager.showNodeDetail(nodeName));
         return card;
     },
@@ -161,5 +177,14 @@ const NodeRenderer = {
             const bgClass = isControlPlane ? 'bg-blue-600/60 text-blue-200' : 'bg-slate-600/60 text-slate-300';
             return `<span class="px-2 py-1 text-xs font-medium rounded-full ${bgClass}">${role}</span>`;
         }).join('');
+    },
+    getSeverityBadge(severity) {
+        const badges = {
+            'critical': 'bg-red-700/80 text-red-200',
+            'high': 'bg-orange-700/80 text-orange-200', 
+            'medium': 'bg-yellow-700/80 text-yellow-200',
+            'low': 'bg-blue-700/80 text-blue-200'
+        };
+        return badges[severity] || 'bg-slate-700/80 text-slate-200';
     }
 };
