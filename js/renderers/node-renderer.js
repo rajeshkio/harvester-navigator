@@ -48,14 +48,6 @@ const NodeRenderer = {
     
     createNodeCard(node, issues) {
         const nodeName = node.longhornInfo ? node.longhornInfo.name : (node.name || 'Unknown');
-        if (nodeName === 'ettenheim-harv02') {
-        console.log('Node harv02 card data:', {
-            nodeName,
-            pdbHealthStatus: node.pdbHealthStatus,
-            hasIssues: node.pdbHealthStatus?.hasIssues,
-            issueCount: node.pdbHealthStatus?.issueCount
-        });
-    }
         const nodeIssues = issues.filter(issue => 
             issue.resourceType === 'node-not-ready' && issue.resourceName === nodeName
         );

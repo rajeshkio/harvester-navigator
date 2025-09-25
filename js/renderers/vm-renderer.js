@@ -156,7 +156,6 @@ const VMRenderer = {
             phase = vmi.phase || phase;
             
             if (vmi.interfaces && vmi.interfaces.length > 0) {
-                // Enhanced IP address detection
                 const prioritizedInterfaces = vmi.interfaces
                     .filter(iface => iface.ipAddress && iface.ipAddress !== '127.0.0.1')
                     .sort((a, b) => {
