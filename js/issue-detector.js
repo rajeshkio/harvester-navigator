@@ -49,9 +49,10 @@ const IssueDetector = {
     },
     
     checkVMIssues(vm, issues) {
+        console.log('Processing VM:', vm.name);
         if (vm.errors && vm.errors.length > 0) {
             const realErrors = vm.errors.filter(error => 
-                error.severity !== 'info' && error.severity !== 'information'
+                error.severity !== 'info' && error.severity !== 'informati  on'
             );
             
             realErrors.forEach(error => {
