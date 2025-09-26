@@ -47,10 +47,19 @@ func (df *DataFetcher) fetchFullClusterData() (models.FullClusterData, error) {
 	var allData models.FullClusterData
 	start := time.Now()
 
+	upgradeInfo, err := upgrade.FetchLatestUpgrade(df.client)
+	if err != nil {
+		log.Printf("Warning: could not fetch upgrade information: %v", err)
+		upgradeInfo = nil
+	} else {
+		allData.UpgradeInfo = upgradeInfo
+		log.Printf("Upgrade info: %s -> %s (%s)",
+			upgradeInfo.PreviousVersion, upgradeInfo.Version, upgradeInfo.State)
+	}
 	log.Println("Starting cluster data fetch...")
 
 	log.Println("Running health checks...")
-	healthChecker := health.CreateHealthChecker(df.client)
+	healthChecker := health.CreateHealthChecker(df.client, upgradeInfo)
 	healthSummary := healthChecker.RunAllChecks(context.Background())
 	allData.HealthChecks = healthSummary
 	log.Printf("Health checks completed: %d passed, %d failed, %d warnings",

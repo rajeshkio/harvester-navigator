@@ -259,7 +259,7 @@ const IssueDetector = {
     },
     processHealthCheckResults(healthChecks, issues) {
     healthChecks.forEach(check => {
-        if (check.status === 'failed') {
+        if (check.status === 'failed' || check.status === 'warning') {
             if (check.checkName === 'error_pods' && check.podErrors && check.podErrors.length > 0) {
                 // Filter out less critical restart issues - only show serious problems
                 const seriousPodErrors = check.podErrors.filter(pod => {
@@ -351,7 +351,7 @@ const IssueDetector = {
                 issues.push({
                     id: `health-${check.checkName}`,
                     title: `Health Check Failed: ${this.formatCheckName(check.checkName)}`,
-                    severity: this.getCheckSeverity(check.checkName),
+                    severity: check.status === 'warning' ? 'medium' : this.getCheckSeverity(check.checkName),
                     category: 'Cluster Health',
                     description: check.error || check.message,
                     affectedResource: `Health Check: ${check.checkName}`,
