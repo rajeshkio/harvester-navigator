@@ -33,30 +33,6 @@ class HarvesterDashboardApp {
             AppState.updateData(data);
             // Note: upgrade status will be updated by displayUpgradeInfo method
             
-            // Set up automatic refresh every 30 seconds
-            setInterval(async () => {
-                try {
-                    const response = await fetch('/data');
-                    
-                    if (!response.ok) {
-                        ViewManager.updateUpgradeStatus('warning', 'Connection issues - retrying...');
-                        return;
-                    }
-                    
-                    const contentType = response.headers.get('content-type');
-                    if (!contentType || !contentType.includes('application/json')) {
-                        ViewManager.updateUpgradeStatus('warning', 'Server response error - retrying...');
-                        return;
-                    }
-                    
-                    const data = await response.json();
-                    AppState.updateData(data);
-                    // Note: upgrade status will be updated by displayUpgradeInfo method
-                } catch (error) {
-                    ViewManager.updateUpgradeStatus('warning', 'Connection lost - retrying...');
-                }
-            }, 30000);
-            
         } catch (error) {
             
             // Provide user-friendly error messages based on error type
