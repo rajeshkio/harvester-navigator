@@ -153,7 +153,7 @@ const IssueRenderer = {
                             <div class="bg-slate-900/60 rounded p-2 mb-2">
                                 <div class="flex justify-between items-center mb-1">
                                     <span class="text-xs text-slate-400">Command:</span>
-                                    onclick="Utils.copyToClipboard('${step.command.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')" 
+                                    <button onclick="Utils.copyToClipboard('${step.command.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')" 
                                             class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs">
                                         Copy
                                     </button>

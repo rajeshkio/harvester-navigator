@@ -204,7 +204,7 @@ const ViewManager = {
                                     <p class="text-sm text-slate-400 mb-3">${step.description}</p>
                                     <div class="bg-slate-950 p-3 rounded font-mono text-sm text-green-300 mb-2 relative group">
                                         <span class="text-cyan-400">$</span> ${step.command}
-                                        <button onclick="Utils.copyToClipboard('${step.command}')" class="absolute top-2 right-2 bg-slate-700 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onclick="Utils.copyToClipboard(${JSON.stringify(step.command)})" class="absolute top-2 right-2 bg-slate-700 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
                                             📋
                                         </button>
                                     </div>
@@ -221,7 +221,7 @@ const ViewManager = {
                                 <div class="verification-step border-l-4 border-slate-600 bg-slate-850 p-4 rounded-r-lg">
                                     <div class="flex justify-between items-center mb-2">
                                         <h5 class="font-semibold text-slate-200">${index + 1}. ${step.title}</h5>
-                                        <button onclick="Utils.copyToClipboard('${step.command}')" class="bg-green-600 text-white px-3 py-1 rounded text-xs font-medium hover:bg-green-700 transition-colors">
+                                        <button onclick="Utils.copyToClipboard(${JSON.stringify(step.command)})" class="bg-green-600 text-white px-3 py-1 rounded text-xs font-medium hover:bg-green-700 transition-colors">
                                             📋 Copy
                                         </button>
                                     </div>

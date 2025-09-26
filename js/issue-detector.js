@@ -18,9 +18,10 @@ const IssueDetector = {
     },
     
     checkVMIssues(vm, issues) {
+        console.log('Processing VM:', vm.name);
         if (vm.errors && vm.errors.length > 0) {
             const realErrors = vm.errors.filter(error => 
-                error.severity !== 'info' && error.severity !== 'information'
+                error.severity !== 'info' && error.severity !== 'informati  on'
             );
             
             realErrors.forEach(error => {
@@ -67,6 +68,87 @@ const IssueDetector = {
                     vmName: vm.name
                 }));
             }
+        }
+        if (vm.attachmentTicketsRaw && typeof vm.attachmentTicketsRaw === 'object') {
+            const ticketIds = Object.keys(vm.attachmentTicketsRaw);
+            console.log(`VM ${vm.name} has ${ticketIds.length} attachment tickets:`, ticketIds);
+            
+            // Issue 1: Multiple attachment tickets (should normally be just 1)
+            if (ticketIds.length > 1) {
+                const volumeId = vm.volumeName || vm.name;
+                issues.push(this.createIssue({
+                    id: `multiple-attachment-tickets-${volumeId}`, // Use volume ID instead of VM name
+                    title: 'Multiple Volume Attachment Tickets',
+                    severity: 'high',
+                    category: 'Volume Attachment',
+                    description: `Volume ${volumeId} has ${ticketIds.length} attachment tickets. This indicates potential CSI attachment conflicts or stale references. Affected VM: ${vm.name}`,
+                    affectedResource: `Volume: ${volumeId}`,
+                    resourceType: 'attachment-tickets-multiple',
+                    resourceName: volumeId, // Use volume name for verification steps
+                    vmName: vm.name,
+                    attachmentDetails: {
+                        ticketCount: ticketIds.length,
+                        ticketIds: ticketIds,
+                        attachmentData: vm.attachmentTicketsRaw,
+                        volumeName: volumeId,
+                        affectedVMs: [vm.name] // Start with current VM
+                    }
+                }));
+            }
+            const unsatisfiedTickets = ticketIds.filter(ticketId => {
+                const ticket = vm.attachmentTicketsRaw[ticketId];
+                return !ticket?.satisfied;
+            });
+            
+            if (unsatisfiedTickets.length > 0) {
+                issues.push(this.createIssue({
+                    id: `unsatisfied-attachment-tickets-${vm.name}`,
+                    title: 'Volume Attachment Not Satisfied',
+                    severity: 'critical',
+                    category: 'Volume Attachment',
+                    description: `Volume ${vm.volumeName || vm.name} has ${unsatisfiedTickets.length} unsatisfied attachment tickets. Volume may not be accessible to the VM.`,
+                    affectedResource: `Volume: ${vm.volumeName || vm.name}`,
+                    resourceType: 'attachment-tickets-unsatisfied',
+                    resourceName: vm.volumeName || vm.name,
+                    vmName: vm.name,
+                    attachmentDetails: {
+                        unsatisfiedTickets: unsatisfiedTickets,
+                        attachmentData: vm.attachmentTicketsRaw
+                    }
+                }));
+            }
+            ticketIds.forEach(ticketId => {
+                const ticket = vm.attachmentTicketsRaw[ticketId];
+                if (ticket?.conditions) {
+                    const failedConditions = ticket.conditions.filter(condition => condition.status !== 'True');
+                    
+                    if (failedConditions.length > 0) {
+                        failedConditions.forEach(condition => {
+                            // Only create issue if condition has been failing for more than 2 minutes
+                            const isStaleFailure = this.isConditionStale(condition.lastTransitionTime, 2);
+                            
+                            if (isStaleFailure) {
+                                issues.push(this.createIssue({
+                                    id: `attachment-condition-failed-${vm.name}-${condition.type}`,
+                                    title: `Attachment Condition Failed: ${condition.type}`,
+                                    severity: 'medium',
+                                    category: 'Volume Attachment',
+                                    description: `Volume attachment condition "${condition.type}" is failing for ${vm.volumeName || vm.name}. Status: ${condition.status}`,
+                                    affectedResource: `Volume: ${vm.volumeName || vm.name}`,
+                                    resourceType: 'attachment-condition-failed',
+                                    resourceName: vm.volumeName || vm.name,
+                                    vmName: vm.name,
+                                    attachmentDetails: {
+                                        ticketId: ticketId,
+                                        condition: condition,
+                                        attachmentData: vm.attachmentTicketsRaw
+                                    }
+                                }));
+                            }
+                        });
+                    }
+                }
+            });
         }
     },
     
@@ -613,31 +695,107 @@ const IssueDetector = {
                     expectedOutput: 'All outputs should be "healthy"',
                     description: 'Ensure all volumes are healthy before PDB deletion'
                 }
+            ],
+            'attachment-tickets-multiple': [
+                {
+                    id: 'check-attachment-tickets',
+                    title: 'List All Volume Attachment Tickets',
+                    command: `kubectl get volumeattachments.longhorn.io  -n longhorn-system -o yaml`,
+                    expectedOutput: 'JSON of all attachment tickets with their status',
+                    description: 'Shows all attachment tickets and their current state'
+                },
+                {
+                    id: 'check-csi-attachments',
+                    title: 'Check CSI Volume Attachments',
+                    command: `kubectl get volumeattachment --all-namespaces | grep ${resourceName}`,
+                    expectedOutput: 'List of CSI volume attachments',
+                    description: 'Shows CSI-level volume attachments that might be causing conflicts'
+                },
+                {
+                    id: 'check-longhorn-volume-status',
+                    title: 'Check Longhorn Volume Status',
+                    command: `kubectl get volume.longhorn.io ${resourceName} -n longhorn-system -o yaml`,
+                    expectedOutput: 'Complete Longhorn volume status',
+                    description: 'Shows detailed volume status including attachment state'
+                },
+                {
+                    id: 'check-vm-node-assignment',
+                    title: 'Check VM Node Assignment',
+                    command: `kubectl get vm ${resourceName} -o jsonpath="{.status.nodeName}"`,
+                    expectedOutput: 'Node name where VM is running',
+                    description: 'Verify which node the VM is assigned to'
+                }
+            ],
+            'attachment-tickets-unsatisfied': [
+                // Same verification steps as multiple tickets
+                {
+                    id: 'check-attachment-tickets',
+                    title: 'List All Volume Attachment Tickets',
+                    command: `kubectl get volumeattachments.longhorn.io ${resourceName} -n longhorn-system -o jsonpath='{.status.attachmentTicketStatuses}' | jq '.'`,
+                    expectedOutput: 'JSON of all attachment tickets with their status',
+                    description: 'Shows all attachment tickets and their current state'
+                },
+                {
+                    id: 'check-csi-attachments',
+                    title: 'Check CSI Volume Attachments',
+                    command: `kubectl get volumeattachment --all-namespaces | grep ${resourceName}`,
+                    expectedOutput: 'List of CSI volume attachments',
+                    description: 'Shows CSI-level volume attachments that might be causing conflicts'
+                }
+            ],
+            'attachment-condition-failed': [
+                {
+                    id: 'check-specific-condition',
+                    title: 'Check Failed Condition Details',
+                    command: `kubectl get volumeattachments.longhorn.io ${resourceName} -n longhorn-system -o jsonpath='{.status.attachmentTicketStatuses}' | jq '.[] | select(.conditions[]?.status != "True")'`,
+                    expectedOutput: 'Details about the failed condition',
+                    description: 'Get specifics about what attachment condition is failing'
+                },
+                {
+                    id: 'check-kubelet-logs',
+                    title: 'Check Recent Events',
+                    command: `kubectl get events --all-namespaces --sort-by='.lastTimestamp' | grep ${resourceName}`,
+                    expectedOutput: 'Recent events related to this volume',
+                    description: 'Look for kubelet or CSI events about attachment failures'
+                }
             ]
         };
         return steps[issueType] || [];
     },
     getHealthCheckRemediation(checkName) {
-    const steps = {
-        'nodes': [
-            {
-                id: 'uncordon-nodes',
-                title: 'Uncordon Nodes',
-                command: 'kubectl uncordon <node-name>',
-                description: 'Make nodes schedulable again'
-            }
-        ],
-        'error_pods': [
-            {
-                id: 'restart-pods',
-                title: 'Restart Failed Pods',
-                command: 'kubectl delete pod <pod-name> -n <namespace>',
-                description: 'Restart failed pods to recover'
-            }
-        ]
-    };
-    return steps[checkName] || [];
-},
+        const steps = {
+            'nodes': [
+                {
+                    id: 'uncordon-nodes',
+                    title: 'Uncordon Nodes',
+                    command: 'kubectl uncordon <node-name>',
+                    description: 'Make nodes schedulable again'
+                }
+            ],
+            'error_pods': [
+                {
+                    id: 'restart-pods',
+                    title: 'Restart Failed Pods',
+                    command: 'kubectl delete pod <pod-name> -n <namespace>',
+                    description: 'Restart failed pods to recover'
+                }
+            ]
+        };
+        return steps[checkName] || [];
+    },
+
+    isConditionStale(lastTransitionTime, thresholdMinutes = 5) {
+        if (!lastTransitionTime) return false;
+        
+        try {
+            const conditionTime = new Date(lastTransitionTime);
+            const now = new Date();
+            const diffMinutes = (now - conditionTime) / (1000 * 60);
+            return diffMinutes > thresholdMinutes;
+        } catch (e) {
+            return false; // Invalid timestamp, don't flag as stale
+        }
+    },
     
     getRemediationSteps(issueType, resourceName) {
         const steps = {
@@ -696,6 +854,57 @@ const IssueDetector = {
                     command: `kubectl drain <node-name> --dry-run=client --ignore-daemonsets`,
                     description: 'Test if node can be drained now (dry run)',
                     warning: 'Only run if this issue was blocking an upgrade'
+                }
+            ],
+            'attachment-tickets-multiple': [
+                {
+                    id: 'identify-stale-tickets',
+                    title: 'Identify Stale Attachment Tickets',
+                    command: `kubectl get volumeattachments.longhorn.io ${resourceName} -n longhorn-system -o jsonpath='{.status.attachmentTicketStatuses}' | jq 'to_entries[] | select(.value.satisfied == false)'`,
+                    description: 'Find unsatisfied tickets that may need cleanup',
+                    warning: 'Review carefully before removing tickets'
+                },
+                {
+                    id: 'check-vm-current-node',
+                    title: 'Verify Current VM Node',
+                    command: `kubectl get vm ${resourceName} -o jsonpath='{.status.nodeName}'`,
+                    description: 'Confirm where VM is actually running'
+                },
+                {
+                    id: 'restart-vm-if-needed',
+                    title: 'Restart VM (if attachment is blocking)',
+                    command: `kubectl patch vm ${resourceName} --type merge -p '{"spec":{"runStrategy":"RerunOnFailure"}}'`,
+                    description: 'Forces VM restart which may resolve stale attachment tickets',
+                    warning: 'This will restart the VM - ensure workloads can handle interruption'
+                }
+            ],
+            'attachment-tickets-unsatisfied': [
+                {
+                    id: 'check-longhorn-manager-logs',
+                    title: 'Check Longhorn Manager Logs',
+                    command: `kubectl logs -n longhorn-system -l app=longhorn-manager --tail=100 | grep -i "${resourceName}\\|attachment"`,
+                    description: 'Look for attachment-related errors in Longhorn manager logs'
+                },
+                {
+                    id: 'check-csi-attacher-logs',
+                    title: 'Check CSI Attacher Logs',
+                    command: `kubectl logs -n longhorn-system -l app=longhorn-csi-plugin --tail=50 | grep -i "${resourceName}\\|attach"`,
+                    description: 'Check CSI attacher component for attachment issues'
+                },
+                {
+                    id: 'force-volume-detach-attach',
+                    title: 'Force Volume Re-attachment',
+                    command: `kubectl annotate volumeattachments.longhorn.io ${resourceName} -n longhorn-system volume.longhorn.io/detach-manually="true"`,
+                    description: 'Forces Longhorn to detach and re-attach the volume',
+                    warning: 'This may cause brief I/O interruption'
+                }
+            ],
+            'attachment-condition-failed': [
+                {
+                    id: 'restart-csi-driver',
+                    title: 'Restart CSI Driver Pod',
+                    command: `kubectl delete pods -n longhorn-system -l app=longhorn-csi-plugin --field-selector spec.nodeName=$(kubectl get vm ${resourceName} -o jsonpath='{.status.nodeName}')`,
+                    description: 'Restart CSI driver on the target node to resolve attachment issues'
                 }
             ]
         };
