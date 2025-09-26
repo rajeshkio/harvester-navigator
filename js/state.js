@@ -28,7 +28,9 @@ const AppState = {
     
     updateData(newData) {
         this.data = { ...this.data, ...newData };
+        
         this.issues = IssueDetector.detectIssues(this.data);
+        
         this.notifyStateChange();
     },
     

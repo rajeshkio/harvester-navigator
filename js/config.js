@@ -17,12 +17,12 @@ const CONFIG = {
     },
     
     SEVERITY_CONFIG: {
-        critical: { color: 'text-red-500', icon: '🚨', badge: 'bg-red-900/80 text-red-200 border border-red-600/50' },
-        high: { color: 'text-red-400', icon: '❌', badge: 'bg-orange-900/80 text-orange-200 border border-orange-600/50' },
-        medium: { color: 'text-yellow-400', icon: '⚠️', badge: 'bg-yellow-900/80 text-yellow-200 border border-yellow-600/50' },
-        low: { color: 'text-blue-400', icon: '📋', badge: 'bg-blue-900/80 text-blue-200 border border-blue-600/50' },
-        error: { color: 'text-red-400', icon: '❌' },
-        warning: { color: 'text-yellow-400', icon: '⚠️' }
+        critical: { color: 'text-red-500', icon: '•', badge: 'bg-red-900/80 text-red-200 border border-red-600/50' },
+        high: { color: 'text-red-400', icon: '•', badge: 'bg-orange-900/80 text-orange-200 border border-orange-600/50' },
+        medium: { color: 'text-yellow-400', icon: '•', badge: 'bg-yellow-900/80 text-yellow-200 border border-yellow-600/50' },
+        low: { color: 'text-blue-400', icon: '•', badge: 'bg-blue-900/80 text-blue-200 border border-blue-600/50' },
+        error: { color: 'text-red-400', icon: '•' },
+        warning: { color: 'text-yellow-400', icon: '•' }
     },
     
     STATUS_COLORS: {
