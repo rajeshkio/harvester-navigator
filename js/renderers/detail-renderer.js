@@ -94,7 +94,7 @@ const DetailRenderer = {
                 </div>
                 <div class="space-y-3">
                     <div class="flex items-center gap-3 p-3 rounded ${healthSummary.overallHealthy ? 'bg-green-900/20 border border-green-600/30' : 'bg-red-900/20 border border-red-600/30'}">
-                        <span class="text-2xl">${healthSummary.overallHealthy ? '✅' : '❌'}</span>
+                        <span class="text-2xl">${healthSummary.overallHealthy ? '[OK]' : '[FAIL]'}</span>
                         <div>
                             <div class="font-medium text-white">${healthSummary.overallHealthy ? 'All Systems Healthy' : 'Issues Detected'}</div>
                             <div class="text-sm text-slate-400">${healthSummary.summary || 'Status information unavailable'}</div>
@@ -318,7 +318,7 @@ const DetailRenderer = {
             return `
                 <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                     <div class="flex items-center gap-2 mb-4">
-                        <span class="text-lg">💾</span>
+                        <span class="text-lg">[DISK]</span>
                         <h2 class="text-lg font-medium text-white">Storage Overview</h2>
                     </div>
                     <div class="text-center py-4 text-slate-400">No storage information available</div>
@@ -338,7 +338,7 @@ const DetailRenderer = {
         return `
             <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                 <div class="flex items-center gap-2 mb-4">
-                    <span class="text-lg">💾</span>
+                    <span class="text-lg">[DISK]</span>
                     <h2 class="text-lg font-medium text-white">Storage Overview</h2>
                 </div>
                 
@@ -461,12 +461,12 @@ const DetailRenderer = {
             {
                 title: 'View Running Pods',
                 command: `kubectl get pods --all-namespaces --field-selector spec.nodeName=${nodeName}`,
-                icon: '🔄'
+                icon: '[SYNC]'
             },
             {
                 title: 'List All Replicas on Node',
                 command: `kubectl get replicas.longhorn.io -n longhorn-system -l longhornnode=${nodeName}`,
-                icon: '🔄'
+                icon: '[SYNC]'
             },
             {
                 title: 'Node Describe',
@@ -486,7 +486,7 @@ const DetailRenderer = {
             {
                 title: 'Check Storage Resources by Node',
                 command: `echo '=== ENGINES ==='; kubectl get engines.longhorn.io -n longhorn-system -l longhornnode=${nodeName}; echo ''; echo '=== REPLICAS ==='; kubectl get replicas.longhorn.io -n longhorn-system -l longhornnode=${nodeName}; echo ''; echo '=== INSTANCE MANAGERS ==='; kubectl get instancemanager -n longhorn-system -l longhorn.io/node=${nodeName}`,
-                icon: '💾'
+                icon: '[DISK]'
             }
         ];
 
@@ -504,9 +504,8 @@ const DetailRenderer = {
                                     <span>${cmd.icon}</span>
                                     <span class="text-white font-medium">${cmd.title}</span>
                                 </div>
-                                <button onclick="Utils.copyToClipboard('${cmd.command.replace(/'/g, "\\'")}')" 
-                                        class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition-colors">
-                                    📋 Copy
+                                <button data-copy-text="${cmd.command.replace(/"/g, '&quot;')}" class="copy-command-btn bg-green-600 text-white px-3 py-1 rounded text-xs font-medium hover:bg-green-700 transition-colors">
+                                    Copy
                                 </button>
                             </div>
                             <code class="text-xs text-green-300 bg-slate-800 p-2 rounded block overflow-x-auto">${cmd.command}</code>
@@ -942,7 +941,7 @@ const DetailRenderer = {
                 <!-- Warning indicators -->
                 ${migration.targetPod && !migration.targetPodExists ? `
                     <div class="mt-2 p-2 bg-yellow-900/30 border border-yellow-700/30 rounded text-xs">
-                        <span class="text-yellow-300">⚠️ Target pod missing or not ready</span>
+                        <span class="text-yellow-300">Target pod missing or not ready</span>
                     </div>
                 ` : ''}
 
@@ -1176,7 +1175,7 @@ const DetailRenderer = {
                 <div class="bg-slate-800/40 rounded p-3 border ${satisfied ? 'border-green-500/30' : 'border-red-500/30'}">
                     <div class="flex items-center justify-between mb-2">
                         <div class="flex items-center gap-2">
-                            <span class="${satisfied ? 'text-green-400' : 'text-red-400'}">${satisfied ? '✅' : '⏳'}</span>
+                            <span class="${satisfied ? 'text-green-400' : 'text-red-400'}">${satisfied ? '[OK]' : '[WAIT]'}</span>
                             <span class="text-sm text-slate-200">Ticket ${shortTicketId}</span>
                         </div>
                         <span class="px-2 py-1 text-xs rounded ${satisfied ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">
@@ -1322,7 +1321,7 @@ const DetailRenderer = {
                 <div class="bg-slate-800/40 rounded p-3 border ${satisfied ? 'border-green-500/30' : 'border-red-500/30'}">
                     <div class="flex items-center justify-between mb-2">
                         <div class="flex items-center gap-2">
-                            <span class="${satisfied ? 'text-green-400' : 'text-red-400'}">${satisfied ? '✅' : '⏳'}</span>
+                            <span class="${satisfied ? 'text-green-400' : 'text-red-400'}">${satisfied ? '[OK]' : '[WAIT]'}</span>
                             <span class="text-sm text-slate-200">Ticket ${shortTicketId}</span>
                         </div>
                         <span class="px-2 py-1 text-xs rounded ${satisfied ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">
@@ -1470,7 +1469,7 @@ const DetailRenderer = {
             return `
                 <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                     <div class="flex items-center gap-2 mb-4">
-                        <span class="text-lg">🔄</span>
+                        <span class="text-lg">[SYNC]</span>
                         <h2 class="text-lg font-medium text-white">Migration</h2>
                     </div>
                     <div class="text-center py-4 text-slate-400">No migration information available</div>
@@ -1481,7 +1480,7 @@ const DetailRenderer = {
         return `
             <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                 <div class="flex items-center gap-2 mb-4">
-                    <span class="text-lg">🔄</span>
+                    <span class="text-lg">[SYNC]</span>
                     <h2 class="text-lg font-medium text-white">Migration</h2>
                 </div>
                 
@@ -1524,7 +1523,7 @@ const DetailRenderer = {
         return `
             <div class="bg-red-900/20 border border-red-600/30 rounded-lg p-4">
                 <div class="flex items-center gap-2 mb-4">
-                    <span class="text-lg">⚠️</span>
+                    <span class="text-lg">[WARNING]</span>
                     <h2 class="text-lg font-medium text-white">Issues (${errors.length})</h2>
                 </div>
                 <div class="space-y-2">
@@ -1547,7 +1546,7 @@ const DetailRenderer = {
         return `
             <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                 <div class="flex items-center gap-2 mb-4">
-                    <span class="text-lg">💾</span>
+                    <span class="text-lg">[DISK]</span>
                     <h2 class="text-lg font-medium text-white">Storage</h2>
                 </div>
                 
@@ -1572,15 +1571,15 @@ const DetailRenderer = {
                                 <span class="text-slate-400">Volume:</span>
                                 <div class="flex items-center gap-2">
                                     <code class="text-blue-300 bg-slate-700/80 px-2 py-1 rounded font-mono text-xs break-all">${vmData.volumeName}</code>
-                                    <button onclick="navigator.clipboard.writeText('${vmData.volumeName}'); this.textContent='✓'; setTimeout(() => this.textContent='📋', 1500)" 
-                                            class="text-slate-400 hover:text-white transition-colors" title="Copy volume name">📋</button>
+                                    <button onclick="navigator.clipboard.writeText('${vmData.volumeName}'); this.textContent='[COPIED]'; setTimeout(() => this.textContent='Copy', 1500)" 
+                                            class="text-slate-400 hover:text-white transition-colors" title="Copy volume name">Copy</button>
                                 </div>
                                 
                                 <span class="text-slate-400">Claim:</span>
                                 <div class="flex items-center gap-2">
                                     <code class="text-green-300 bg-slate-700/80 px-2 py-1 rounded font-mono text-xs break-all">${vmData.claimNames || 'N/A'}</code>
-                                    ${vmData.claimNames ? `<button onclick="navigator.clipboard.writeText('${vmData.claimNames}'); this.textContent='✓'; setTimeout(() => this.textContent='📋', 1500)" 
-                                            class="text-slate-400 hover:text-white transition-colors" title="Copy claim name">📋</button>` : ''}
+                                    ${vmData.claimNames ? `<button onclick="navigator.clipboard.writeText('${vmData.claimNames}'); this.textContent='[COPIED]'; setTimeout(() => this.textContent='Copy', 1500)" 
+                                            class="text-slate-400 hover:text-white transition-colors" title="Copy claim name">Copy</button>` : ''}
                                 </div>
                             </div>
                         </div>
@@ -1597,7 +1596,7 @@ const DetailRenderer = {
             return `
                 <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                     <div class="flex items-center gap-2 mb-4">
-                        <span class="text-lg">🔄</span>
+                        <span class="text-lg">[SYNC]</span>
                         <h2 class="text-lg font-medium text-white">Storage Replicas (0)</h2>
                     </div>
                     <div class="text-center py-4 text-slate-400">No replica information available</div>
@@ -1610,7 +1609,7 @@ const DetailRenderer = {
         return `
             <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                 <div class="flex items-center gap-2 mb-4">
-                    <span class="text-lg">🔄</span>
+                    <span class="text-lg">[SYNC]</span>
                     <h2 class="text-lg font-medium text-white">Storage Replicas (${replicas.length})</h2>
                 </div>
                 

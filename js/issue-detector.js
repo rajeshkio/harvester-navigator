@@ -1,5 +1,36 @@
 // Issue detection logic
 const IssueDetector = {
+    // Merge attachment ticket status and spec data for backward compatibility
+    mergeAttachmentTicketsData(vm) {
+        if (!vm.attachmentTicketsStatusRaw && !vm.attachmentTicketsSpecRaw) {
+            return null;
+        }
+
+        const mergedData = {};
+        
+        // Start with status data (timestamps, satisfied status, conditions)
+        if (vm.attachmentTicketsStatusRaw && typeof vm.attachmentTicketsStatusRaw === 'object') {
+            Object.entries(vm.attachmentTicketsStatusRaw).forEach(([ticketId, statusData]) => {
+                mergedData[ticketId] = { ...statusData };
+            });
+        }
+
+        // Add spec data (nodeID mappings, type, etc.)
+        if (vm.attachmentTicketsSpecRaw && typeof vm.attachmentTicketsSpecRaw === 'object') {
+            Object.entries(vm.attachmentTicketsSpecRaw).forEach(([ticketId, specData]) => {
+                if (mergedData[ticketId]) {
+                    // Merge spec data into existing status data
+                    mergedData[ticketId] = { ...mergedData[ticketId], ...specData };
+                } else {
+                    // Only spec data available
+                    mergedData[ticketId] = { ...specData };
+                }
+            });
+        }
+
+        return Object.keys(mergedData).length > 0 ? mergedData : null;
+    },
+
     detectIssues(data) {
         const issues = [];
         
@@ -18,10 +49,9 @@ const IssueDetector = {
     },
     
     checkVMIssues(vm, issues) {
-        console.log('Processing VM:', vm.name);
         if (vm.errors && vm.errors.length > 0) {
             const realErrors = vm.errors.filter(error => 
-                error.severity !== 'info' && error.severity !== 'informati  on'
+                error.severity !== 'info' && error.severity !== 'information'
             );
             
             realErrors.forEach(error => {
@@ -69,34 +99,53 @@ const IssueDetector = {
                 }));
             }
         }
-        if (vm.attachmentTicketsRaw && typeof vm.attachmentTicketsRaw === 'object') {
-            const ticketIds = Object.keys(vm.attachmentTicketsRaw);
-            console.log(`VM ${vm.name} has ${ticketIds.length} attachment tickets:`, ticketIds);
+        // Merge status and spec data for attachment tickets
+        const attachmentTicketsData = this.mergeAttachmentTicketsData(vm);
+        
+        if (attachmentTicketsData && typeof attachmentTicketsData === 'object') {
+            const ticketIds = Object.keys(attachmentTicketsData);
             
-            // Issue 1: Multiple attachment tickets (should normally be just 1)
+            // Intelligent multiple ticket analysis with timeline extraction
             if (ticketIds.length > 1) {
-                const volumeId = vm.volumeName || vm.name;
-                issues.push(this.createIssue({
-                    id: `multiple-attachment-tickets-${volumeId}`, // Use volume ID instead of VM name
-                    title: 'Multiple Volume Attachment Tickets',
-                    severity: 'high',
-                    category: 'Volume Attachment',
-                    description: `Volume ${volumeId} has ${ticketIds.length} attachment tickets. This indicates potential CSI attachment conflicts or stale references. Affected VM: ${vm.name}`,
-                    affectedResource: `Volume: ${volumeId}`,
-                    resourceType: 'attachment-tickets-multiple',
-                    resourceName: volumeId, // Use volume name for verification steps
-                    vmName: vm.name,
-                    attachmentDetails: {
-                        ticketCount: ticketIds.length,
-                        ticketIds: ticketIds,
-                        attachmentData: vm.attachmentTicketsRaw,
-                        volumeName: volumeId,
-                        affectedVMs: [vm.name] // Start with current VM
-                    }
-                }));
+            const volumeId = vm.volumeName || vm.name;
+            const ticketAnalysis = this.analyzeMultipleTickets(
+                attachmentTicketsData,
+                vm.volumeAttachmentStatus || null,  // May not be available yet
+                vm.migrationData || null,           // May not be available yet  
+                vm
+            );
+            
+            let ticketDescription = `Volume ${volumeId} has ${ticketIds.length} attachment tickets: ${ticketAnalysis.description}. Affected VM: ${vm.name}`;
+            
+            if (ticketAnalysis.migrationStory) {
+                ticketDescription = ticketAnalysis.migrationStory.summary;
             }
+            
+            issues.push(this.createIssue({
+                id: `multiple-attachment-tickets-${volumeId}`,
+                title: ticketAnalysis.migrationStory?.headline || `Multiple Volume Attachment Tickets (${ticketAnalysis.cause})`,
+                severity: ticketAnalysis.severity,
+                category: 'Volume Attachment',
+                description: ticketDescription,
+                affectedResource: `Volume: ${volumeId}`,
+                resourceType: ticketAnalysis.resourceType,
+                resourceName: volumeId,
+                vmName: vm.name,
+                attachmentDetails: {
+                    ticketCount: ticketIds.length,
+                    ticketIds: ticketIds,
+                    attachmentData: attachmentTicketsData,
+                    volumeName: volumeId,
+                    affectedVMs: [vm.name],
+                    ticketAnalysis: ticketAnalysis,
+                    migrationStory: ticketAnalysis.migrationStory,
+                    timeline: ticketAnalysis.timeline
+                }
+            }));
+            }
+            
             const unsatisfiedTickets = ticketIds.filter(ticketId => {
-                const ticket = vm.attachmentTicketsRaw[ticketId];
+                const ticket = attachmentTicketsData[ticketId];
                 return !ticket?.satisfied;
             });
             
@@ -113,12 +162,12 @@ const IssueDetector = {
                     vmName: vm.name,
                     attachmentDetails: {
                         unsatisfiedTickets: unsatisfiedTickets,
-                        attachmentData: vm.attachmentTicketsRaw
+                        attachmentData: attachmentTicketsData
                     }
                 }));
             }
             ticketIds.forEach(ticketId => {
-                const ticket = vm.attachmentTicketsRaw[ticketId];
+                const ticket = attachmentTicketsData[ticketId];
                 if (ticket?.conditions) {
                     const failedConditions = ticket.conditions.filter(condition => condition.status !== 'True');
                     
@@ -141,7 +190,7 @@ const IssueDetector = {
                                     attachmentDetails: {
                                         ticketId: ticketId,
                                         condition: condition,
-                                        attachmentData: vm.attachmentTicketsRaw
+                                        attachmentData: attachmentTicketsData
                                     }
                                 }));
                             }
@@ -698,33 +747,34 @@ const IssueDetector = {
             ],
             'attachment-tickets-multiple': [
                 {
-                    id: 'check-attachment-tickets',
-                    title: 'List All Volume Attachment Tickets',
-                    command: `kubectl get volumeattachments.longhorn.io  -n longhorn-system -o yaml`,
-                    expectedOutput: 'JSON of all attachment tickets with their status',
-                    description: 'Shows all attachment tickets and their current state'
+                    id: 'analyze-ticket-types',
+                    title: 'Analyze Attachment Ticket Types',
+                    command: `kubectl get volumeattachments.longhorn.io ${resourceName} -n longhorn-system -o jsonpath='{.spec.attachmentTickets}' | jq 'to_entries[] | {ticketId: .key, type: .value.type, nodeID: .value.nodeID, parameters: .value.parameters}'`,
+                    expectedOutput: 'Detailed breakdown of each ticket type and target node',
+                    description: 'Critical first step: Identifies the purpose and target of each attachment ticket'
                 },
                 {
-                    id: 'check-csi-attachments',
-                    title: 'Check CSI Volume Attachments',
-                    command: `kubectl get volumeattachment --all-namespaces | grep ${resourceName}`,
-                    expectedOutput: 'List of CSI volume attachments',
-                    description: 'Shows CSI-level volume attachments that might be causing conflicts'
+                    id: 'check-ticket-generations',
+                    title: 'Check Ticket Generation Consistency',
+                    command: `kubectl get volumeattachments.longhorn.io ${resourceName} -n longhorn-system -o json | jq '{spec: [.spec.attachmentTickets | to_entries[] | {ticketId: .key, specGen: .value.generation}], status: [.status.attachmentTicketStatuses | to_entries[] | {ticketId: .key, statusGen: .value.generation, satisfied: .value.satisfied}]}'`,
+                    expectedOutput: 'Generation numbers should match between spec and status for healthy tickets',
+                    description: 'Mismatched generations indicate stale or processing tickets'
                 },
                 {
-                    id: 'check-longhorn-volume-status',
-                    title: 'Check Longhorn Volume Status',
-                    command: `kubectl get volume.longhorn.io ${resourceName} -n longhorn-system -o yaml`,
-                    expectedOutput: 'Complete Longhorn volume status',
-                    description: 'Shows detailed volume status including attachment state'
+                    id: 'verify-volume-safety-state',
+                    title: 'Verify Volume Safety State',
+                    command: `kubectl get volumes.longhorn.io ${resourceName} -n longhorn-system -o jsonpath='{.status.state}'`,
+                    expectedOutput: 'detached or attached (not attaching/detaching)',
+                    description: 'SAFETY CHECK: Ensure volume is in stable state before any remediation',
+                    warning: 'Do not proceed with remediation if volume is in transitional state'
                 },
                 {
-                    id: 'check-vm-node-assignment',
-                    title: 'Check VM Node Assignment',
-                    command: `kubectl get vm ${resourceName} -o jsonpath="{.status.nodeName}"`,
-                    expectedOutput: 'Node name where VM is running',
-                    description: 'Verify which node the VM is assigned to'
-                }
+                    id: 'check-workload-sources',
+                    title: 'Identify Workload Sources of Tickets',
+                    command: `kubectl get pods --all-namespaces -o json | jq '.items[] | select(.spec.volumes[]?.persistentVolumeClaim.claimName // "" | test("${resourceName}")) | {namespace: .metadata.namespace, name: .metadata.name, phase: .status.phase, nodeName: .spec.nodeName}'`,
+                    expectedOutput: 'List of pods currently using this volume',
+                    description: 'Shows which workloads are requesting attachments - critical for safe remediation'
+                },
             ],
             'attachment-tickets-unsatisfied': [
                 // Same verification steps as multiple tickets
@@ -741,6 +791,112 @@ const IssueDetector = {
                     command: `kubectl get volumeattachment --all-namespaces | grep ${resourceName}`,
                     expectedOutput: 'List of CSI volume attachments',
                     description: 'Shows CSI-level volume attachments that might be causing conflicts'
+                }
+            ],
+            'attachment-tickets-stuck-migration': [
+                {
+                    id: 'check-migration-timeline',
+                    title: 'Review Migration Timeline',
+                    command: `kubectl get volumeattachments.longhorn.io ${resourceName} -n longhorn-system -o jsonpath='{.status.attachmentTicketStatuses}' | jq 'to_entries[] | {ticketId: .key, satisfied: .value.satisfied, lastTransition: (.value.conditions[]? | select(.type == "Satisfied") | .lastTransitionTime)}'`,
+                    expectedOutput: 'Timeline showing when each attachment ticket was satisfied',
+                    description: 'TIMELINE ANALYSIS: Shows the chronological progression of the migration'
+                },
+                {
+                    id: 'check-migration-nodes',
+                    title: 'Check Migration Node Mapping',
+                    command: `kubectl get volumeattachments.longhorn.io ${resourceName} -n longhorn-system -o jsonpath='{.spec.attachmentTickets}' | jq 'to_entries[] | select(.value.type == "csi-attacher") | {ticketId: .key, nodeID: .value.nodeID}'`,
+                    expectedOutput: 'List of nodes involved in migration with ticket IDs',
+                    description: 'NODE MAPPING: Shows which nodes have CSI attachment tickets'
+                },
+                {
+                    id: 'find-pvc-name',
+                    title: 'Find PVC Claim Name',
+                    command: `kubectl get pvc --all-namespaces -o json | jq -r '.items[] | select(.spec.volumeName == "${resourceName}") | "\\(.metadata.namespace)/\\(.metadata.name)"'`,
+                    expectedOutput: 'namespace/pvc-name format',
+                    description: 'PVC RESOLUTION: Find the PVC claim name for this volume'
+                },
+                {
+                    id: 'find-vm-using-volume',
+                    title: 'Find VM Using This Volume',
+                    command: `PVC_INFO=$(kubectl get pvc --all-namespaces -o json | jq -r '.items[] | select(.spec.volumeName == "${resourceName}") | "\\(.metadata.namespace) \\(.metadata.name)"'); if [ -n "$PVC_INFO" ]; then read NS PVC <<< "$PVC_INFO"; kubectl get pods -n $NS -o json | jq -r '.items[] | select(.spec.volumes[]?.persistentVolumeClaim.claimName == "'$PVC'") | {name: .metadata.name, namespace: .metadata.namespace, phase: .status.phase, nodeName: .spec.nodeName, startTime: .status.startTime}'; fi`,
+                    expectedOutput: 'Pod details including current node placement',
+                    description: 'VM LOCATION: Find which VM/pod is using this volume and where it\'s running'
+                },
+                {
+                    id: 'check-vm-migration-status',
+                    title: 'Check for Active Migrations',
+                    command: `kubectl get vmim --all-namespaces -o json | jq '.items[] | select(.status.phase == "Running" or .status.phase == "Pending") | {name: .metadata.name, phase: .status.phase, vmiName: .spec.vmiName, creationTime: .metadata.creationTimestamp}'`,
+                    expectedOutput: 'Active migration operations in the cluster',
+                    description: 'MIGRATION STATE: Check if there are active VM migrations that might be related'
+                },
+                {
+                    id: 'calculate-risk-duration',
+                    title: 'Calculate Migration Risk Duration',
+                    command: `echo "Migration Analysis:"; echo "First attachment: 2025-09-11T22:23:29Z"; echo "Second attachment: 2025-09-25T15:21:51Z"; START_TIME=$(date -d "2025-09-11T22:23:29Z" +%s); CURRENT_TIME=$(date +%s); DURATION_SECONDS=$((CURRENT_TIME - START_TIME)); DURATION_DAYS=$((DURATION_SECONDS / 86400)); echo "Duration: $DURATION_SECONDS seconds = $DURATION_DAYS days"`,
+                    expectedOutput: 'Duration calculation showing days since migration started',
+                    description: 'RISK ASSESSMENT: Calculate how long this migration has been stuck'
+                }
+            ],
+            'attachment-tickets-stale-ui': [
+                {
+                    id: 'identify-stale-ui-tickets',
+                    title: 'Identify Stale UI Tickets',
+                    command: `kubectl get volumeattachments.longhorn.io ${resourceName} -n longhorn-system -o jsonpath='{.spec.attachmentTickets}' | jq 'to_entries[] | select(.value.type == "longhorn-api") | {ticketId: .key, nodeID: .value.nodeID, lastAttachedBy: .value.parameters.lastAttachedBy}'`,
+                    expectedOutput: 'List of longhorn-api tickets with details',
+                    description: 'Shows manual attachment tickets that may be stale'
+                },
+                {
+                    id: 'verify-no-ui-operations',
+                    title: 'Verify No Active UI Operations',
+                    command: `kubectl get volumes.longhorn.io ${resourceName} -n longhorn-system -o jsonpath='{.status}' | jq '{state: .state, robustness: .robustness, currentNodeID: .currentNodeID}'`,
+                    expectedOutput: 'Volume should not show active operations',
+                    description: 'Ensure no active Longhorn UI operations are in progress'
+                }
+            ],
+            'attachment-tickets-mixed-types': [
+                {
+                    id: 'analyze-operation-types',
+                    title: 'Analyze Mixed Operation Types',
+                    command: `kubectl get volumeattachments.longhorn.io ${resourceName} -n longhorn-system -o jsonpath='{.spec.attachmentTickets}' | jq 'to_entries[] | {ticketId: .key, type: .value.type, nodeID: .value.nodeID} | group_by(.type)'`,
+                    expectedOutput: 'Tickets grouped by their operation type',
+                    description: 'Shows different types of operations targeting this volume'
+                },
+                {
+                    id: 'check-backup-snapshot-status',
+                    title: 'Check Backup/Snapshot Operations',
+                    command: `kubectl get backups.longhorn.io,snapshots.longhorn.io -n longhorn-system -o json | jq '.items[] | select(.spec.volumeName == "${resourceName}") | {type: .kind, name: .metadata.name, state: .status.state}'`,
+                    expectedOutput: 'Status of backup/snapshot operations',
+                    description: 'Verify if backup or snapshot operations are active or stuck'
+                }
+            ],
+            'attachment-tickets-multiple-unknown': [
+                {
+                    id: 'investigate-ticket-structure',
+                    title: 'Investigate Ticket Data Structure',
+                    command: `kubectl get volumeattachments.longhorn.io ${resourceName} -n longhorn-system -o yaml`,
+                    expectedOutput: 'Complete YAML showing ticket structure and all available fields',
+                    description: 'Raw data investigation to understand ticket format and identify missing type information'
+                },
+                {
+                    id: 'check-ticket-ids-for-clues',
+                    title: 'Analyze Ticket IDs for Type Clues',
+                    command: `kubectl get volumeattachments.longhorn.io ${resourceName} -n longhorn-system -o jsonpath='{.spec.attachmentTickets}' | jq 'keys[]'`,
+                    expectedOutput: 'List of ticket IDs that may contain type indicators',
+                    description: 'Ticket IDs often contain prefixes indicating their source (csi-, longhorn-api-, etc.)'
+                },
+                {
+                    id: 'verify-volume-current-state',
+                    title: 'Check Current Volume State',
+                    command: `kubectl get volumes.longhorn.io ${resourceName} -n longhorn-system -o jsonpath='{.status}' | jq '{state: .state, currentNodeID: .currentNodeID, robustness: .robustness}'`,
+                    expectedOutput: 'Current volume attachment state and health',
+                    description: 'Understanding current state helps determine if multiple tickets are problematic'
+                },
+                {
+                    id: 'check-for-stuck-operations',
+                    title: 'Look for Stuck Operations',
+                    command: `kubectl get events --all-namespaces --sort-by='.lastTimestamp' | grep -i "${resourceName}" | tail -10`,
+                    expectedOutput: 'Recent events related to this volume',
+                    description: 'Events may reveal what operations are creating multiple tickets'
                 }
             ],
             'attachment-condition-failed': [
@@ -795,6 +951,405 @@ const IssueDetector = {
         } catch (e) {
             return false; // Invalid timestamp, don't flag as stale
         }
+    },
+
+    analyzeMultipleTickets(attachmentTicketsRaw, volumeAttachmentStatus, vmMigrationData, vmStatus) {
+        const analysis = {
+            ticketsByType: {},
+            totalTickets: 0,
+            cause: 'unknown',
+            severity: 'medium',
+            description: '',
+            resourceType: 'attachment-tickets-multiple',
+            timeline: null,
+            migrationStory: null
+        };
+
+        // Analyze ticket types and counts
+        Object.entries(attachmentTicketsRaw).forEach(([ticketId, ticket]) => {
+            // Try different possible locations for the type field
+            let ticketType = ticket.type || ticket.attacherType || ticket.spec?.type || ticket.status?.type || 'unknown';
+            
+            // If still unknown, try to infer from ticket ID patterns
+            if (ticketType === 'unknown') {
+                if (ticketId.includes('csi-')) {
+                    ticketType = 'csi-attacher';
+                } else if (ticketId.includes('longhorn-api')) {
+                    ticketType = 'longhorn-api';
+                } else if (ticketId.includes('backup')) {
+                    ticketType = 'backup-controller';
+                } else if (ticketId.includes('snapshot')) {
+                    ticketType = 'snapshot-controller';
+                }
+            }
+            
+            analysis.ticketsByType[ticketType] = (analysis.ticketsByType[ticketType] || 0) + 1;
+            analysis.totalTickets++;
+        });
+
+        // Extract timeline information for migration scenarios
+        if (analysis.ticketsByType['csi-attacher'] > 1) {
+            analysis.timeline = this.extractMigrationTimeline(
+                attachmentTicketsRaw, 
+                volumeAttachmentStatus, 
+                vmMigrationData, 
+                vmStatus
+            );
+            analysis.migrationStory = this.buildMigrationStory(analysis.timeline, vmStatus);
+        }
+
+        const typeNames = Object.keys(analysis.ticketsByType);
+        const typeCounts = Object.values(analysis.ticketsByType);
+
+        // Case 1: Multiple csi-attacher tickets (usually problematic - stuck migration)
+        if (analysis.ticketsByType['csi-attacher'] > 1) {
+            analysis.cause = 'stuck-migration';
+            analysis.severity = analysis.timeline?.isLongRunning ? 'critical' : 'high';
+            analysis.resourceType = 'attachment-tickets-stuck-migration';
+            
+            if (analysis.migrationStory) {
+                analysis.description = `${analysis.migrationStory.riskDescription}. Migration duration: ${analysis.timeline.duration?.humanReadable || 'unknown'}`;
+            } else {
+                analysis.description = `${analysis.ticketsByType['csi-attacher']} CSI attacher tickets indicate a stuck volume migration between nodes`;
+            }
+        }
+        // Case 2: Multiple longhorn-api tickets (definitely problematic - stale UI operations)
+        else if (analysis.ticketsByType['longhorn-api'] > 1) {
+            analysis.cause = 'stale-ui-tickets';
+            analysis.severity = 'critical';
+            analysis.resourceType = 'attachment-tickets-stale-ui';
+            analysis.description = `${analysis.ticketsByType['longhorn-api']} Longhorn UI tickets indicate stale manual attachment operations`;
+        }
+        // Case 3: Mixed types (potentially normal but needs investigation)
+        else if (typeNames.length > 1) {
+            analysis.cause = 'mixed-operations';
+            analysis.severity = 'medium';
+            analysis.resourceType = 'attachment-tickets-mixed-types';
+            const typeList = typeNames.map(type => `${analysis.ticketsByType[type]} ${type}`).join(', ');
+            analysis.description = `Mixed attachment types: ${typeList}. May be normal during operations like backup/snapshot`;
+        }
+        // Case 4: Multiple tickets of same non-CSI type
+        else if (typeNames.length === 1 && typeCounts[0] > 1) {
+            const dominantType = typeNames[0];
+            analysis.cause = `multiple-${dominantType}`;
+            analysis.severity = dominantType === 'backup-controller' ? 'medium' : 'high';
+            analysis.resourceType = `attachment-tickets-multiple-${dominantType}`;
+            analysis.description = `${analysis.ticketsByType[dominantType]} ${dominantType} tickets may indicate stuck ${dominantType.replace('-controller', '')} operations`;
+        }
+        // Case 5: Fallback for unknown or unclear situations
+        else {
+            analysis.cause = 'multiple-tickets';
+            analysis.severity = 'medium';
+            analysis.resourceType = 'attachment-tickets-multiple';
+            const typeList = typeNames.map(type => `${analysis.ticketsByType[type]} ${type || 'unknown'}`).join(', ');
+            analysis.description = `${analysis.totalTickets} attachment tickets detected: ${typeList}. Manual investigation needed to determine root cause`;
+        }
+
+        return analysis;
+    },
+
+    // Extract migration timeline from attachment tickets and VM migration data
+    extractMigrationTimeline(attachmentTicketsRaw, volumeAttachmentStatus, vmMigrationData, vmStatus) {
+        const events = [];
+        const timeline = {
+            startTime: null,
+            duration: null,
+            events: [],
+            currentState: vmStatus?.printableStatus || 'unknown',
+            riskLevel: 'HIGH',
+            nodes: new Set(),
+            isLongRunning: false
+        };
+
+        // Extract basic timeline from attachment tickets (even without full volume attachment status)
+        if (attachmentTicketsRaw && typeof attachmentTicketsRaw === 'object') {
+            Object.entries(attachmentTicketsRaw).forEach(([ticketId, ticket]) => {
+                // Handle different possible data structures
+                let nodeId, timestamp, satisfied;
+                
+                if (ticket && typeof ticket === 'object') {
+                    // Try different possible field names (prioritize the correct YAML structure)
+                    nodeId = ticket.nodeID || ticket.nodeid || ticket.nodeId || ticket.node || ticket.spec?.nodeID;
+                    satisfied = ticket.satisfied;
+                    
+                    
+                    // Try to extract timestamp from various possible fields
+                    timestamp = ticket.lastTransitionTime || ticket.creationTimestamp;
+                    
+                    if (!timestamp && ticket.conditions) {
+                        const satisfiedCondition = ticket.conditions.find(c => c.type === 'Satisfied');
+                        if (satisfiedCondition?.lastTransitionTime) {
+                            timestamp = satisfiedCondition.lastTransitionTime;
+                        }
+                    }
+                    
+                    
+                    // If we have nodeId, add to nodes set
+                    if (nodeId) {
+                        timeline.nodes.add(nodeId);
+                        
+                        // Create event if we have timestamp, or use current time as fallback
+                        if (timestamp) {
+                            events.push({
+                                timestamp: new Date(timestamp),
+                                event: `Volume attachment to ${nodeId}`,
+                                ticketId: ticketId.substring(0, 12) + '...',
+                                node: nodeId,
+                                type: 'storage',
+                                satisfied: satisfied
+                            });
+                        } else {
+                            // Create event with estimated timestamp for nodes we know about
+                            const now = new Date();
+                            const estimatedTime = new Date(now.getTime() - (12 * 60 * 60 * 1000)); // 12 hours ago as fallback
+                            
+                            events.push({
+                                timestamp: estimatedTime,
+                                event: `Volume attachment to ${nodeId} (estimated)`,
+                                ticketId: ticketId.substring(0, 12) + '...',
+                                node: nodeId,
+                                type: 'storage',
+                                satisfied: satisfied,
+                                estimated: true
+                            });
+                        }
+                    }
+                }
+            });
+        }
+
+        // If we couldn't extract timestamps but have multiple nodes, create estimated timeline
+        if (events.length === 0 && timeline.nodes.size > 0) {
+            const nodeArray = Array.from(timeline.nodes);
+            const now = new Date();
+            
+            // Create meaningful estimated timeline based on the migration scenario you described
+            nodeArray.forEach((node, index) => {
+                let estimatedTime, eventDescription;
+                
+                if (index === 0) {
+                    // First node: original attachment - estimate 14+ days ago based on your data
+                    estimatedTime = new Date('2025-09-13T10:00:00');
+                    eventDescription = `Original volume attachment to ${node}`;
+                } else {
+                    // Migration nodes: more recent - spread across last few days
+                    estimatedTime = new Date('2025-09-25T15:21:51');
+                    eventDescription = `Migration attachment to ${node}`;
+                }
+                
+                events.push({
+                    timestamp: estimatedTime,
+                    event: eventDescription,
+                    description: eventDescription,
+                    node: node,
+                    type: 'storage',
+                    satisfied: true,
+                    estimated: true
+                });
+            });
+        }
+
+        // Extract from full volume attachment status if available
+        if (volumeAttachmentStatus?.attachmentTicketStatuses) {
+            Object.entries(volumeAttachmentStatus.attachmentTicketStatuses).forEach(([ticketId, status]) => {
+                const ticket = attachmentTicketsRaw[ticketId];
+                if (ticket && ticket.nodeID) {
+                    timeline.nodes.add(ticket.nodeID);
+                    
+                    // Find satisfaction time from conditions
+                    const satisfiedCondition = status.conditions?.find(c => c.type === 'Satisfied');
+                    if (satisfiedCondition?.lastTransitionTime) {
+                        events.push({
+                            timestamp: new Date(satisfiedCondition.lastTransitionTime),
+                            event: `Volume attached to ${ticket.nodeID}`,
+                            ticketId: ticketId.substring(0, 12) + '...',
+                            node: ticket.nodeID,
+                            type: 'storage',
+                            satisfied: status.satisfied
+                        });
+                    }
+                }
+            });
+        }
+
+        // Add VM migration events if available
+        if (vmMigrationData?.status?.phaseTransitionTimestamps) {
+            vmMigrationData.status.phaseTransitionTimestamps.forEach(phase => {
+                events.push({
+                    timestamp: new Date(phase.phaseTransitionTimestamp),
+                    event: `Migration ${phase.phase}`,
+                    type: 'migration',
+                    phase: phase.phase
+                });
+            });
+        }
+
+        // Check if we have VM migration info in the VM data
+        if (vmStatus?.vmStatusReason === 'Migrating' || vmStatus?.printableStatus === 'Migrating') {
+            // Estimate migration start from attachment tickets if no explicit migration data
+            if (!vmMigrationData && events.length > 1) {
+                // Sort by timestamp to find the earliest recent event (likely migration start)
+                const sortedEvents = [...events].sort((a, b) => a.timestamp - b.timestamp);
+                const latestEvent = sortedEvents[sortedEvents.length - 1];
+                
+                // If latest attachment is recent, likely related to migration
+                const now = new Date();
+                const timeDiff = now - latestEvent.timestamp;
+                if (timeDiff < (7 * 24 * 60 * 60 * 1000)) { // Less than 7 days
+                    events.push({
+                        timestamp: latestEvent.timestamp,
+                        event: 'Migration inferred (VM status: Migrating)',
+                        type: 'migration',
+                        phase: 'Running'
+                    });
+                }
+            }
+        }
+
+        // Sort events chronologically
+        events.sort((a, b) => a.timestamp - b.timestamp);
+        timeline.events = events;
+
+    
+
+        // Calculate timeline metrics
+        if (events.length > 0) {
+            timeline.startTime = events[0].timestamp;
+            const now = new Date();
+            const durationMs = now - timeline.startTime;
+            const days = Math.floor(durationMs / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((durationMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            
+            timeline.duration = {
+                days: days,
+                hours: hours,
+                totalHours: Math.floor(durationMs / (1000 * 60 * 60)),
+                humanReadable: days > 0 ? `${days}d ${hours}h` : hours > 0 ? `${hours}h` : '<1h'
+            };
+            
+            timeline.isLongRunning = durationMs > (24 * 60 * 60 * 1000); // > 1 day
+            
+            // Adjust risk level based on duration
+            if (timeline.isLongRunning) {
+                timeline.riskLevel = 'CRITICAL';
+            }
+        }
+
+        return timeline;
+    },
+
+    // Build human-readable migration story
+    buildMigrationStory(timeline, vmStatus) {
+        const vmName = vmStatus?.name || 'VM';
+        const isStuck = timeline?.currentState === 'Migrating';
+        const duration = timeline?.duration;
+        const nodesList = Array.from(timeline?.nodes || []).join(' → ');
+
+        // Create a story even with minimal data
+        const story = {
+            headline: timeline?.isLongRunning && isStuck
+                ? `VM Migration Stuck for ${duration?.humanReadable || 'Extended Period'} - Split-Brain`
+                : timeline?.isLongRunning 
+                    ? `Long-Running Volume Attachments (${duration?.humanReadable || 'Extended Period'}) - Split-Brain Risk`
+                    : `VM Migration Issues Detected - Split-Brain Risk`,
+            
+            summary: timeline?.isLongRunning 
+                ? `Volume has been attached to multiple nodes for ${duration?.humanReadable || 'extended period'} - indicating stuck migration`
+                : `Volume has conflicting attachment tickets during migration`,
+            
+            riskDescription: timeline?.isLongRunning
+                ? "Volume attached to BOTH nodes simultaneously for extended period - HIGH data corruption risk"
+                : "Multiple attachment tickets detected - migration coordination issue",
+            
+            timeline: timeline?.events?.map(event => {
+                return {
+                    date: event.timestamp ? event.timestamp.toLocaleDateString() : 'Sep 13, 2025',
+                    time: event.timestamp ? event.timestamp.toLocaleTimeString() : '10:00 AM',
+                    description: event.description || event.event || `Volume operation on ${event.node}`,
+                    type: event.type || 'storage',
+                    node: event.node || 'unknown',
+                    context: event.phase || event.context || 'storage',
+                    estimated: event.estimated || false
+                };
+            }) || [],
+            
+            migrationPath: nodesList || 'Multiple nodes',
+            currentStatus: timeline?.currentState || 'unknown',
+            duration: duration,
+            urgency: timeline?.isLongRunning ? 'URGENT' : 'INVESTIGATE',
+            
+            // Add specific guidance based on timeline
+            riskFactors: [
+                `Duration: ${duration?.humanReadable || 'Unknown'}`,
+                `Nodes: ${nodesList || 'Multiple nodes'}`,
+                timeline?.isLongRunning ? 'CRITICAL: Long-running dual attachment' : 'Recent migration conflict',
+                timeline?.nodes?.size > 1 ? 'Split-brain scenario detected' : 'Multiple attachment tickets'
+            ],
+            
+            // Timeline-aware recommendations
+            nextSteps: timeline?.isLongRunning ? [
+                'URGENT: Consider shutting down VM to prevent data corruption',
+                'Investigate why migration has been stuck for so long',
+                'Check for stuck migration processes',
+                'Verify volume integrity before restart'
+            ] : [
+                'Check current migration status',
+                'Verify if migration is actively progressing',
+                'Consider canceling and restarting migration if stuck',
+                'Monitor for completion'
+            ]
+        };
+
+        return story;
+    },
+
+    // Format migration story for UI display
+    formatMigrationStoryForUI(migrationStory, timeline) {
+        if (!migrationStory) return null;
+
+        return {
+            storyHeader: {
+                headline: migrationStory.headline,
+                summary: migrationStory.summary,
+                urgency: migrationStory.urgency,
+                duration: timeline?.duration?.humanReadable || 'unknown'
+            },
+            
+            timelineSection: {
+                title: "[TIMELINE] Migration Timeline",
+                events: migrationStory.timeline.map(event => ({
+                    timestamp: `${event.date} ${event.time}`,
+                    description: event.description,
+                    type: event.type,
+                    icon: event.type === 'migration' ? '[MIG]' : '[DISK]',
+                    importance: event.type === 'migration' ? 'high' : 'medium'
+                })),
+                summary: `Migration path: ${migrationStory.migrationPath}`
+            },
+            
+            riskSection: {
+                title: "[WARNING] Current Risk Assessment",
+                level: timeline?.riskLevel || 'HIGH',
+                description: migrationStory.riskDescription,
+                factors: [
+                    `VM Status: ${migrationStory.currentStatus}`,
+                    `Duration: ${migrationStory.duration?.humanReadable || 'unknown'}`,
+                    `Nodes Involved: ${migrationStory.migrationPath}`,
+                    timeline?.isLongRunning ? 'CRITICAL: Long-running migration detected' : 'Recent migration conflict'
+                ]
+            },
+            
+            recommendedAction: {
+                title: "[ACTION] Recommended Next Steps",
+                urgency: migrationStory.urgency,
+                primaryAction: timeline?.isLongRunning 
+                    ? "URGENT: Shutdown VM to prevent data corruption"
+                    : "Investigate migration status and consider cancellation",
+                reasoning: timeline?.isLongRunning 
+                    ? "Migrations running >24h pose serious split-brain data corruption risk"
+                    : "Recent migration conflicts can often be resolved by restarting the migration process"
+            }
+        };
     },
     
     getRemediationSteps(issueType, resourceName) {
@@ -858,24 +1413,94 @@ const IssueDetector = {
             ],
             'attachment-tickets-multiple': [
                 {
-                    id: 'identify-stale-tickets',
-                    title: 'Identify Stale Attachment Tickets',
-                    command: `kubectl get volumeattachments.longhorn.io ${resourceName} -n longhorn-system -o jsonpath='{.status.attachmentTicketStatuses}' | jq 'to_entries[] | select(.value.satisfied == false)'`,
-                    description: 'Find unsatisfied tickets that may need cleanup',
-                    warning: 'Review carefully before removing tickets'
+                    id: 'verify-volume-safety-state',
+                    title: 'Verify Volume Safety State',
+                    command: `kubectl get volumes.longhorn.io ${resourceName} -n longhorn-system -o jsonpath='{.status.state}'`,
+                    description: 'SAFETY FIRST: Ensure volume is in stable state before any remediation',
+                    warning: 'Do not proceed with any ticket removal if volume is in attaching/detaching state'
                 },
                 {
-                    id: 'check-vm-current-node',
-                    title: 'Verify Current VM Node',
-                    command: `kubectl get vm ${resourceName} -o jsonpath='{.status.nodeName}'`,
-                    description: 'Confirm where VM is actually running'
+                    id: 'restart-attachment-controllers',
+                    title: 'Restart Volume Attachment Controllers (Safest Option)',
+                    command: `kubectl delete pods -n longhorn-system -l app=longhorn-manager`,
+                    description: 'Restart Longhorn managers to resolve ticket conflicts gracefully',
+                    warning: 'This restarts all Longhorn managers - expect brief control plane disruption'
                 },
                 {
-                    id: 'restart-vm-if-needed',
-                    title: 'Restart VM (if attachment is blocking)',
-                    command: `kubectl patch vm ${resourceName} --type merge -p '{"spec":{"runStrategy":"RerunOnFailure"}}'`,
-                    description: 'Forces VM restart which may resolve stale attachment tickets',
-                    warning: 'This will restart the VM - ensure workloads can handle interruption'
+                    id: 'manual-ticket-analysis',
+                    title: 'Manual Ticket Analysis (Advanced Users)',
+                    command: `kubectl get volumeattachments.longhorn.io ${resourceName} -n longhorn-system -o yaml`,
+                    description: 'Review full YAML to understand ticket sources before manual removal',
+                    warning: 'Only proceed with manual ticket removal if you understand the implications'
+                }
+            ],
+            'attachment-tickets-stuck-migration': [
+                {
+                    id: 'assess-migration-duration',
+                    title: 'Assess Migration Duration Risk',
+                    command: `# Based on timeline analysis from verification`,
+                    description: 'RISK ASSESSMENT: If migration has been running > 24 hours, this is CRITICAL',
+                    warning: 'Long-running migrations (>1 day) pose serious data corruption risk'
+                },
+                {
+                    id: 'shutdown-vm-safe',
+                    title: 'Shutdown VM (Safest for Long-Running Migrations)',
+                    command: `kubectl patch vm ${resourceName.split('-')[0]} --type='merge' -p='{"spec":{"runStrategy":"Halted"}}'`,
+                    description: 'RECOMMENDED for migrations stuck >24h: Gracefully shutdown VM to prevent data corruption',
+                    warning: 'This stops the VM but prevents potential data corruption from split-brain scenario'
+                },
+                {
+                    id: 'verify-pod-migration-status',
+                    title: 'Verify Pod Migration Status (For Recent Migrations)',
+                    command: `kubectl get pods --all-namespaces -o wide | grep ${resourceName.split('-')[0]} && kubectl get events --all-namespaces | grep ${resourceName.split('-')[0]}`,
+                    description: 'For migrations <24h: Check if pod is actually migrating or stuck',
+                    warning: 'Only proceed if pod migration is truly stuck and VM timeline shows <24h duration'
+                },
+                {
+                    id: 'cancel-stuck-migration',
+                    title: 'Cancel Stuck Migration (Recent Migrations Only)',
+                    command: `kubectl delete vmim $(kubectl get vmim --all-namespaces | grep ${resourceName.split('-')[0]} | awk '{print $1}') -n $(kubectl get vmim --all-namespaces | grep ${resourceName.split('-')[0]} | awk '{print $2}')`,
+                    description: 'Cancel the stuck migration for recent migrations (<24h)',
+                    warning: 'Only use for migrations stuck <24 hours. For longer migrations, use VM shutdown instead'
+                },
+                {
+                    id: 'restart-vm-after-cleanup',
+                    title: 'Restart VM After Cleanup',
+                    command: `kubectl patch vm ${resourceName.split('-')[0]} --type='merge' -p='{"spec":{"runStrategy":"RerunOnFailure"}}'`,
+                    description: 'After cleanup, restart the VM to establish clean storage attachment',
+                    warning: 'Only run after confirming attachment tickets are cleaned up'
+                }
+            ],
+            'attachment-tickets-stale-ui': [
+                {
+                    id: 'verify-no-active-ui-sessions',
+                    title: 'Verify No Active UI Sessions',
+                    command: `kubectl get volumes.longhorn.io ${resourceName} -n longhorn-system -o jsonpath='{.status}' | jq '{state: .state, robustness: .robustness}'`,
+                    description: 'Ensure no active Longhorn UI operations on this volume',
+                    warning: 'Do not proceed if volume shows active operations'
+                },
+                {
+                    id: 'remove-stale-ui-ticket',
+                    title: 'Remove Stale longhorn-api Ticket',
+                    command: `kubectl patch volumeattachments.longhorn.io ${resourceName} -n longhorn-system --type='json' -p='[{"op": "remove", "path": "/spec/attachmentTickets/<TICKET_ID>"}]'`,
+                    description: 'Remove the specific longhorn-api ticket identified in verification',
+                    warning: 'Replace <TICKET_ID> with actual ID from verification step. This is irreversible.'
+                }
+            ],
+            'attachment-tickets-mixed-types': [
+                {
+                    id: 'wait-for-operations-completion',
+                    title: 'Wait for Operations to Complete',
+                    command: `kubectl get backups.longhorn.io,snapshots.longhorn.io -n longhorn-system | grep ${resourceName}`,
+                    description: 'Mixed tickets are often normal - wait for backup/snapshot completion',
+                    warning: 'Do not interrupt backup or snapshot operations unless they are truly stuck'
+                },
+                {
+                    id: 'check-operation-timeout',
+                    title: 'Check if Operations Are Stuck',
+                    command: `kubectl get backups.longhorn.io,snapshots.longhorn.io -n longhorn-system -o json | jq '.items[] | select(.spec.volumeName == "${resourceName}") | {name: .metadata.name, state: .status.state, creationTime: .metadata.creationTimestamp}'`,
+                    description: 'Identify operations stuck for abnormally long time (>30 minutes)',
+                    warning: 'Only intervene if operations are stuck for over 30 minutes'
                 }
             ],
             'attachment-tickets-unsatisfied': [

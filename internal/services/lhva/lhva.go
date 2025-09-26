@@ -41,12 +41,12 @@ func ParseLHVAStatus(lhvaData map[string]interface{}) (interface{}, error) {
 
 	statusRaw, ok := lhvaData["status"]
 	if !ok {
-		return nil, fmt.Errorf("status field missing in LHVA data")
+		return nil, fmt.Errorf("LHVA status field missing in LHVA data")
 	}
 
 	lhvaStatus, ok := statusRaw.(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("status field is not an object")
+		return nil, fmt.Errorf("LHVA status field is not an object")
 	}
 
 	attachmentTicketStatusesRaw, ok := lhvaStatus["attachmentTicketStatuses"]
@@ -54,4 +54,26 @@ func ParseLHVAStatus(lhvaData map[string]interface{}) (interface{}, error) {
 		return nil, fmt.Errorf("attachmentTicketStatuses field missing in LHVA status")
 	}
 	return attachmentTicketStatusesRaw, nil
+}
+
+func ParseLHVASpec(lhvaData map[string]interface{}) (interface{}, error) {
+	if lhvaData == nil {
+		return nil, fmt.Errorf("LHVA data is nil")
+	}
+
+	specRaw, ok := lhvaData["spec"]
+	if !ok {
+		return nil, fmt.Errorf("LHVA spec field is missing in the LHVA data")
+	}
+
+	lhvaSpec, ok := specRaw.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("LHVA spec is not an object")
+	}
+
+	attachmentTicketSpecRaw, ok := lhvaSpec["attachmentTickets"]
+	if !ok {
+		return nil, fmt.Errorf("attachmentTicket field missing in LHVA spec")
+	}
+	return attachmentTicketSpecRaw, nil
 }

@@ -99,7 +99,7 @@ const NodeRenderer = {
             <!-- Issues indicator if any -->
             ${nodeIssues.length > 0 ? `
                 <div class="pt-3 border-t border-slate-600">
-                    <div class="text-red-400 text-sm font-medium">⚠️ ${nodeIssues.length} issue${nodeIssues.length > 1 ? 's' : ''}</div>
+                    <div class="text-red-400 text-sm font-medium">[ISSUES] ${nodeIssues.length} issue${nodeIssues.length > 1 ? 's' : ''}</div>
                 </div>
             ` : ''}
 
@@ -120,7 +120,7 @@ const NodeRenderer = {
         pdbIndicator = `
             <div class="pt-2 border-t border-slate-600 mt-3">
                 <div class="${severityClass} text-sm font-medium flex items-center gap-1">
-                    <span>⚠️</span>
+                    <span>[WARNING]</span>
                     PDB: ${pdbHealth.issueCount} issue${pdbHealth.issueCount > 1 ? 's' : ''}
                     <span class="text-xs px-1 py-0.5 rounded ${this.getSeverityBadge(pdbHealth.severity)}">${pdbHealth.severity.toUpperCase()}</span>
                 </div>
