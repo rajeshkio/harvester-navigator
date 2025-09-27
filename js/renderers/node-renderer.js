@@ -60,6 +60,20 @@ const NodeRenderer = {
         const isReady = (longhornReadyCondition && longhornReadyCondition.status === 'True') ||
                        (k8sReadyCondition && k8sReadyCondition.status === 'True');
 
+        const isSchedulable = !node.kubernetesInfo?.unschedulable;
+
+        let statusText, statusClass;
+        if (!isReady) {
+            statusText = 'Not Ready';
+            statusClass = 'bg-red-700/80 text-red-200';
+        } else if (!isSchedulable) {
+            statusText = 'Ready, SchedulingDisabled';
+            statusClass = 'bg-yellow-700/80 text-yellow-200';
+        } else {
+            statusText = 'Ready';
+            statusClass = 'bg-green-700/80 text-green-200';
+        }
+
         const nodeMetrics = this.getNodeMetrics(node);
         
         const card = document.createElement('div');
@@ -71,8 +85,8 @@ const NodeRenderer = {
             <!-- Top line: Node name and status badge -->
             <div class="flex justify-between items-center mb-4">
                 <h3 class="font-semibold text-white text-base">${nodeName}</h3>
-                <span class="px-2 py-1 text-sm font-medium rounded ${isReady ? 'bg-green-700/80 text-green-200' : 'bg-red-700/80 text-red-200'}">
-                    ${isReady ? 'Ready' : 'Not Ready'}
+                <span class="px-2 py-1 text-sm font-medium rounded ${statusClass} ? 'bg-green-700/80 text-green-200' : 'bg-red-700/80 text-red-200'}">
+                    ${statusText}
                 </span>
             </div>
 

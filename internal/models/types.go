@@ -73,6 +73,7 @@ type KubernetesNodeInfo struct {
 	VolumesAttached []VolumeAttachment `json:"volumesAttached"`
 	VolumesInUse    []string           `json:"volumesInUse"`
 	Annotations     map[string]string  `json:"annotations"`
+	Unschedulable   bool               `json:"unschedulable"`
 }
 
 // NodeSystemInfo contains system information about the node

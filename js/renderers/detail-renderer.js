@@ -152,8 +152,10 @@ const DetailRenderer = {
         try {
             // Kubernetes health checks
             if (nodeData && nodeData.kubernetesInfo && nodeData.kubernetesInfo.conditions && Array.isArray(nodeData.kubernetesInfo.conditions)) {
-                nodeData.kubernetesInfo.conditions.forEach((condition, index) => {
-                    
+                if (nodeData.kubernetesInfo && nodeData.kubernetesInfo.unschedulable === true) {
+                    warnings.push('Node is cordoned (scheduling disabled)');
+                }
+                nodeData.kubernetesInfo.conditions.forEach((condition, index) => {      
                     if (condition && condition.type === 'Ready' && condition.status !== 'True') {
                         issues.push({
                             type: 'Node Not Ready',
@@ -161,7 +163,6 @@ const DetailRenderer = {
                             severity: 'critical'
                         });
                     }
-                    
                     if (condition && ['MemoryPressure', 'DiskPressure', 'PIDPressure'].includes(condition.type) && condition.status === 'True') {
                         warnings.push(`${condition.type} detected`);
                     }
@@ -518,15 +519,37 @@ const DetailRenderer = {
 
     // Keep existing utility methods
     getNodeStatusBadge(nodeData) {
-        const status = this.getNodeStatus(nodeData);
-        if (status === 'Ready') return 'bg-green-700 text-green-200';
-        return 'bg-red-700 text-red-200';
+        const k8sReady = this.getNodeStatus(nodeData);
+        const isSchedulable = !nodeData.kubernetesInfo?.unschedulable;
+        
+        if (!k8sReady) {
+            return 'bg-red-700/80 text-red-200';
+        } else if (!isSchedulable) {
+            return 'bg-yellow-700/80 text-yellow-200';
+        } else {
+            return 'bg-green-700/80 text-green-200';
+        }
     },
 
     getNodeStatus(nodeData) {
+        // Debug logging - remove after fixing
+        console.log("=== NODE STATUS DEBUG ===");
+        console.log("nodeData:", nodeData);
+        console.log("kubernetesInfo:", nodeData?.kubernetesInfo);
+        console.log("unschedulable field:", nodeData?.kubernetesInfo?.unschedulable);
+        console.log("conditions:", nodeData?.kubernetesInfo?.conditions);
+        console.log("========================");
+        
         const k8sReady = nodeData.kubernetesInfo?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
-        if (k8sReady) return 'Ready';
-        return 'Not Ready';
+        const isSchedulable = !nodeData.kubernetesInfo?.unschedulable;
+
+        if (!k8sReady) {
+            return 'Not Ready';
+        } else if (!isSchedulable) {
+            return 'Ready, SchedulingDisabled';
+        } else {
+            return 'Ready';
+        }
     },
 
     parseStorageSize(sizeStr) {
@@ -1060,20 +1083,6 @@ const DetailRenderer = {
             'paused': 'bg-blue-700 text-blue-200'
         };
         return statusMap[status?.toLowerCase()] || 'bg-slate-600 text-slate-300';
-    },
-
-    getNodeStatusBadge(nodeData) {
-        const status = this.getNodeStatus(nodeData);
-        if (status === 'Ready') return 'bg-green-700 text-green-200';
-        return 'bg-red-700 text-red-200';
-    },
-
-    // Duplicate analyzeNodeHealth method removed - using the detailed version above
-
-    getNodeStatus(nodeData) {
-        const k8sReady = nodeData.kubernetesInfo?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
-        if (k8sReady) return 'Ready';
-        return 'Not Ready';
     },
 
     parseStorageSize(sizeStr) {
