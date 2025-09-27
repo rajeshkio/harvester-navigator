@@ -58,12 +58,12 @@ const DetailRenderer = {
                             ${this.renderHealth(nodeData, healthSummary)}
                             ${this.renderResources(nodeData)}
                             ${this.renderSystem(nodeData)}
+                            ${this.renderQuickCommands(nodeName)}
                         </div>
 
                         <!-- Right Column -->
                         <div class="space-y-6">
                             ${this.renderStorage(nodeData.longhornInfo ? nodeData.longhornInfo.disks : [])}
-                            ${this.renderQuickCommands(nodeName)}
                         </div>
                     </div>
                 </div>
@@ -152,8 +152,10 @@ const DetailRenderer = {
         try {
             // Kubernetes health checks
             if (nodeData && nodeData.kubernetesInfo && nodeData.kubernetesInfo.conditions && Array.isArray(nodeData.kubernetesInfo.conditions)) {
-                nodeData.kubernetesInfo.conditions.forEach((condition, index) => {
-                    
+                if (nodeData.kubernetesInfo && nodeData.kubernetesInfo.unschedulable === true) {
+                    warnings.push('Node is cordoned (scheduling disabled)');
+                }
+                nodeData.kubernetesInfo.conditions.forEach((condition, index) => {      
                     if (condition && condition.type === 'Ready' && condition.status !== 'True') {
                         issues.push({
                             type: 'Node Not Ready',
@@ -161,7 +163,6 @@ const DetailRenderer = {
                             severity: 'critical'
                         });
                     }
-                    
                     if (condition && ['MemoryPressure', 'DiskPressure', 'PIDPressure'].includes(condition.type) && condition.status === 'True') {
                         warnings.push(`${condition.type} detected`);
                     }
@@ -437,6 +438,31 @@ const DetailRenderer = {
         `;
     },
 
+    detectSplitBrain(vmiInfo) {
+        if (!vmiInfo || !vmiInfo.length) {
+            return { hasSplitBrain: false };
+        }
+        
+        const activePods = vmiInfo[0].activePods || {};
+        const podUIDs = Object.keys(activePods);
+        
+        if (podUIDs.length <= 1) {
+            return { hasSplitBrain: false };
+        }
+        
+        // Get unique nodes where pods are running
+        const uniqueNodes = [...new Set(Object.values(activePods))];
+        
+        return {
+            hasSplitBrain: uniqueNodes.length > 1,
+            totalPods: podUIDs.length,
+            nodes: uniqueNodes,
+            podsPerNode: uniqueNodes.map(node => ({
+                node,
+                podCount: Object.values(activePods).filter(n => n === node).length
+            }))
+        };
+    },
     getDiskDisplayName(diskPath) {
         if (!diskPath) return 'Unknown';
         
@@ -461,32 +487,32 @@ const DetailRenderer = {
             {
                 title: 'View Running Pods',
                 command: `kubectl get pods --all-namespaces --field-selector spec.nodeName=${nodeName}`,
-                icon: '[SYNC]'
+                icon: ''
             },
             {
                 title: 'List All Replicas on Node',
                 command: `kubectl get replicas.longhorn.io -n longhorn-system -l longhornnode=${nodeName}`,
-                icon: '[SYNC]'
+                icon: ''
             },
             {
                 title: 'Node Describe',
                 command: `kubectl describe node ${nodeName}`,
-                icon: '🔍'
+                icon: ''
             },
             {
                 title: 'List Instance Managers on Node',
                 command: `kubectl get instancemanager -n longhorn-system -l longhorn.io/node=${nodeName}`,
-                icon: '⚙️'
+                icon: ''
             },
             {
                 title: 'List All Volumes (check nodeID column)',
                 command: `kubectl get volumes.longhorn.io -n longhorn-system -o wide`,
-                icon: '📀'
+                icon: ''
             },
             {
                 title: 'Check Storage Resources by Node',
                 command: `echo '=== ENGINES ==='; kubectl get engines.longhorn.io -n longhorn-system -l longhornnode=${nodeName}; echo ''; echo '=== REPLICAS ==='; kubectl get replicas.longhorn.io -n longhorn-system -l longhornnode=${nodeName}; echo ''; echo '=== INSTANCE MANAGERS ==='; kubectl get instancemanager -n longhorn-system -l longhorn.io/node=${nodeName}`,
-                icon: '[DISK]'
+                icon: ''
             }
         ];
 
@@ -518,15 +544,30 @@ const DetailRenderer = {
 
     // Keep existing utility methods
     getNodeStatusBadge(nodeData) {
-        const status = this.getNodeStatus(nodeData);
-        if (status === 'Ready') return 'bg-green-700 text-green-200';
-        return 'bg-red-700 text-red-200';
+        const k8sReady = this.getNodeStatus(nodeData);
+        const isSchedulable = !nodeData.kubernetesInfo?.unschedulable;
+        
+        if (!k8sReady) {
+            return 'bg-red-700/80 text-red-200';
+        } else if (!isSchedulable) {
+            return 'bg-yellow-700/80 text-yellow-200';
+        } else {
+            return 'bg-green-700/80 text-green-200';
+        }
     },
 
     getNodeStatus(nodeData) {
+        
         const k8sReady = nodeData.kubernetesInfo?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
-        if (k8sReady) return 'Ready';
-        return 'Not Ready';
+        const isSchedulable = !nodeData.kubernetesInfo?.unschedulable;
+
+        if (!k8sReady) {
+            return 'Not Ready';
+        } else if (!isSchedulable) {
+            return 'Ready, SchedulingDisabled';
+        } else {
+            return 'Ready';
+        }
     },
 
     parseStorageSize(sizeStr) {
@@ -635,6 +676,7 @@ const DetailRenderer = {
         const vmName = vmData.name || 'Unknown VM';
         const status = vmData.printableStatus || 'Unknown';
         const namespace = vmData.namespace || 'default';
+        const splitBrainInfo = this.detectSplitBrain(vmData.vmiInfo);
         
         return `
             <div class="bg-slate-800 rounded-lg">
@@ -671,22 +713,45 @@ const DetailRenderer = {
                         </div>
                     </div>
                 </div>
+                ${splitBrainInfo.hasSplitBrain ? `
+                    <div class="p-6 border-b border-slate-700">
+                        <div class="p-4 bg-red-900/40 border border-red-600/50 rounded-lg">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="text-red-400 text-xl">⚠️</span>
+                                <span class="text-red-300 font-semibold text-lg">CRITICAL: Split-Brain Detected</span>
+                            </div>
+                            <div class="text-red-200 mb-3">
+                                VM has ${splitBrainInfo.totalPods} pods running on ${splitBrainInfo.nodes.length} different nodes simultaneously. This can cause data corruption!
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-${splitBrainInfo.nodes.length} gap-4">
+                                ${splitBrainInfo.podsPerNode.map(nodeInfo => `
+                                    <div class="bg-red-800/30 rounded p-3 text-center">
+                                        <div class="text-red-300 font-mono text-sm">${nodeInfo.node}</div>
+                                        <div class="text-red-200 text-xs">${nodeInfo.podCount} pod${nodeInfo.podCount > 1 ? 's' : ''}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                ` : ''}
 
                 <div class="p-6">
                     <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
                         
                         <!-- Left Column: Compute & Migration -->
                         <div class="space-y-6">
-                            ${this.renderCompute(vmData)}
-                            ${this.renderMigration(vmData.vmimInfo || [], vmData.vmiInfo)}
+                            ${this.renderComputeResources(vmData)}
+                            ${this.renderPodDetails(vmData, splitBrainInfo)}
                             ${this.renderVMErrors(vmData.errors || [])}
+                            ${this.renderVolumeAttachment(vmData.attachmentTicketsRaw)}
+                            ${this.renderMigration(vmData.vmimInfo || [], vmData.vmiInfo)}
                         </div>
 
                         <!-- Right Column: Storage & Replicas -->
                         <div class="space-y-6">
-                            ${this.renderVMStorage(vmData)}
-                            ${this.renderVolumeAttachment(vmData.attachmentTicketsRaw)}
+                            ${this.renderVMStorage(vmData)}   
                             ${this.renderStorageReplicas(vmData)}
+                            ${this.renderVolumeAttachment(vmData.attachmentTicketsRaw)}
                         </div>
                     </div>
                 </div>
@@ -1062,20 +1127,6 @@ const DetailRenderer = {
         return statusMap[status?.toLowerCase()] || 'bg-slate-600 text-slate-300';
     },
 
-    getNodeStatusBadge(nodeData) {
-        const status = this.getNodeStatus(nodeData);
-        if (status === 'Ready') return 'bg-green-700 text-green-200';
-        return 'bg-red-700 text-red-200';
-    },
-
-    // Duplicate analyzeNodeHealth method removed - using the detailed version above
-
-    getNodeStatus(nodeData) {
-        const k8sReady = nodeData.kubernetesInfo?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
-        if (k8sReady) return 'Ready';
-        return 'Not Ready';
-    },
-
     parseStorageSize(sizeStr) {
         if (!sizeStr || sizeStr === '0') return 0;
         const numValue = parseFloat(sizeStr);
@@ -1347,22 +1398,18 @@ const DetailRenderer = {
         `;
     },
 
-    renderCompute(vmData) {
-        // Get VMI info - check multiple possible data sources
+    renderComputeResources(vmData) {
         const vmiInfo = vmData.vmiInfo && vmData.vmiInfo.length > 0 ? vmData.vmiInfo[0] : null;
-        const podInfo = vmData.podInfo && vmData.podInfo.length > 0 ? vmData.podInfo[0] : null;
         
-        // Extract CPU and Memory from different possible locations
+        // Extract CPU and Memory logic (same as before)
         let cpuCores = 'N/A';
         let memory = 'N/A';
         
         if (vmiInfo) {
-            // Memory: Use memoryInfo fields that actually exist
             memory = (vmiInfo.memoryInfo && vmiInfo.memoryInfo.guestCurrent) ||
                     (vmiInfo.memoryInfo && vmiInfo.memoryInfo.guestRequested) ||
                     (vmiInfo.memoryInfo && vmiInfo.memoryInfo.guestAtBoot) || 'N/A';
             
-            // CPU: Use the new CPU topology fields from the updated backend
             const coresFromCurrentTopology = vmiInfo.currentCPUTopology && vmiInfo.currentCPUTopology.cores;
             const coresFromDomain = vmiInfo.cpuDomain && vmiInfo.cpuDomain.cores;
             
@@ -1370,97 +1417,92 @@ const DetailRenderer = {
                 cpuCores = `${coresFromCurrentTopology} cores`;
             } else if (coresFromDomain) {
                 cpuCores = `${coresFromDomain} cores`;
-            } else {
-                cpuCores = 'N/A';
             }
         }
         
-        const vmiName = vmiInfo && vmiInfo.name ? vmiInfo.name : vmData.name || 'N/A';
         const vmiPhase = vmiInfo && vmiInfo.phase ? vmiInfo.phase : vmData.phase || 'N/A';
-        const nodeName = (vmiInfo && vmiInfo.nodeName) || (podInfo && (podInfo.nodeName || podInfo.nodeId)) || vmData.nodeName || 'N/A';
-        
-        // Pod IP: Check multiple possible sources including VMI interfaces
-        const podIP = (podInfo && podInfo.podIP) || 
-                     (podInfo && podInfo.ip) || 
-                     (vmiInfo && vmiInfo.interfaces && vmiInfo.interfaces[0] && vmiInfo.interfaces[0].ipAddress) ||
-                     'N/A';
+        const nodeName = vmiInfo && vmiInfo.nodeName || vmData.nodeName || 'N/A';
         
         return `
-            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-6">
-                <div class="flex items-center gap-3 mb-6">
-                    <span class="text-xl">💻</span>
-                    <h2 class="text-xl font-semibold text-white">Compute Resources</h2>
+            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-lg">💻</span>
+                    <h2 class="text-lg font-medium text-white">Compute Resources</h2>
                 </div>
                 
-                <!-- Resource Summary Cards -->
-                <div class="grid grid-cols-2 gap-6 mb-6">
-                    <div class="bg-slate-800/60 rounded-lg p-4 text-center">
-                        <div class="text-2xl font-bold text-blue-400 mb-1">${cpuCores}</div>
-                        <div class="text-sm text-slate-400 uppercase tracking-wide">CPU</div>
+                <!-- Resource Cards -->
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div class="bg-slate-800/60 rounded p-3 text-center">
+                        <div class="text-xl font-bold text-blue-400">${cpuCores}</div>
+                        <div class="text-xs text-slate-400">CPU</div>
                     </div>
-                    <div class="bg-slate-800/60 rounded-lg p-4 text-center">
-                        <div class="text-2xl font-bold text-green-400 mb-1">${memory}</div>
-                        <div class="text-sm text-slate-400 uppercase tracking-wide">Memory</div>
-                    </div>
-                </div>
-
-                <!-- Virtual Machine Instance Details -->
-                <div class="mb-6">
-                    <h3 class="text-lg font-medium text-white mb-4 flex items-center gap-2">
-                        <span class="w-2 h-2 bg-blue-400 rounded-full"></span>
-                        Instance Details
-                    </h3>
-                    <div class="bg-slate-800/40 rounded-lg p-4">
-                        <div class="grid grid-cols-1 gap-3">
-                            <div class="flex justify-between items-center">
-                                <span class="text-slate-400 font-medium">Phase</span>
-                                <span class="px-3 py-1 rounded-full text-xs font-medium ${vmiPhase === 'Running' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}">${vmiPhase}</span>
-                            </div>
-                            <div class="flex justify-between items-center">
-                                <span class="text-slate-400 font-medium">Node</span>
-                                <span class="text-slate-200 font-mono">${nodeName}</span>
-                            </div>
-                        </div>
+                    <div class="bg-slate-800/60 rounded p-3 text-center">
+                        <div class="text-xl font-bold text-green-400">${memory}</div>
+                        <div class="text-xs text-slate-400">Memory</div>
                     </div>
                 </div>
 
-                <!-- Pod Details -->
-                <div>
-                    <h3 class="text-lg font-medium text-white mb-4 flex items-center gap-2">
-                        <span class="w-2 h-2 bg-purple-400 rounded-full"></span>
-                        Pod Information
-                    </h3>
-                    ${podInfo ? `
-                        <div class="bg-slate-800/40 rounded-lg p-4">
-                            <div class="grid grid-cols-1 gap-3">
-                                <div class="flex justify-between items-center">
-                                    <span class="text-slate-400 font-medium">Pod Name</span>
-                                    <span class="text-purple-300 font-mono text-sm bg-slate-700 px-2 py-1 rounded">${vmData.podName || 'N/A'}</span>
-                                </div>
-                                <div class="flex justify-between items-center">
-                                    <span class="text-slate-400 font-medium">Node</span>
-                                    <span class="text-slate-200 font-mono">${podInfo.nodeId || podInfo.nodeName || 'N/A'}</span>
-                                </div>
-                                <div class="flex justify-between items-center">
-                                    <span class="text-slate-400 font-medium">Status</span>
-                                    <span class="px-3 py-1 rounded-full text-xs font-medium ${(podInfo.status || podInfo.phase) === 'Running' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}">${podInfo.status || podInfo.phase || 'N/A'}</span>
-                                </div>
-                                <div class="flex justify-between items-center">
-                                    <span class="text-slate-400 font-medium">IP Address</span>
-                                    <span class="text-green-300 font-mono bg-slate-700 px-2 py-1 rounded">${podIP}</span>
-                                </div>
-                            </div>
-                        </div>
-                    ` : `
-                        <div class="bg-slate-800/40 rounded-lg p-4">
-                            <div class="text-center py-4 text-slate-400">No pod information available</div>
-                        </div>
-                    `}
+                <!-- Instance Status -->
+                <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
+                    <span class="text-slate-400">Phase:</span>
+                    <span class="px-2 py-1 rounded text-xs ${vmiPhase === 'Running' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}">${vmiPhase}</span>
+                    
+                    <span class="text-slate-400">Node:</span>
+                    <span class="text-slate-200 font-mono">${nodeName}</span>
                 </div>
             </div>
         `;
     },
 
+    renderPodDetails(vmData, splitBrainInfo) {
+        const vmiInfo = vmData.vmiInfo && vmData.vmiInfo.length > 0 ? vmData.vmiInfo[0] : null;
+        const podInfo = vmData.podInfo && vmData.podInfo.length > 0 ? vmData.podInfo[0] : null;
+        
+        return `
+            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-lg">🔗</span>
+                    <h2 class="text-lg font-medium text-white">Pod Information</h2>
+                    ${splitBrainInfo.hasSplitBrain ? `
+                        <span class="px-2 py-1 text-xs bg-red-600/80 text-red-200 rounded font-medium">
+                            SPLIT-BRAIN
+                        </span>
+                    ` : ''}
+                </div>
+                
+                ${vmiInfo && vmiInfo.activePods && Object.keys(vmiInfo.activePods).length > 0 ? `
+                    <div class="space-y-2">
+                        <div class="text-sm text-slate-400 mb-2">
+                            Active Pods: ${Object.keys(vmiInfo.activePods).length}
+                            ${splitBrainInfo.hasSplitBrain ? ' ⚠️' : ''}
+                        </div>
+                        ${Object.entries(vmiInfo.activePods).map(([podUID, nodeName]) => {
+                            // Get actual pod name or fall back to generated name
+                            const podName = vmiInfo.activePodNames && vmiInfo.activePodNames[podUID] 
+                                ? vmiInfo.activePodNames[podUID]
+                                : `virt-launcher-${vmData.name}-${podUID.substring(0, 5)}`;
+                            
+                            return `
+                                <div class="border border-slate-600 rounded p-2 ${splitBrainInfo.hasSplitBrain ? 'border-red-500/30 bg-red-900/10' : ''}">
+                                    <div class="space-y-1">
+                                        <div class="flex justify-between items-center text-sm">
+                                            <span class="text-purple-300 font-mono text-xs">${podName}</span>
+                                            <span class="text-slate-200 font-mono">${nodeName}</span>
+                                        </div>
+                                        <div class="text-xs text-slate-400">
+                                            UID: ${podUID.substring(0, 8)}...${podUID.substring(podUID.length - 8)}
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                ` : `
+                    <div class="text-center py-4 text-slate-400">No pod information available</div>
+                `}
+            </div>
+        `;
+    },
  
     renderMigration(vmimInfo, vmiInfo) {
         const migration = vmimInfo && vmimInfo.length > 0 ? vmimInfo[0] : null;
@@ -1472,7 +1514,7 @@ const DetailRenderer = {
                         <span class="text-lg">[SYNC]</span>
                         <h2 class="text-lg font-medium text-white">Migration</h2>
                     </div>
-                    <div class="text-center py-4 text-slate-400">No migration information available</div>
+                    <div class="text-center py-4 text-slate-400">No active migrations</div>
                 </div>
             `;
         }
@@ -1482,34 +1524,20 @@ const DetailRenderer = {
                 <div class="flex items-center gap-2 mb-4">
                     <span class="text-lg">[SYNC]</span>
                     <h2 class="text-lg font-medium text-white">Migration</h2>
+                    <span class="px-2 py-1 text-xs rounded ${migration.phase === 'Running' ? 'bg-yellow-600/80 text-yellow-200' : 'bg-slate-600/80 text-slate-200'}">${migration.phase}</span>
                 </div>
                 
-                <div class="space-y-3">
-                    <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-                        <span class="text-slate-400">Status:</span>
-                        <span class="text-slate-300">${migration.migrationState || migration.phase || 'N/A'}</span>
-                        
-                        <span class="text-slate-400">Source:</span>
-                        <span class="text-blue-300 font-mono">${migration.sourceNode || 'N/A'}</span>
-                        
-                        <span class="text-slate-400">Target:</span>
-                        <span class="text-green-300 font-mono">${migration.targetNode || 'N/A'}</span>
-                        
-                        ${migration.startTimestamp ? `
-                            <span class="text-slate-400">Started:</span>
-                            <span class="text-slate-300">${new Date(migration.startTimestamp).toLocaleString()}</span>
-                        ` : ''}
-                        
-                        ${migration.endTimestamp ? `
-                            <span class="text-slate-400">Completed:</span>
-                            <span class="text-slate-300">${new Date(migration.endTimestamp).toLocaleString()}</span>
-                        ` : ''}
-                        
-                        ${migration.targetPodStatus ? `
-                            <span class="text-slate-400">Target Pod:</span>
-                            <span class="text-slate-300">${migration.targetPodStatus}</span>
-                        ` : ''}
-                    </div>
+                <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
+                    <span class="text-slate-400">Source:</span>
+                    <span class="text-blue-300 font-mono">${migration.sourceNode || 'N/A'}</span>
+                    
+                    <span class="text-slate-400">Target:</span>
+                    <span class="text-green-300 font-mono">${migration.targetNode || 'N/A'}</span>
+                    
+                    ${migration.startTimestamp ? `
+                        <span class="text-slate-400">Started:</span>
+                        <span class="text-slate-300 text-xs">${new Date(migration.startTimestamp).toLocaleString()}</span>
+                    ` : ''}
                 </div>
             </div>
         `;

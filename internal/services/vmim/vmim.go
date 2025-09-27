@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	types "github.com/rk280392/harvesterNavigator/internal/models"
 	"k8s.io/client-go/kubernetes"
@@ -65,7 +66,7 @@ func FetchAllVMIMsForVMI(client *kubernetes.Clientset, vmiName, absPath, namespa
 	for _, item := range items {
 		if itemMap, ok := item.(map[string]interface{}); ok {
 			// Check if this VMIM is for our VMI
-			if targetVMI, err := extractVMINameFromVMIM(itemMap); err == nil && targetVMI == vmiName {
+			if isVMIMForVMI(itemMap, vmiName) {
 				result = append(result, itemMap)
 			}
 		}
@@ -87,6 +88,41 @@ func ParseVMIMData(vmimDataList []map[string]interface{}, client *kubernetes.Cli
 	}
 
 	return vmimInfos, nil
+}
+
+func isVMIMForVMI(vmimData map[string]interface{}, vmiName string) bool {
+	// Method 1: Direct spec.vmiName reference
+	if targetVMI, err := extractVMINameFromVMIM(vmimData); err == nil && targetVMI == vmiName {
+		return true
+	}
+
+	// Method 2: Check metadata labels (evacuation migrations)
+	if metadata, ok := vmimData["metadata"].(map[string]interface{}); ok {
+		if labels, ok := metadata["labels"].(map[string]interface{}); ok {
+			// Check for VMI name in labels
+			if labelVMI, ok := labels["kubevirt.io/vmiName"].(string); ok && labelVMI == vmiName {
+				return true
+			}
+		}
+	}
+
+	// Method 3: Check status.vmiName (some evacuations store it here)
+	if status, ok := vmimData["status"].(map[string]interface{}); ok {
+		if statusVMI, ok := status["vmiName"].(string); ok && statusVMI == vmiName {
+			return true
+		}
+	}
+
+	// Method 4: Check if VMIM name contains VMI name (evacuation pattern)
+	if metadata, ok := vmimData["metadata"].(map[string]interface{}); ok {
+		if vmimName, ok := metadata["name"].(string); ok {
+			if strings.Contains(vmimName, vmiName) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // parseVMIMDetailed processes a single VMIM object with full detail extraction
@@ -179,46 +215,39 @@ func parseVMIMDetailed(vmimData map[string]interface{}, client *kubernetes.Clien
 							vmimInfo.SourceNode = sourceNode
 						}
 					}
-
 					if sourcePodRaw, ok := migrationState["sourcePod"]; ok {
 						if sourcePod, ok := sourcePodRaw.(string); ok {
 							vmimInfo.SourcePod = sourcePod
 						}
 					}
-
 					// Extract target node and pod
 					if targetNodeRaw, ok := migrationState["targetNode"]; ok {
 						if targetNode, ok := targetNodeRaw.(string); ok {
 							vmimInfo.TargetNode = targetNode
 						}
 					}
-
 					if targetPodRaw, ok := migrationState["targetPod"]; ok {
 						if targetPod, ok := targetPodRaw.(string); ok {
 							vmimInfo.TargetPod = targetPod
 						}
 					}
-
 					if targetNodeAddressRaw, ok := migrationState["targetNodeAddress"]; ok {
 						if targetNodeAddress, ok := targetNodeAddressRaw.(string); ok {
 							vmimInfo.TargetNodeAddress = targetNodeAddress
 						}
 					}
-
 					// Extract start timestamp
 					if startTimestampRaw, ok := migrationState["startTimestamp"]; ok {
 						if startTimestamp, ok := startTimestampRaw.(string); ok {
 							vmimInfo.StartTimestamp = startTimestamp
 						}
 					}
-
 					// Extract migration mode
 					if modeRaw, ok := migrationState["mode"]; ok {
 						if mode, ok := modeRaw.(string); ok {
 							vmimInfo.MigrationMode = mode
 						}
 					}
-
 					// Extract migration configuration
 					if configRaw, ok := migrationState["migrationConfiguration"]; ok {
 						if config, ok := configRaw.(map[string]interface{}); ok {

@@ -73,6 +73,7 @@ type KubernetesNodeInfo struct {
 	VolumesAttached []VolumeAttachment `json:"volumesAttached"`
 	VolumesInUse    []string           `json:"volumesInUse"`
 	Annotations     map[string]string  `json:"annotations"`
+	Unschedulable   bool               `json:"unschedulable"`
 }
 
 // NodeSystemInfo contains system information about the node
@@ -254,11 +255,13 @@ type VMIInfo struct {
 	NodeName           string            `json:"nodeName"`
 	Phase              string            `json:"phase"`
 	ActivePods         map[string]string `json:"activePods"`
+	ActivePodNames     map[string]string `json:"activePodNames"`
 	GuestOSInfo        *GuestOSInfo      `json:"guestOSInfo"`
 	MemoryInfo         *MemoryInfo       `json:"memoryInfo"`
 	Interfaces         []Interface       `json:"interfaces"`
 	CurrentCPUTopology *CPUTopology      `json:"currentCPUTopology,omitempty"`
 	CPUDomain          *CPUDomain        `json:"cpuDomain,omitempty"`
+	MigrationInfo      *VMIMInfo         `json:"migrationInfo,omitempty"`
 }
 
 // VMIMInfo represents information about a Virtual Machine Instance Migration

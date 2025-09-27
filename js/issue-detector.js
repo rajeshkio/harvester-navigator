@@ -101,7 +101,8 @@ const IssueDetector = {
         }
         // Merge status and spec data for attachment tickets
         const attachmentTicketsData = this.mergeAttachmentTicketsData(vm);
-        
+
+        vm.attachmentTicketsRaw = attachmentTicketsData;        
         if (attachmentTicketsData && typeof attachmentTicketsData === 'object') {
             const ticketIds = Object.keys(attachmentTicketsData);
             

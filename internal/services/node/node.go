@@ -142,7 +142,11 @@ func ParseKubernetesNodeData(nodes []interface{}) (map[string]*models.Kubernetes
 			if _, ok := status["allocatable"].(map[string]interface{}); ok {
 				nodeInfo.Allocatable = getStringMap(status, "allocatable")
 			}
-
+			if spec, ok := nodeMap["spec"].(map[string]interface{}); ok {
+				if unschedulable, ok := spec["unschedulable"].(bool); ok {
+					nodeInfo.Unschedulable = unschedulable
+				}
+			}
 			// Extract volumes attached and in use
 			if volumesAttached, ok := status["volumesAttached"].([]interface{}); ok {
 				for _, vol := range volumesAttached {
