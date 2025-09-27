@@ -131,18 +131,77 @@ const IssueRenderer = {
         }
         // Default display for other issues
         else {
+            
+        if (issue.resourceType === 'attachment-tickets-stuck-migration' && issue.attachmentDetails?.migrationStory) {
+            const story = issue.attachmentDetails.migrationStory;
             card.innerHTML = `
-                <div class="flex justify-between items-start">
+                <div class="flex justify-between items-start mb-2">
                     <div class="flex items-center gap-2">
                         <span class="text-lg">${severityIcon}</span>
                         <div>
-                            <h4 class="font-semibold text-slate-200 text-sm">${issue.title}</h4>
-                            <p class="text-slate-400 text-xs">${issue.affectedResource}</p>
+                            <h4 class="font-semibold text-slate-200 text-sm">${story.headline || issue.title}</h4>
+                            <p class="text-slate-300 text-xs mt-1">${story.summary}</p>
                         </div>
                     </div>
                     <span class="text-xs px-2 py-1 rounded ${Utils.getSeverityBadgeClass(issue.severity)}">${issue.severity.toUpperCase()}</span>
                 </div>
+                
+                <div class="mt-2 pt-2 border-t border-slate-600/30">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-slate-400">Affected VM:</span>
+                        <span class="text-orange-300 font-medium">${issue.vmName}</span>
+                    </div>
+                    ${story.duration ? `
+                        <div class="flex items-center justify-between text-xs mt-1">
+                            <span class="text-slate-400">Duration:</span>
+                            <span class="text-red-300 font-medium">${story.duration.humanReadable}</span>
+                        </div>
+                    ` : ''}
+                    <div class="flex items-center justify-between text-xs mt-1">
+                        <span class="text-slate-400">Migration Path:</span>
+                        <span class="text-blue-300 font-mono text-xs">${story.migrationPath}</span>
+                    </div>
+                </div>
             `;
+        }
+        else if (issue.resourceType?.includes('attachment-tickets') && issue.attachmentDetails) {
+            const details = issue.attachmentDetails;
+            card.innerHTML = `
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg">${severityIcon}</span>
+                        <div>
+                            <h4 class="font-semibold text-slate-200 text-sm">${issue.title}</h4>
+                            <p class="text-slate-300 text-xs mt-1">
+                                <span class="text-orange-300 font-medium">VM ${issue.vmName}</span> has 
+                                <span class="text-red-300 font-medium">${details.ticketCount} attachment tickets</span>
+                            </p>
+                        </div>
+                    </div>
+                    <span class="text-xs px-2 py-1 rounded ${Utils.getSeverityBadgeClass(issue.severity)}">${issue.severity.toUpperCase()}</span>
+                </div>
+                
+                <div class="mt-2 pt-2 border-t border-slate-600/30">
+                    <div class="text-xs text-slate-400 mb-1">Issue Type:</div>
+                    <div class="text-xs text-slate-300">${issue.description}</div>
+                </div>
+            `;
+        }
+        // Default display for other issues
+        else {
+            card.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div class="flex items-center gap-2">
+                            <span class="text-lg">${severityIcon}</span>
+                            <div>
+                                <h4 class="font-semibold text-slate-200 text-sm">${issue.title}</h4>
+                                <p class="text-slate-400 text-xs">${issue.affectedResource}</p>
+                            </div>
+                        </div>
+                        <span class="text-xs px-2 py-1 rounded ${Utils.getSeverityBadgeClass(issue.severity)}">${issue.severity.toUpperCase()}</span>
+                    </div>
+                `;
+        }
         }
         
         card.onclick = () => ViewManager.showIssueDetail(issue.id);
