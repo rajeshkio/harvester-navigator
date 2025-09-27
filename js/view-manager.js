@@ -177,70 +177,7 @@ const ViewManager = {
 
         const detailHTML = `
             <div class="card p-6 fade-in">
-                <div class="flex justify-between items-start mb-6">
-                    <div>
-                        <div class="flex items-center gap-3 mb-3">
-                            <span class="text-3xl">${Utils.getSeverityIcon(issue.severity)}</span>
-                            <div>
-                                <h3 class="text-2xl font-bold text-slate-100">${issue.title}</h3>
-                                <span class="text-xs px-2 py-1 rounded ${Utils.getSeverityBadgeClass(issue.severity)}">${issue.severity.toUpperCase()}</span>
-                            </div>
-                        </div>
-                        <p class="text-slate-300 max-w-3xl">${issue.description}</p>
-                    </div>
-                    <div class="text-right text-sm text-slate-400">
-                        <div>Detected: ${Utils.formatTimestamp(issue.detectionTime)}</div>
-                        <div class="font-mono text-xs mt-1">ID: ${issue.id}</div>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div>
-                        <h4 class="text-xl font-bold text-white mb-4 flex items-center gap-2">🔍 Verification Steps</h4>
-                        <div class="space-y-4">
-                            ${issue.verificationSteps.map((step, index) => `
-                                <div class="verification-step border-l-4 border-slate-600 bg-slate-850 p-4 rounded-r-lg">
-                                    <h5 class="font-semibold text-slate-200 mb-2">${index + 1}. ${step.title}</h5>
-                                    <p class="text-sm text-slate-400 mb-3">${step.description}</p>
-                                    <div class="bg-slate-950 p-3 rounded font-mono text-sm text-green-300 mb-2 relative group">
-                                        <span class="text-cyan-400">$</span> ${step.command}
-                                        <button onclick="Utils.copyToClipboard('${step.command}')" class="absolute top-2 right-2 bg-slate-700 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                                            📋
-                                        </button>
-                                    </div>
-                                    <div class="text-xs text-slate-500">Expected: ${step.expectedOutput}</div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-
-                    <div>
-                        <h4 class="text-xl font-bold text-white mb-4 flex items-center gap-2">🛠️ Remediation Steps</h4>
-                        <div class="space-y-4">
-                            ${issue.remediationSteps.map((step, index) => `
-                                <div class="verification-step border-l-4 border-slate-600 bg-slate-850 p-4 rounded-r-lg">
-                                    <div class="flex justify-between items-center mb-2">
-                                        <h5 class="font-semibold text-slate-200">${index + 1}. ${step.title}</h5>
-                                        <button onclick="Utils.copyToClipboard('${step.command}')" class="bg-green-600 text-white px-3 py-1 rounded text-xs font-medium hover:bg-green-700 transition-colors">
-                                            📋 Copy
-                                        </button>
-                                    </div>
-                                    <p class="text-sm text-slate-400 mb-3">${step.description}</p>
-                                    ${this.renderRemediationCommand(step)}
-                                    ${step.warning ? `<div class="mt-2 text-xs text-yellow-400 bg-yellow-500/10 p-2 rounded flex items-center gap-2">⚠️ ${step.warning}</div>` : ''}
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mt-6 bg-slate-800/30 p-4 rounded-lg">
-                    <h4 class="font-bold text-slate-200 mb-2">Affected Resources</h4>
-                    <div class="flex gap-2 flex-wrap">
-                        <span class="bg-slate-700 px-2 py-1 rounded text-xs">${issue.affectedResource}</span>
-                        <span class="bg-slate-700 px-2 py-1 rounded text-xs">Category: ${issue.category}</span>
-                    </div>
-                </div>
+                ${IssueRenderer.renderIssueDetail(issue)}
             </div>
         `;
 
@@ -260,14 +197,14 @@ const ViewManager = {
                 return `
                     <div class="bg-slate-950 p-3 rounded mb-2">
                         <div class="flex items-center gap-2">
-                            <span class="text-blue-400">🔗</span>
+                            <span class="text-blue-400">[LINK]</span>
                             <a href="${url}" target="_blank" rel="noopener noreferrer" 
                             class="text-blue-400 hover:text-blue-300 underline">
                                 ${url}
                             </a>
                             <button onclick="Utils.copyToClipboard('${url}')" 
                                     class="bg-slate-700 text-white px-2 py-1 rounded text-xs hover:bg-slate-600 transition-colors">
-                                📋
+                                Copy
                             </button>
                         </div>
                     </div>
@@ -300,16 +237,16 @@ const ViewManager = {
             warning: 'text-yellow-400'
         };
         const iconMap = { 
-            info: '📋', 
-            error: '❌', 
-            success: '✅',
-            warning: '⚠️'
+            info: '[INFO]', 
+            error: '[ERROR]', 
+            success: '[SUCCESS]',
+            warning: '[WARNING]'
         };
         
         const statusElement = document.getElementById('upgrade-status');
         if (statusElement) {
             statusElement.innerHTML = 
-                `<span class="${colorMap[type] || 'text-slate-300'}">${iconMap[type] || '📋'} ${message}</span>`;
+                `<span class="${colorMap[type] || 'text-slate-300'}">${iconMap[type] || '[INFO]'} ${message}</span>`;
         }
     }
 };

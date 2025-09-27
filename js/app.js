@@ -14,8 +14,7 @@ class HarvesterDashboardApp {
 
     async startDataFetching() {
         try {
-            ViewManager.updateUpgradeStatus('info', 'Connecting to server...');
-            
+            ViewManager.updateUpgradeStatus('info', 'Connecting to server...'); 
             const response = await fetch('/data');
             
             // Check if the response is ok
@@ -31,9 +30,11 @@ class HarvesterDashboardApp {
             
             const data = await response.json();
             AppState.updateData(data);
+    
             // Note: upgrade status will be updated by displayUpgradeInfo method
             
         } catch (error) {
+            
             
             // Provide user-friendly error messages based on error type
             let userMessage = 'Unable to connect to server';
@@ -41,11 +42,11 @@ class HarvesterDashboardApp {
             if (error.name === 'TypeError' && error.message.includes('fetch')) {
                 userMessage = 'Server is not responding - please check if the backend is running';
             } else if (error.message.includes('500')) {
-                userMessage = 'Server error - please check backend logs';
+                userMessage = 'Server error - please check backend logs';      
             } else if (error.message.includes('404')) {
-                userMessage = 'Data endpoint not found - check server configuration';
+                userMessage = 'Data endpoint not found - check server configuration';  
             } else if (error.message.includes('JSON')) {
-                userMessage = 'Server returned invalid data format';
+                userMessage = 'Server returned invalid data format'; 
             }
             
             ViewManager.updateUpgradeStatus('error', userMessage);
@@ -61,7 +62,7 @@ class HarvesterDashboardApp {
             dashboard.innerHTML = `
                 <div class="text-center py-12">
                     <div class="bg-red-900/20 border border-red-500/30 rounded-lg p-8 max-w-md mx-auto">
-                        <div class="text-6xl mb-4">⚠️</div>
+                        <div class="text-6xl mb-4">[ERROR]</div>
                         <h2 class="text-xl font-semibold text-red-400 mb-3">Connection Error</h2>
                         <p class="text-slate-300 mb-6">${message}</p>
                         
@@ -73,7 +74,7 @@ class HarvesterDashboardApp {
                         
                         <button id="retry-connection" 
                                 class="bg-slate-700 hover:bg-slate-600 px-6 py-2 rounded-lg text-sm transition-colors">
-                            <span>🔄</span> Retry Connection
+                            <span>Retry Connection</span>
                         </button>
                     </div>
                 </div>
@@ -83,7 +84,7 @@ class HarvesterDashboardApp {
             const retryButton = document.getElementById('retry-connection');
             if (retryButton) {
                 retryButton.addEventListener('click', () => {
-                    retryButton.innerHTML = '<span class="animate-spin">🔄</span> Connecting...';
+                    retryButton.innerHTML = '<span class="animate-spin">[...]</span> Connecting...';
                     retryButton.disabled = true;
                     
                     setTimeout(() => {
@@ -99,6 +100,20 @@ class HarvesterDashboardApp {
         if (!container) return; // Safety check
 
         container.addEventListener('click', (event) => {
+            // Handle copy button clicks first
+            if (event.target.classList.contains('copy-command-btn') || event.target.closest('.copy-command-btn')) {
+                event.preventDefault();
+                event.stopPropagation();
+                
+                const button = event.target.classList.contains('copy-command-btn') ? event.target : event.target.closest('.copy-command-btn');
+                const command = button.getAttribute('data-copy-text');
+                
+                if (command) {
+                    Utils.copyToClipboard(command);
+                }
+                return;
+            }
+
             // Find the closest button if a click happens on an element inside a button
             const button = event.target.closest('button');
             if (!button) return;
@@ -166,18 +181,18 @@ class HarvesterDashboardApp {
             AppState.updateData(data);
             
             // Success feedback
-            refreshIcon.textContent = '✅';
+            refreshIcon.textContent = '[OK]';
             // Note: upgrade status will be updated by displayUpgradeInfo method
             
             setTimeout(() => {
-                refreshIcon.textContent = '🔄';
+                refreshIcon.textContent = '[REFRESH]';
                 refreshIcon.style.animation = '';
             }, 1000);
             
         } catch (error) {
             
             // Error feedback
-            refreshIcon.textContent = '❌';
+            refreshIcon.textContent = '[ERROR]';
             
             // Provide user-friendly error message
             let userMessage = 'Refresh failed';
@@ -192,7 +207,7 @@ class HarvesterDashboardApp {
             ViewManager.updateUpgradeStatus('error', userMessage);
             
             setTimeout(() => {
-                refreshIcon.textContent = '🔄';
+                refreshIcon.textContent = '[REFRESH]';
                 refreshIcon.style.animation = '';
             }, 2000);
             
@@ -230,22 +245,22 @@ class HarvesterDashboardApp {
         }
 
         let stateColor = 'text-slate-300';
-        let stateIcon = '📋';
+        let stateIcon = '[INFO]';
         
         switch (state.toLowerCase()) {
             case 'succeeded':
                 stateColor = 'text-green-400';
-                stateIcon = '✅';
+                stateIcon = '[OK]';
                 break;
             case 'failed':
                 stateColor = 'text-red-400';
-                stateIcon = '❌';
+                stateIcon = '[FAIL]';
                 break;
             case 'upgrading':
             case 'upgradingsystemservices':
             case 'upgradingnodes':
                 stateColor = 'text-yellow-400';
-                stateIcon = '🔄';
+                stateIcon = '[PROGRESS]';
                 break;
         }
 
@@ -271,12 +286,12 @@ class HarvesterDashboardApp {
             
             // Order matters - show progression from success to stuck states
             const statusOrder = [
-                { key: 'Succeeded', icon: '✅', color: 'text-green-400', bgColor: 'bg-green-900/20 border-green-600/30' },
-                { key: 'Images preloaded', icon: '📦', color: 'text-blue-400', bgColor: 'bg-blue-900/20 border-blue-600/30' },
-                { key: 'Pre-draining', icon: '🔄', color: 'text-yellow-400', bgColor: 'bg-yellow-900/20 border-yellow-600/30' },
-                { key: 'Draining', icon: '⏳', color: 'text-orange-400', bgColor: 'bg-orange-900/20 border-orange-600/30' },
-                { key: 'Upgrading', icon: '⚡', color: 'text-purple-400', bgColor: 'bg-purple-900/20 border-purple-600/30' },
-                { key: 'Failed', icon: '❌', color: 'text-red-400', bgColor: 'bg-red-900/20 border-red-600/30' }
+                { key: 'Succeeded', icon: '[OK]', color: 'text-green-400', bgColor: 'bg-green-900/20 border-green-600/30' },
+                { key: 'Images preloaded', icon: '[READY]', color: 'text-blue-400', bgColor: 'bg-blue-900/20 border-blue-600/30' },
+                { key: 'Pre-draining', icon: '[PREP]', color: 'text-yellow-400', bgColor: 'bg-yellow-900/20 border-yellow-600/30' },
+                { key: 'Draining', icon: '[DRAIN]', color: 'text-orange-400', bgColor: 'bg-orange-900/20 border-orange-600/30' },
+                { key: 'Upgrading', icon: '[UPG]', color: 'text-purple-400', bgColor: 'bg-purple-900/20 border-purple-600/30' },
+                { key: 'Failed', icon: '[FAIL]', color: 'text-red-400', bgColor: 'bg-red-900/20 border-red-600/30' }
             ];
             
             statusOrder.forEach(({ key, icon, color, bgColor }) => {

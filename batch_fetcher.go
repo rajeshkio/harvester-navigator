@@ -310,7 +310,11 @@ func (df *DataFetcher) processVMWithBatchedData(
 			if err == nil {
 				lhvaStatus, err := lhva.ParseLHVAStatus(lhvaData)
 				if err == nil {
-					vmInfo.AttachmentTicketsRaw = lhvaStatus
+					vmInfo.AttachmentTicketsStatusRaw = lhvaStatus
+				}
+				lhvaSpec, err := lhva.ParseLHVASpec(lhvaData)
+				if err == nil {
+					vmInfo.AttachmentTicketsSpecRaw = lhvaSpec
 				}
 			}
 		}
