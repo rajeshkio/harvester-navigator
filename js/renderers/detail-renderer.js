@@ -438,21 +438,45 @@ const DetailRenderer = {
         `;
     },
 
-    detectSplitBrain(vmiInfo) {
-        if (!vmiInfo || !vmiInfo.length) {
+    detectSplitBrain(vmData) {
+        if (!vmData.vmiInfo || !vmData.vmiInfo.length) {
             return { hasSplitBrain: false };
         }
         
-        const activePods = vmiInfo[0].activePods || {};
+        const activePods = vmData.vmiInfo[0].activePods || {};
         const podUIDs = Object.keys(activePods);
         
         if (podUIDs.length <= 1) {
             return { hasSplitBrain: false };
         }
         
-        // Get unique nodes where pods are running
-        const uniqueNodes = [...new Set(Object.values(activePods))];
+        // CRITICAL FIX: Check actual pod status to filter out completed/failed pods
+        if (vmData.podInfo && Array.isArray(vmData.podInfo)) {
+            // Only consider pods that are actually Running or Pending (not Completed/Failed/Succeeded)
+            const runningPods = vmData.podInfo.filter(pod => 
+                pod.status === 'Running' || pod.status === 'Pending'
+            );
+            
+            if (runningPods.length <= 1) {
+                return { hasSplitBrain: false };
+            }
+            
+            // Get nodes for running pods only
+            const runningNodes = [...new Set(runningPods.map(pod => pod.nodeId))];
+            
+            return {
+                hasSplitBrain: runningNodes.length > 1,
+                totalPods: runningPods.length,
+                nodes: runningNodes,
+                podsPerNode: runningNodes.map(node => ({
+                    node,
+                    podCount: runningPods.filter(pod => pod.nodeId === node).length
+                }))
+            };
+        }
         
+        // Fallback to original logic if no pod status info available
+        const uniqueNodes = [...new Set(Object.values(activePods))];
         return {
             hasSplitBrain: uniqueNodes.length > 1,
             totalPods: podUIDs.length,
@@ -676,7 +700,7 @@ const DetailRenderer = {
         const vmName = vmData.name || 'Unknown VM';
         const status = vmData.printableStatus || 'Unknown';
         const namespace = vmData.namespace || 'default';
-        const splitBrainInfo = this.detectSplitBrain(vmData.vmiInfo);
+        const splitBrainInfo = this.detectSplitBrain(vmData);
         
         return `
             <div class="bg-slate-800 rounded-lg">
@@ -1482,15 +1506,48 @@ const DetailRenderer = {
                                 ? vmiInfo.activePodNames[podUID]
                                 : `virt-launcher-${vmData.name}-${podUID.substring(0, 5)}`;
                             
+                            // Find pod status from podInfo by matching node or by VM name
+                            let podStatus = 'Unknown';
+                            if (vmData.podInfo) {
+                                // Try to find by node first
+                                let podInfo = vmData.podInfo.find(pod => pod.nodeId === nodeName);
+                                
+                                // If not found by node, try to match by VM name
+                                if (!podInfo) {
+                                    podInfo = vmData.podInfo.find(pod => pod.vmi === vmData.name);
+                                }
+                                
+                                podStatus = podInfo?.status || 'Unknown';
+                            }
+                            
+                            // Get status badge styling
+                            const getStatusBadge = (status) => {
+                                const statusMap = {
+                                    'running': 'bg-green-600/80 text-green-100',
+                                    'pending': 'bg-yellow-600/80 text-yellow-100',
+                                    'succeeded': 'bg-blue-600/80 text-blue-100',
+                                    'completed': 'bg-blue-600/80 text-blue-100',
+                                    'failed': 'bg-red-600/80 text-red-100',
+                                    'error': 'bg-red-600/80 text-red-100',
+                                    'unknown': 'bg-slate-600/80 text-slate-300'
+                                };
+                                return statusMap[status?.toLowerCase()] || 'bg-slate-600/80 text-slate-200';
+                            };
+                            
                             return `
                                 <div class="border border-slate-600 rounded p-2 ${splitBrainInfo.hasSplitBrain ? 'border-red-500/30 bg-red-900/10' : ''}">
-                                    <div class="space-y-1">
+                                    <div class="space-y-2">
                                         <div class="flex justify-between items-center text-sm">
                                             <span class="text-purple-300 font-mono text-xs">${podName}</span>
                                             <span class="text-slate-200 font-mono">${nodeName}</span>
                                         </div>
-                                        <div class="text-xs text-slate-400">
-                                            UID: ${podUID.substring(0, 8)}...${podUID.substring(podUID.length - 8)}
+                                        <div class="flex justify-between items-center">
+                                            <div class="text-xs text-slate-400">
+                                                UID: ${podUID.substring(0, 8)}...${podUID.substring(podUID.length - 8)}
+                                            </div>
+                                            <span class="px-2 py-1 text-xs font-medium rounded ${getStatusBadge(podStatus)}">
+                                                ${podStatus}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>

@@ -213,6 +213,23 @@ const VMRenderer = {
             const getHasSplitBrain = (vm) => {
                 if (!vm.vmiInfo || !vm.vmiInfo.length || !vm.vmiInfo[0].activePods) return false;
                 const activePods = vm.vmiInfo[0].activePods;
+                
+                if (Object.keys(activePods).length <= 1) return false;
+                
+                if (vm.podInfo && Array.isArray(vm.podInfo)) {
+                    // Only consider pods that are actually Running or Pending (not Completed/Failed/Succeeded)
+                    const runningPods = vm.podInfo.filter(pod => 
+                        pod.status === 'Running' || pod.status === 'Pending'
+                    );
+                    
+                    if (runningPods.length <= 1) return false;
+                    
+                    // Get nodes for running pods only
+                    const runningNodes = [...new Set(runningPods.map(pod => pod.nodeId))];
+                    return runningNodes.length > 1;
+                }
+                
+                // Fallback to original logic if no pod status info available
                 const nodes = [...new Set(Object.values(activePods))];
                 return Object.keys(activePods).length > 1 && nodes.length > 1;
             };
