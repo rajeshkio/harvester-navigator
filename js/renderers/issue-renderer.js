@@ -131,6 +131,7 @@ const IssueRenderer = {
         }
         // Default display for other issues
         else {
+
             
         if (issue.resourceType === 'attachment-tickets-stuck-migration' && issue.attachmentDetails?.migrationStory) {
             const story = issue.attachmentDetails.migrationStory;
@@ -180,7 +181,7 @@ const IssueRenderer = {
                     </div>
                     <span class="text-xs px-2 py-1 rounded ${Utils.getSeverityBadgeClass(issue.severity)}">${issue.severity.toUpperCase()}</span>
                 </div>
-                
+     
                 <div class="mt-2 pt-2 border-t border-slate-600/30">
                     <div class="text-xs text-slate-400 mb-1">Issue Type:</div>
                     <div class="text-xs text-slate-300">${issue.description}</div>
