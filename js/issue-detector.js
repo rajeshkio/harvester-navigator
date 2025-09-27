@@ -350,7 +350,9 @@ const IssueDetector = {
                 // Handle other health check failures
                 issues.push({
                     id: `health-${check.checkName}`,
-                    title: `Health Check Failed: ${this.formatCheckName(check.checkName)}`,
+                    title: check.checkName === 'nodes' && check.status === 'warning' ? 
+                        'Nodes Under Maintenance' : 
+                        `Health Check Failed: ${this.formatCheckName(check.checkName)}`,
                     severity: check.status === 'warning' ? 'medium' : this.getCheckSeverity(check.checkName),
                     category: 'Cluster Health',
                     description: check.error || check.message,
@@ -654,6 +656,13 @@ const IssueDetector = {
                     command: 'kubectl get nodes -o wide',
                     expectedOutput: 'All nodes should be Ready',
                     description: 'Verify node readiness and scheduling status'
+                },
+                {
+                    id: 'check-upgrade-context',
+                    title: 'Check for Active Upgrades',
+                    command: 'kubectl get upgrades -n harvester-system',
+                    expectedOutput: 'Shows if upgrade is in progress',
+                    description: 'Determine if cordoning is due to maintenance'
                 }
             ],
             'error_pods': [
@@ -923,11 +932,24 @@ const IssueDetector = {
         const steps = {
             'nodes': [
                 {
-                    id: 'uncordon-nodes',
-                    title: 'Uncordon Nodes',
-                    command: 'kubectl uncordon <node-name>',
-                    description: 'Make nodes schedulable again'
-                }
+                id: 'check-upgrade-status',
+                title: 'Check Upgrade Progress',
+                command: 'kubectl get upgrades -n harvester-system -o wide',
+                description: 'Monitor upgrade progress before taking action'
+            },
+            {
+                id: 'wait-or-investigate',
+                title: 'Wait for Upgrade or Investigate',
+                command: 'kubectl get nodes -o wide',
+                description: 'If upgrade in progress: wait. If stuck >1hr: investigate'
+            },
+            {
+                id: 'uncordon-if-safe',
+                title: 'Uncordon Only If No Upgrade',
+                command: 'kubectl uncordon <node-name>',
+                description: 'Only if node is cordoned outside of upgrade operations',
+                warning: 'Do not uncordon during active upgrades'
+            }
             ],
             'error_pods': [
                 {

@@ -117,8 +117,12 @@ func (h *HealthChecker) isNodeInUpgrade(nodename string) (bool, string) {
 
 func (h *HealthChecker) getUpgradeMessage(nodeName, upgradeState string) string {
 	switch upgradeState {
-	case "pre-drained":
+	case "Pre-draining": // ADD this line
 		return fmt.Sprintf("Node %s: Preparing for upgrade (draining pods)", nodeName)
+	case "Pre-drained":
+		return fmt.Sprintf("Node %s: Preparing for upgrade (draining pods)", nodeName)
+	case "Images preloaded": // ADD this line too
+		return fmt.Sprintf("Node %s: Images ready for upgrade", nodeName)
 	case "Upgrading":
 		return fmt.Sprintf("Node %s: Actively upgrading OS", nodeName)
 	case "Succeeded":
@@ -129,18 +133,26 @@ func (h *HealthChecker) getUpgradeMessage(nodeName, upgradeState string) string 
 		return fmt.Sprintf("Node %s: Under upgrade (%s)", nodeName, upgradeState)
 	}
 }
+
+func (h *HealthChecker) isUpgradeStuck(upgradeState string) bool {
+	if h.upgradeInfo == nil {
+		return false
+	}
+
+	if upgradeState == "Pre-drained" {
+		timeSinceUpgrade := time.Since(h.upgradeInfo.UpgradeTime)
+		if timeSinceUpgrade > 60*time.Minute {
+			return true
+		}
+	}
+	return false
+}
+
 func (h *HealthChecker) checkNodes(ctx context.Context) models.HealthCheckResult {
 	start := time.Now()
 	result := models.HealthCheckResult{
 		CheckName: "nodes",
 		Timestamp: start,
-	}
-
-	if h.upgradeInfo != nil {
-		fmt.Printf("DEBUG: Found upgrade info! State: %s\n", h.upgradeInfo.State)
-		fmt.Printf("DEBUG: Node statuses: %v\n", h.upgradeInfo.NodeStatuses)
-	} else {
-		fmt.Printf("DEBUG: No upgrade info available\n")
 	}
 
 	nodes, err := h.clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
@@ -158,11 +170,13 @@ func (h *HealthChecker) checkNodes(ctx context.Context) models.HealthCheckResult
 		if node.Spec.Unschedulable {
 			inUpgrade, upgradeStatus := h.isNodeInUpgrade(node.Name)
 			if inUpgrade {
-				message := h.getUpgradeMessage(node.Name, upgradeStatus)
-				fmt.Printf("DEBUG: Node %s is cordoned for upgrade (state: %s)\n", node.Name, upgradeStatus)
-				issues = append(issues, message)
+				if h.isUpgradeStuck(upgradeStatus) {
+					issues = append(issues, fmt.Sprintf("Node %s: Upgrade STUCK in %s state - needs intervention", node.Name, upgradeStatus))
+				} else {
+					message := h.getUpgradeMessage(node.Name, upgradeStatus)
+					issues = append(issues, message)
+				}
 			} else {
-				fmt.Printf("DEBUG: Node %s is cordoned but NOT in upgrade\n", node.Name)
 				issues = append(issues, fmt.Sprintf("Node %s: Unexpectedly cordoned - investigate", node.Name))
 			}
 
@@ -187,13 +201,20 @@ func (h *HealthChecker) checkNodes(ctx context.Context) models.HealthCheckResult
 	if len(issues) > 0 {
 
 		upgradeIssues := 0
+		stuckIssues := 0
 		for _, issue := range issues {
-			if strings.Contains(issue, "cordoned for upgrade") {
+			if strings.Contains(issue, "Preparing for upgrade") || strings.Contains(issue, "Images ready") || strings.Contains(issue, "Under upgrade") {
 				upgradeIssues++
+			}
+			if strings.Contains(issue, "STUCK") {
+				stuckIssues++
 			}
 		}
 
-		if upgradeIssues == len(issues) {
+		if stuckIssues > 0 {
+			result.Status = "failed"
+			result.Error = fmt.Sprintf("%d nodes stuck in upgrade", stuckIssues)
+		} else if upgradeIssues == len(issues) {
 			result.Status = "warning"
 			result.Message = fmt.Sprintf("%d nodes temporarily cordoned for upgrade", len(issues))
 		} else {

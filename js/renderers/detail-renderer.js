@@ -1511,7 +1511,7 @@ const DetailRenderer = {
             return `
                 <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                     <div class="flex items-center gap-2 mb-4">
-                        <span class="text-lg">[SYNC]</span>
+                        <span class="text-lg">🔄</span>
                         <h2 class="text-lg font-medium text-white">Migration</h2>
                     </div>
                     <div class="text-center py-4 text-slate-400">No active migrations</div>
@@ -1522,7 +1522,7 @@ const DetailRenderer = {
         return `
             <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                 <div class="flex items-center gap-2 mb-4">
-                    <span class="text-lg">[SYNC]</span>
+                    <span class="text-lg">🔄</span>
                     <h2 class="text-lg font-medium text-white">Migration</h2>
                     <span class="px-2 py-1 text-xs rounded ${migration.phase === 'Running' ? 'bg-yellow-600/80 text-yellow-200' : 'bg-slate-600/80 text-slate-200'}">${migration.phase}</span>
                 </div>
