@@ -34,48 +34,108 @@ This tool is designed to provide a **holistic view of Harvester clusters** and e
 - **Node-level upgrade status** - Monitor upgrade success across cluster nodes
 - **Upgrade timeline** - See when upgrades were performed and their outcomes
 
+
 ## 🚀 Installation & Setup
 
 ### Prerequisites
 
-- **Go 1.23+** for building from source
 - **Harvester cluster** OR **Harvester support bundle simulator**
 - **kubectl** configured with access to your environment
 - **Web browser** for accessing the dashboard
 
-### Option 1: Using with Harvester Support Bundle Simulator (Recommended)
+### Option 1: Download Pre-built Binary (Recommended)
+
+Download the latest release from the [releases page](https://github.com/rajeshkio/harvester-navigator/releases/latest):
+
+**Choose the binary for your platform:**
+- **Linux (x64)**: `harvesterNavigator-linux-amd64`
+- **Linux (ARM64)**: `harvesterNavigator-linux-arm64`  
+- **macOS (Intel)**: `harvesterNavigator-darwin-amd64`
+- **macOS (Apple Silicon)**: `harvesterNavigator-darwin-arm64`
+- **Windows**: `harvesterNavigator-windows-amd64.exe`
 
 ```bash
-# Start the Harvester simulator
-support-bundle-kit simulator --reset
+# Make executable (Linux/macOS)
+chmod +x harvesterNavigator-*
 
-# Clone and build the troubleshooting UI
-git clone https://github.com/rajeshkio/harvester-navigator.git
-cd harvester-navigator
-go build -o harvester-troubleshoot
+# Run with default port 8080
+./harvesterNavigator-linux-amd64
 
-# Start the web server (it will automatically connect to the simulator)
-./harvester-troubleshoot
+# Run with custom port
+./harvesterNavigator-linux-amd64 -port 9090
+
+# Show version information
+./harvesterNavigator-linux-amd64 -version
 
 # Access the dashboard
 open http://localhost:8080
 ```
 
-### Option 2: Using with Live Harvester Cluster
+### Option 2: Build from Source
+
+For development or if you prefer building from source:
+
+```bash
+# Prerequisites: Go 1.23+ required
+git clone https://github.com/rajeshkio/harvester-navigator.git
+cd harvester-navigator
+go build -o harvesterNavigator
+./harvesterNavigator
+```
+
+### macOS Security Notice
+
+If macOS blocks the binary with "unverified developer" error:
+
+**Option 1 - Build from source (Recommended for corporate environments):**
+```bash
+git clone https://github.com/rajeshkio/harvester-navigator.git
+cd harvester-navigator
+go build -o harvesterNavigator
+./harvesterNavigator
+```
+
+**Option 2 - Override security (if allowed by IT policy):**
+```bash
+# Download the binary, then:
+xattr -d com.apple.quarantine ./harvesterNavigator-darwin-arm64
+chmod +x ./harvesterNavigator-darwin-arm64
+./harvesterNavigator-darwin-arm64
+```
+
+### Using with Harvester Support Bundle Simulator
+
+```bash
+# Start the Harvester simulator
+support-bundle-kit simulator --reset
+
+# Download and run harvesterNavigator (it will automatically connect to the simulator)
+./harvesterNavigator
+
+# Access the dashboard
+open http://localhost:8080
+```
+
+### Using with Live Harvester Cluster
 
 ```bash
 # Set your kubeconfig environment variable
 export KUBECONFIG=/path/to/your/harvester-kubeconfig
 
-# Build and run the application
-go build -o harvester-troubleshoot
-./harvester-troubleshoot
+# Run the application
+./harvesterNavigator
 
 # Access the dashboard
 open http://localhost:8080
 ```
 
 ## 🔧 How It Works
+
+### Self-Contained Architecture
+The application is distributed as a **single binary** with all static assets (HTML, JavaScript, CSS) embedded directly into the executable using Go's `embed` feature. This means:
+- **No external dependencies** - everything needed is in one file
+- **Easy deployment** - just copy the binary and run
+- **Consistent distribution** - same experience across all platforms
 
 ### Web Dashboard Architecture
 1. **Backend server** starts and establishes Kubernetes API connections
@@ -94,13 +154,36 @@ open http://localhost:8080
 - **Manual**: Uses `KUBECONFIG` environment variable for live cluster connections
 - **Fallback**: Uses default kubeconfig at `~/.kube/config`
 
+### Command Line Options
+```bash
+./harvesterNavigator -h
+
+Usage of ./harvesterNavigator:
+  -port string
+        Port to run the server on (default "8080")
+  -version
+        Show version and exit
+```
+
 ## 🏗️ Project Structure
 
 ```
 .
 ├── go.mod                 # Go module definition
 ├── go.sum                 # Go module checksums
-├── index.html             # Web dashboard frontend
+├── index.html             # Web dashboard frontend (embedded)
+├── js/                    # JavaScript modules (embedded)
+│   ├── app.js             # Main application logic
+│   ├── config.js          # Configuration management
+│   ├── issue-detector.js  # Error detection logic
+│   ├── renderers/         # UI rendering components
+│   ├── search.js          # Search functionality
+│   ├── state.js           # Application state management
+│   ├── utils.js           # Utility functions
+│   ├── view-manager.js    # View routing and management
+│   └── websocket.js       # WebSocket communication
+├── styles/                # CSS stylesheets (embedded)
+│   └── main.css           # Main stylesheet
 ├── main.go                # Application entry point & WebSocket server
 ├── internal/              # Internal packages
 │   ├── client/            # Kubernetes client initialization
@@ -118,28 +201,6 @@ open http://localhost:8080
 └── pkg/                   # Exported packages
     └── display/           # Terminal formatting utilities (legacy)
 ```
-
-## 🔧 How It Works
-
-### Web Dashboard Architecture
-1. **Backend server** starts and establishes Kubernetes API connections
-2. **WebSocket connection** provides real-time data to the frontend
-3. **Comprehensive data gathering**:
-   - Fetches all Harvester VMs and their metadata
-   - Retrieves Longhorn node status and disk information
-   - Gathers PVC, volume, and replica details
-   - Collects VMI information including guest OS details
-   - Tracks Harvester upgrade history and status
-4. **Intelligent error detection** identifies missing or failed resources
-5. **Interactive UI** presents data with drill-down capabilities
-
-### API Integration
-- **Harvester VMs**: `apis/kubevirt.io/v1/virtualmachines`
-- **VMI Details**: `apis/kubevirt.io/v1/virtualmachineinstances`
-- **Longhorn Volumes**: `apis/longhorn.io/v1beta2/volumes`
-- **Storage Replicas**: `apis/longhorn.io/v1beta2/replicas`
-- **Harvester Upgrades**: `apis/harvesterhci.io/v1beta1/upgrades`
-- **Kubernetes Resources**: Standard PVC, Pod, and Node APIs
 
 ## 📱 Dashboard Features
 
@@ -178,6 +239,7 @@ open http://localhost:8080
 - **Cluster overview** for operations teams
 - **Resource dependency verification** for applications
 - **Storage performance analysis** for workload optimization
+
 
 ## 🚨 Error Detection & Reporting
 
