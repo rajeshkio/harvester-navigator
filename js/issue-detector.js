@@ -1339,12 +1339,12 @@ const IssueDetector = {
             },
             
             timelineSection: {
-                title: "[TIMELINE] Migration Timeline",
+                title: " Migration Timeline",
                 events: migrationStory.timeline.map(event => ({
                     timestamp: `${event.date} ${event.time}`,
                     description: event.description,
                     type: event.type,
-                    icon: event.type === 'migration' ? '[MIG]' : '[DISK]',
+                    icon: event.type === 'migration' ? '' : '',
                     importance: event.type === 'migration' ? 'high' : 'medium'
                 })),
                 summary: `Migration path: ${migrationStory.migrationPath}`

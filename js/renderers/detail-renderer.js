@@ -94,7 +94,6 @@ const DetailRenderer = {
                 </div>
                 <div class="space-y-3">
                     <div class="flex items-center gap-3 p-3 rounded ${healthSummary.overallHealthy ? 'bg-green-900/20 border border-green-600/30' : 'bg-red-900/20 border border-red-600/30'}">
-                        <span class="text-2xl">${healthSummary.overallHealthy ? '[OK]' : '[FAIL]'}</span>
                         <div>
                             <div class="font-medium text-white">${healthSummary.overallHealthy ? 'All Systems Healthy' : 'Issues Detected'}</div>
                             <div class="text-sm text-slate-400">${healthSummary.summary || 'Status information unavailable'}</div>
@@ -319,7 +318,6 @@ const DetailRenderer = {
             return `
                 <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                     <div class="flex items-center gap-2 mb-4">
-                        <span class="text-lg">[DISK]</span>
                         <h2 class="text-lg font-medium text-white">Storage Overview</h2>
                     </div>
                     <div class="text-center py-4 text-slate-400">No storage information available</div>
@@ -339,7 +337,6 @@ const DetailRenderer = {
         return `
             <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                 <div class="flex items-center gap-2 mb-4">
-                    <span class="text-lg">[DISK]</span>
                     <h2 class="text-lg font-medium text-white">Storage Overview</h2>
                 </div>
                 
@@ -1396,7 +1393,7 @@ const DetailRenderer = {
                 <div class="bg-slate-800/40 rounded p-3 border ${satisfied ? 'border-green-500/30' : 'border-red-500/30'}">
                     <div class="flex items-center justify-between mb-2">
                         <div class="flex items-center gap-2">
-                            <span class="${satisfied ? 'text-green-400' : 'text-red-400'}">${satisfied ? '[OK]' : '[WAIT]'}</span>
+                            <span class="${satisfied ? 'text-green-400' : 'text-red-400'}">${satisfied ? 'OK' : 'WAIT'}</span>
                             <span class="text-sm text-slate-200">Ticket ${shortTicketId}</span>
                         </div>
                         <span class="px-2 py-1 text-xs rounded ${satisfied ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">
@@ -1631,7 +1628,6 @@ const DetailRenderer = {
         return `
             <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                 <div class="flex items-center gap-2 mb-4">
-                    <span class="text-lg">[DISK]</span>
                     <h2 class="text-lg font-medium text-white">Storage</h2>
                 </div>
                 
@@ -1681,7 +1677,6 @@ const DetailRenderer = {
             return `
                 <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                     <div class="flex items-center gap-2 mb-4">
-                        <span class="text-lg">[SYNC]</span>
                         <h2 class="text-lg font-medium text-white">Storage Replicas (0)</h2>
                     </div>
                     <div class="text-center py-4 text-slate-400">No replica information available</div>
@@ -1693,8 +1688,7 @@ const DetailRenderer = {
 
         return `
             <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
-                <div class="flex items-center gap-2 mb-4">
-                    <span class="text-lg">[SYNC]</span>
+                <div class="flex items-center gap-2 mb-4">  
                     <h2 class="text-lg font-medium text-white">Storage Replicas (${replicas.length})</h2>
                 </div>
                 
