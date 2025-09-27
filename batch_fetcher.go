@@ -319,27 +319,7 @@ func (df *DataFetcher) processVMWithBatchedData(
 			}
 		}
 
-		// Get pod information
-		if podName, exists := podMapping[pvcKey]; exists {
-			vmInfo.PodName = podName
-
-			// Fetch pod details if needed
-			if podName != "" {
-				paths := getDefaultResourcePaths(namespace)
-				podData, err := pod.FetchPodDetails(df.client, podName, paths.PodPath, namespace, "pods")
-				if err != nil {
-					vmInfo.Errors = append(vmInfo.Errors, models.VMError{
-						Type:     "pod",
-						Resource: podName,
-						Message:  fmt.Sprintf("Could not fetch pod details: %v", err),
-						Severity: "warning",
-					})
-				} else {
-					ownerRef, _ := pod.ParsePodData(podData)
-					vmInfo.PodInfo = ownerRef
-				}
-			}
-		}
+		// Pod collection will happen after VMI processing
 
 		// Process Longhorn-specific data if available
 		if volDetails.IsLonghornCSI && volDetails.VolumeHandle != "" {
@@ -412,6 +392,66 @@ func (df *DataFetcher) processVMWithBatchedData(
 			vmInfo.VMIMInfo = migrationData
 		}
 	}
+
+	// Get pod information for all active pods (post-VMI processing)
+	if len(vmInfo.VMIInfo) > 0 && vmInfo.VMIInfo[0].ActivePodNames != nil {
+		log.Printf("DEBUG: VM %s has %d active pods to fetch", vmInfo.Name, len(vmInfo.VMIInfo[0].ActivePodNames))
+		var allPodInfo []models.PodInfo
+		paths := getDefaultResourcePaths(namespace)
+
+		// Fetch details for each active pod
+		for podUID, podName := range vmInfo.VMIInfo[0].ActivePodNames {
+			log.Printf("DEBUG: Fetching pod %s (UID: %s) for VM %s", podName, podUID, vmInfo.Name)
+			if podName != "" {
+				podData, err := pod.FetchPodDetails(df.client, podName, paths.PodPath, namespace, "pods")
+				if err != nil {
+					log.Printf("DEBUG: Failed to fetch pod %s: %v", podName, err)
+					// Add fallback pod info with unknown status
+					nodeID := vmInfo.VMIInfo[0].ActivePods[podUID]
+					allPodInfo = append(allPodInfo, models.PodInfo{
+						VMI:    vmInfo.Name,
+						NodeID: nodeID,
+						Status: "Unknown",
+					})
+				} else {
+					log.Printf("DEBUG: Successfully fetched pod %s", podName)
+					podInfoList, err := pod.ParsePodData(podData)
+					if err == nil && len(podInfoList) > 0 {
+						log.Printf("DEBUG: Parsed %d pod info records for %s", len(podInfoList), podName)
+						allPodInfo = append(allPodInfo, podInfoList...)
+					} else {
+						log.Printf("DEBUG: Failed to parse pod data for %s: %v", podName, err)
+					}
+				}
+			}
+		}
+		log.Printf("DEBUG: VM %s final pod info count: %d", vmInfo.Name, len(allPodInfo))
+		vmInfo.PodInfo = allPodInfo
+	} else {
+		log.Printf("DEBUG: VM %s has no VMI info or active pod names, using fallback", vmInfo.Name)
+		// Fallback to original single pod logic if no VMI info
+		if podName, exists := podMapping[pvcKey]; exists {
+			vmInfo.PodName = podName
+
+			// Fetch pod details if needed
+			if podName != "" {
+				paths := getDefaultResourcePaths(namespace)
+				podData, err := pod.FetchPodDetails(df.client, podName, paths.PodPath, namespace, "pods")
+				if err != nil {
+					vmInfo.Errors = append(vmInfo.Errors, models.VMError{
+						Type:     "pod",
+						Resource: podName,
+						Message:  fmt.Sprintf("Could not fetch pod details: %v", err),
+						Severity: "warning",
+					})
+				} else {
+					ownerRef, _ := pod.ParsePodData(podData)
+					vmInfo.PodInfo = ownerRef
+				}
+			}
+		}
+	}
+
 	return vmInfo
 }
 
