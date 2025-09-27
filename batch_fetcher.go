@@ -398,7 +398,7 @@ func (df *DataFetcher) processVMWithBatchedData(
 		log.Printf("DEBUG: VM %s has %d active pods to fetch", vmInfo.Name, len(vmInfo.VMIInfo[0].ActivePodNames))
 		var allPodInfo []models.PodInfo
 		paths := getDefaultResourcePaths(namespace)
-		
+
 		// Fetch details for each active pod
 		for podUID, podName := range vmInfo.VMIInfo[0].ActivePodNames {
 			log.Printf("DEBUG: Fetching pod %s (UID: %s) for VM %s", podName, podUID, vmInfo.Name)
