@@ -255,11 +255,13 @@ type VMIInfo struct {
 	NodeName           string            `json:"nodeName"`
 	Phase              string            `json:"phase"`
 	ActivePods         map[string]string `json:"activePods"`
+	ActivePodNames     map[string]string `json:"activePodNames"`
 	GuestOSInfo        *GuestOSInfo      `json:"guestOSInfo"`
 	MemoryInfo         *MemoryInfo       `json:"memoryInfo"`
 	Interfaces         []Interface       `json:"interfaces"`
 	CurrentCPUTopology *CPUTopology      `json:"currentCPUTopology,omitempty"`
 	CPUDomain          *CPUDomain        `json:"cpuDomain,omitempty"`
+	MigrationInfo      *VMIMInfo         `json:"migrationInfo,omitempty"`
 }
 
 // VMIMInfo represents information about a Virtual Machine Instance Migration

@@ -171,10 +171,6 @@ func ParseKubernetesNodeData(nodes []interface{}) (map[string]*models.Kubernetes
 		results[nodeName] = nodeInfo
 	}
 
-	for nodeName, nodeInfo := range results {
-		fmt.Printf("DEBUG node: %s, Unschedulable=%v, Roles=%v\n", nodeName, nodeInfo.Unschedulable, nodeInfo.Roles)
-	}
-
 	return results, nil
 }
 

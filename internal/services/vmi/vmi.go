@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	types "github.com/rk280392/harvesterNavigator/internal/models"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -36,7 +38,7 @@ func FetchVMIDetails(client *kubernetes.Clientset, name, absPath, namespace, res
 
 // ParseVMIData extracts relevant information from VMI data and returns it as VMIInfo objects.
 // It processes metadata, status, guest OS info, memory info, and network interfaces.
-func ParseVMIData(vmiData map[string]interface{}) ([]types.VMIInfo, error) {
+func ParseVMIData(client *kubernetes.Clientset, vmiData map[string]interface{}, namespace string) ([]types.VMIInfo, error) {
 	var vmiInfos []types.VMIInfo
 
 	// Check if VMI data is available
@@ -58,17 +60,27 @@ func ParseVMIData(vmiData map[string]interface{}) ([]types.VMIInfo, error) {
 
 	// Create a VMI info object
 	vmiInfo := types.VMIInfo{
-		Name:        vmiName,
-		Phase:       extractPhase(vmiStatus),
-		NodeName:    extractNodeName(vmiStatus),
-		ActivePods:  make(map[string]string),
-		GuestOSInfo: &types.GuestOSInfo{},
-		Interfaces:  []types.Interface{},
-		MemoryInfo:  &types.MemoryInfo{},
+		Name:           vmiName,
+		Phase:          extractPhase(vmiStatus),
+		NodeName:       extractNodeName(vmiStatus),
+		ActivePods:     make(map[string]string),
+		ActivePodNames: make(map[string]string),
+		GuestOSInfo:    &types.GuestOSInfo{},
+		Interfaces:     []types.Interface{},
+		MemoryInfo:     &types.MemoryInfo{},
 	}
 
 	// Extract active pods
 	extractActivePods(vmiStatus, &vmiInfo)
+
+	if len(vmiInfo.ActivePods) > 0 {
+		podNames, err := FetchPodNamesForVM(client, namespace, vmiName, vmiInfo.ActivePods)
+		if err != nil {
+			log.Printf("Warning: Could not fetch pod names for VMI %s: %v", vmiName, err)
+		} else {
+			vmiInfo.ActivePodNames = podNames
+		}
+	}
 
 	// Extract guest OS information
 	extractGuestOSInfo(vmiStatus, &vmiInfo)
@@ -81,6 +93,9 @@ func ParseVMIData(vmiData map[string]interface{}) ([]types.VMIInfo, error) {
 
 	// Extract network interfaces
 	extractNetworkInterfaces(vmiStatus, &vmiInfo)
+
+	// Extract migration information if present
+	vmiInfo.MigrationInfo = extractMigrationInfo(vmiStatus, vmiName, namespace)
 
 	// Add the VMI info to the results
 	vmiInfos = append(vmiInfos, vmiInfo)
@@ -175,6 +190,32 @@ func extractActivePods(vmiStatus map[string]interface{}, vmiInfo *types.VMIInfo)
 			vmiInfo.ActivePods[podUID] = nodeNameStr
 		}
 	}
+}
+
+func FetchPodNamesForVM(client *kubernetes.Clientset, namespace string, vmName string, nodeToUID map[string]string) (map[string]string, error) {
+	podNames := make(map[string]string)
+
+	// Get all pods in the namespace
+	pods, err := client.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	vmPrefix := fmt.Sprintf("virt-launcher-%s-", vmName)
+	for _, pod := range pods.Items {
+		if strings.HasPrefix(pod.Name, vmPrefix) {
+			nodeName := pod.Spec.NodeName
+			// Find the UID that corresponds to this node
+			for uid, uidNode := range nodeToUID {
+				if uidNode == nodeName {
+					podNames[uid] = pod.Name
+					break
+				}
+			}
+		}
+	}
+
+	return podNames, nil
 }
 
 // extractGuestOSInfo extracts guest OS information from VMI status
@@ -386,4 +427,87 @@ func containsColon(s string) bool {
 		}
 	}
 	return false
+}
+
+// extractMigrationInfo extracts migration state from VMI status
+func extractMigrationInfo(vmiStatus map[string]interface{}, vmiName, namespace string) *types.VMIMInfo {
+	migrationStateRaw, ok := vmiStatus["migrationState"]
+	if !ok {
+		return nil // No migration state
+	}
+
+	migrationState, ok := migrationStateRaw.(map[string]interface{})
+	if !ok {
+		return nil // Invalid migration state
+	}
+
+	// Create VMIMInfo from VMI migration state
+	migrationInfo := &types.VMIMInfo{
+		Name:      fmt.Sprintf("vmi-embedded-%s", vmiName),
+		VMIName:   vmiName,
+		Namespace: namespace,
+		Phase:     "Running", // Since VMI is running with migration
+	}
+
+	// Extract all migration fields from VMI
+	if sourceNodeRaw, ok := migrationState["sourceNode"]; ok {
+		if sourceNode, ok := sourceNodeRaw.(string); ok {
+			migrationInfo.SourceNode = sourceNode
+		}
+	}
+
+	if targetNodeRaw, ok := migrationState["targetNode"]; ok {
+		if targetNode, ok := targetNodeRaw.(string); ok {
+			migrationInfo.TargetNode = targetNode
+		}
+	}
+
+	if sourcePodRaw, ok := migrationState["sourcePod"]; ok {
+		if sourcePod, ok := sourcePodRaw.(string); ok {
+			migrationInfo.SourcePod = sourcePod
+		}
+	}
+
+	if targetPodRaw, ok := migrationState["targetPod"]; ok {
+		if targetPod, ok := targetPodRaw.(string); ok {
+			migrationInfo.TargetPod = targetPod
+		}
+	}
+
+	if startTimestampRaw, ok := migrationState["startTimestamp"]; ok {
+		if startTimestamp, ok := startTimestampRaw.(string); ok {
+			migrationInfo.StartTimestamp = startTimestamp
+		}
+	}
+
+	// Override startTimestamp with the earliest phase transition if available
+	// This is more accurate than the migrationState startTimestamp
+	if phaseTransitionsRaw, ok := vmiStatus["phaseTransitionTimestamps"]; ok {
+		if phaseTransitions, ok := phaseTransitionsRaw.([]interface{}); ok && len(phaseTransitions) > 0 {
+			// Find the earliest timestamp (usually "Pending" phase)
+			var earliestTimestamp string
+			for _, transitionRaw := range phaseTransitions {
+				if transition, ok := transitionRaw.(map[string]interface{}); ok {
+					if timestampRaw, ok := transition["phaseTransitionTimestamp"]; ok {
+						if timestamp, ok := timestampRaw.(string); ok {
+							if earliestTimestamp == "" || timestamp < earliestTimestamp {
+								earliestTimestamp = timestamp
+							}
+						}
+					}
+				}
+			}
+			if earliestTimestamp != "" {
+				migrationInfo.StartTimestamp = earliestTimestamp
+			}
+		}
+	}
+
+	if modeRaw, ok := migrationState["mode"]; ok {
+		if mode, ok := modeRaw.(string); ok {
+			migrationInfo.MigrationMode = mode
+		}
+	}
+
+	return migrationInfo
 }

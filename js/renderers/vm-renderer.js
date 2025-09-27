@@ -14,7 +14,7 @@ const VMRenderer = {
             container.innerHTML = '<div class="text-center py-8 text-slate-400">No virtual machines found</div>';
             return;
         }
-        
+        const sortedVMs = this.sortVMsByPriority(vms); 
         // Create the table structure
         const table = document.createElement('table');
         table.className = 'w-full text-sm';
@@ -25,7 +25,6 @@ const VMRenderer = {
                 <tr class="border-b border-slate-600 text-slate-300">
                     <th class="text-left py-3 px-4 font-medium text-base">Name</th>
                     <th class="text-center py-3 px-4 font-medium text-base">Status</th>
-                    <th class="text-center py-3 px-4 font-medium text-base">Issues</th>
                     <th class="text-left py-3 px-4 font-medium text-base">Node</th>
                     <th class="text-left py-3 px-4 font-medium text-base">IP Address</th>
                     <th class="text-left py-3 px-4 font-medium text-base">Phase</th>
@@ -41,7 +40,7 @@ const VMRenderer = {
         const tbody = document.getElementById('vm-table-body');
         
         // Create table rows for each VM
-        vms.forEach(vm => {
+        sortedVMs.forEach(vm => {
             const vmRow = this.createVMTableRow(vm);
             tbody.appendChild(vmRow);
         });
@@ -83,19 +82,6 @@ const VMRenderer = {
                         </div>
                     ` : ''}
                 </div>
-            </td>
-            
-            <!-- Issues - Centered with softened "No issues" -->
-            <td class="py-3 px-4 text-center">
-                ${realIssueCount > 0 ? `
-                    <span class="px-2 py-1 text-sm font-medium rounded bg-red-700/80 text-red-200">
-                        ${realIssueCount} issue${realIssueCount > 1 ? 's' : ''}
-                    </span>
-                ` : `
-                    <span class="px-2 py-1 text-sm rounded bg-slate-700/50 text-slate-400">
-                        No issues
-                    </span>
-                `}
             </td>
             
             <!-- Node -->
@@ -220,5 +206,75 @@ const VMRenderer = {
             'lost': 'bg-red-700/80 text-red-200'
         };
         return statusMap[status?.toLowerCase()] || 'bg-slate-600/80 text-slate-200';
-    }
+    },
+
+    sortVMsByPriority(vms) {
+        return [...vms].sort((a, b) => {
+            const getHasSplitBrain = (vm) => {
+                if (!vm.vmiInfo || !vm.vmiInfo.length || !vm.vmiInfo[0].activePods) return false;
+                const activePods = vm.vmiInfo[0].activePods;
+                const nodes = [...new Set(Object.values(activePods))];
+                return Object.keys(activePods).length > 1 && nodes.length > 1;
+            };
+
+            // Update priority calculation:
+            const aHasSplitBrain = getHasSplitBrain(a);
+            const bHasSplitBrain = getHasSplitBrain(b);
+
+            // 0. Split-brain comes first (critical priority)
+            if (aHasSplitBrain && !bHasSplitBrain) return -1;
+            if (!aHasSplitBrain && bHasSplitBrain) return 1;
+            const getMigrationInfo = (vm) => {
+                if (!vm.vmimInfo || !Array.isArray(vm.vmimInfo) || vm.vmimInfo.length === 0) {
+                    return { isActive: false, phase: 'None' };
+                }
+                
+                const migration = vm.vmimInfo[0];
+                const isActive = ['Running', 'Scheduling', 'Scheduled', 'PreparingTarget', 'TargetReady'].includes(migration.phase);
+                return { isActive, phase: migration.phase || 'Unknown' };
+            };
+            
+            const getIssueCount = (vm) => AppState.countRealIssues(vm.errors || []);
+            
+            const getStatusPriority = (status) => {
+                // Lower number = higher priority (shows first)
+                const statusPriority = {
+                    'Failed': 1,
+                    'Error': 1,
+                    'Stopped': 2,
+                    'Stopping': 2,
+                    'Starting': 3,
+                    'Pending': 3,
+                    'Running': 4,
+                    'Succeeded': 5
+                };
+                return statusPriority[status] || 3; // Default to middle priority
+            };
+            
+            // Priority calculation for VM A and B
+            const aMigration = getMigrationInfo(a);
+            const bMigration = getMigrationInfo(b);
+            const aIssues = getIssueCount(a);
+            const bIssues = getIssueCount(b);
+            const aStatusPriority = getStatusPriority(a.printableStatus);
+            const bStatusPriority = getStatusPriority(b.printableStatus);
+            
+            // 1. Active migrations come first (highest priority)
+            if (aMigration.isActive && !bMigration.isActive) return -1;
+            if (!aMigration.isActive && bMigration.isActive) return 1;
+            
+            // 2. VMs with issues come next
+            if (aIssues > 0 && bIssues === 0) return -1;
+            if (aIssues === 0 && bIssues > 0) return 1;
+            if (aIssues !== bIssues) return bIssues - aIssues; // More issues = higher priority
+            
+            // 3. Non-running statuses come before running
+            if (aStatusPriority !== bStatusPriority) {
+                return aStatusPriority - bStatusPriority;
+            }
+            
+            // 4. Within same priority, sort alphabetically by name
+            return a.name.localeCompare(b.name);
+        });
+    },
 };
