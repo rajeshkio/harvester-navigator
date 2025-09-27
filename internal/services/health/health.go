@@ -3,6 +3,7 @@ package health
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -13,12 +14,14 @@ import (
 )
 
 type HealthChecker struct {
-	clientset *kubernetes.Clientset
+	clientset   *kubernetes.Clientset
+	upgradeInfo *models.UpgradeInfo
 }
 
-func CreateHealthChecker(clientset *kubernetes.Clientset) *HealthChecker {
+func CreateHealthChecker(clientset *kubernetes.Clientset, upgradeInfo *models.UpgradeInfo) *HealthChecker {
 	return &HealthChecker{
-		clientset: clientset,
+		clientset:   clientset,
+		upgradeInfo: upgradeInfo,
 	}
 }
 
@@ -101,6 +104,50 @@ func (h *HealthChecker) checkHarvesterBundle(ctx context.Context) models.HealthC
 	return result
 }
 
+func (h *HealthChecker) isNodeInUpgrade(nodename string) (bool, string) {
+	if h.upgradeInfo == nil || h.upgradeInfo.NodeStatuses == nil {
+		return false, ""
+	}
+
+	if state, exists := h.upgradeInfo.NodeStatuses[nodename]; exists {
+		return true, state
+	}
+	return false, ""
+}
+
+func (h *HealthChecker) getUpgradeMessage(nodeName, upgradeState string) string {
+	switch upgradeState {
+	case "Pre-draining": // ADD this line
+		return fmt.Sprintf("Node %s: Preparing for upgrade (draining pods)", nodeName)
+	case "Pre-drained":
+		return fmt.Sprintf("Node %s: Preparing for upgrade (draining pods)", nodeName)
+	case "Images preloaded": // ADD this line too
+		return fmt.Sprintf("Node %s: Images ready for upgrade", nodeName)
+	case "Upgrading":
+		return fmt.Sprintf("Node %s: Actively upgrading OS", nodeName)
+	case "Succeeded":
+		return fmt.Sprintf("Node %s: Upgrade completed but still cordoned", nodeName)
+	case "Failed":
+		return fmt.Sprintf("Node %s: Upgrade failed - needs attention", nodeName)
+	default:
+		return fmt.Sprintf("Node %s: Under upgrade (%s)", nodeName, upgradeState)
+	}
+}
+
+func (h *HealthChecker) isUpgradeStuck(upgradeState string) bool {
+	if h.upgradeInfo == nil {
+		return false
+	}
+
+	if upgradeState == "Pre-drained" {
+		timeSinceUpgrade := time.Since(h.upgradeInfo.UpgradeTime)
+		if timeSinceUpgrade > 60*time.Minute {
+			return true
+		}
+	}
+	return false
+}
+
 func (h *HealthChecker) checkNodes(ctx context.Context) models.HealthCheckResult {
 	start := time.Now()
 	result := models.HealthCheckResult{
@@ -121,7 +168,18 @@ func (h *HealthChecker) checkNodes(ctx context.Context) models.HealthCheckResult
 	for _, node := range nodes.Items {
 		// Check if node is unschedulable
 		if node.Spec.Unschedulable {
-			issues = append(issues, fmt.Sprintf("Node %s is unschedulable", node.Name))
+			inUpgrade, upgradeStatus := h.isNodeInUpgrade(node.Name)
+			if inUpgrade {
+				if h.isUpgradeStuck(upgradeStatus) {
+					issues = append(issues, fmt.Sprintf("Node %s: Upgrade STUCK in %s state - needs intervention", node.Name, upgradeStatus))
+				} else {
+					message := h.getUpgradeMessage(node.Name, upgradeStatus)
+					issues = append(issues, message)
+				}
+			} else {
+				issues = append(issues, fmt.Sprintf("Node %s: Unexpectedly cordoned - investigate", node.Name))
+			}
+
 		}
 
 		// Check if node is ready
@@ -141,8 +199,28 @@ func (h *HealthChecker) checkNodes(ctx context.Context) models.HealthCheckResult
 	result.Duration = time.Since(start).String()
 
 	if len(issues) > 0 {
-		result.Status = "failed"
-		result.Error = fmt.Sprintf("%d node issues found", len(issues))
+
+		upgradeIssues := 0
+		stuckIssues := 0
+		for _, issue := range issues {
+			if strings.Contains(issue, "Preparing for upgrade") || strings.Contains(issue, "Images ready") || strings.Contains(issue, "Under upgrade") {
+				upgradeIssues++
+			}
+			if strings.Contains(issue, "STUCK") {
+				stuckIssues++
+			}
+		}
+
+		if stuckIssues > 0 {
+			result.Status = "failed"
+			result.Error = fmt.Sprintf("%d nodes stuck in upgrade", stuckIssues)
+		} else if upgradeIssues == len(issues) {
+			result.Status = "warning"
+			result.Message = fmt.Sprintf("%d nodes temporarily cordoned for upgrade", len(issues))
+		} else {
+			result.Status = "failed"
+			result.Error = fmt.Sprintf("%d node issues found", len(issues))
+		}
 		result.Details = issues
 	} else {
 		result.Status = "passed"

@@ -47,10 +47,19 @@ func (df *DataFetcher) fetchFullClusterData() (models.FullClusterData, error) {
 	var allData models.FullClusterData
 	start := time.Now()
 
+	upgradeInfo, err := upgrade.FetchLatestUpgrade(df.client)
+	if err != nil {
+		log.Printf("Warning: could not fetch upgrade information: %v", err)
+		upgradeInfo = nil
+	} else {
+		allData.UpgradeInfo = upgradeInfo
+		log.Printf("Upgrade info: %s -> %s (%s)",
+			upgradeInfo.PreviousVersion, upgradeInfo.Version, upgradeInfo.State)
+	}
 	log.Println("Starting cluster data fetch...")
 
 	log.Println("Running health checks...")
-	healthChecker := health.CreateHealthChecker(df.client)
+	healthChecker := health.CreateHealthChecker(df.client, upgradeInfo)
 	healthSummary := healthChecker.RunAllChecks(context.Background())
 	allData.HealthChecks = healthSummary
 	log.Printf("Health checks completed: %d passed, %d failed, %d warnings",
@@ -303,6 +312,7 @@ func (df *DataFetcher) processVMWithBatchedData(
 		vmInfo.PVCStatus = models.PVCStatus(volDetails.Status)
 		vmInfo.StorageClass = volDetails.StorageClass
 		if vmInfo.VolumeName != "" {
+			log.Printf("DEBUG: VM %s has volume name: %s", vmInfo.Name, vmInfo.VolumeName)
 			paths := getDefaultResourcePaths(namespace)
 			lhvaData, err := lhva.FetchLHVAData(df.client, vmInfo.VolumeName, paths.LHVAPath, "longhorn-system", "volumeattachments")
 			if err != nil {
@@ -354,42 +364,26 @@ func (df *DataFetcher) processVMWithBatchedData(
 				Message:  fmt.Sprintf("Could not parse VMI data: %v", err),
 				Severity: "warning",
 			})
-			// If VMI parsing fails, try VMIM directly
-			vmimDataList, err := vmim.FetchAllVMIMsForVMI(df.client, vmInfo.Name, paths.VMIMPath, namespace)
-			if err == nil && len(vmimDataList) > 0 {
-				vmimStatus, err := vmim.ParseVMIMData(vmimDataList, df.client)
-				if err == nil {
-					vmInfo.VMIMInfo = vmimStatus
-				}
-			}
 		} else {
 			vmInfo.VMIInfo = vmiStatus
+		}
+	}
 
-			// Hybrid migration detection: VMI first, then VMIM
-			var migrationData []models.VMIMInfo
-
-			// Strategy 1: Check VMI embedded migration state (most complete)
-			if len(vmiStatus) > 0 && vmiStatus[0].MigrationInfo != nil {
-				migrationData = []models.VMIMInfo{*vmiStatus[0].MigrationInfo}
-			} else {
-				// Strategy 2: Fallback to VMIM (may have incomplete data)
-				vmimDataList, err := vmim.FetchAllVMIMsForVMI(df.client, vmInfo.Name, paths.VMIMPath, namespace)
-				if err != nil {
-					migrationData = []models.VMIMInfo{}
-				} else if len(vmimDataList) > 0 {
-					vmimStatus, err := vmim.ParseVMIMData(vmimDataList, df.client)
-					if err != nil {
-						log.Printf("Warning: Could not parse VMIM data for VM %s: %v", vmInfo.Name, err)
-						migrationData = []models.VMIMInfo{}
-					} else {
-						migrationData = vmimStatus
-					}
-				} else {
-					migrationData = []models.VMIMInfo{}
-				}
-			}
-
-			vmInfo.VMIMInfo = migrationData
+	// Fetch VMIM details (migrations for this VMI)
+	vmimDataList, err := vmim.FetchAllVMIMsForVMI(df.client, vmInfo.Name, paths.VMIMPath, namespace)
+	if err != nil {
+		vmInfo.Errors = append(vmInfo.Errors, models.VMError{
+			Type:     "vmim",
+			Resource: vmInfo.Name,
+			Message:  fmt.Sprintf("Could not fetch VMIM details: %v", err),
+			Severity: "info", // Non-critical since not all VMs have migrations
+		})
+	} else {
+		vmimStatus, err := vmim.ParseVMIMData(vmimDataList, df.client)
+		if err != nil {
+			log.Printf("Warning: Could not parse VMIM data for VM %s: %v", vmInfo.Name, err)
+		} else {
+			vmInfo.VMIMInfo = vmimStatus
 		}
 	}
 
