@@ -62,7 +62,7 @@ class HarvesterDashboardApp {
             dashboard.innerHTML = `
                 <div class="text-center py-12">
                     <div class="bg-red-900/20 border border-red-500/30 rounded-lg p-8 max-w-md mx-auto">
-                        <div class="text-6xl mb-4">[ERROR]</div>
+                        <div class="text-6xl mb-4">❌</div>
                         <h2 class="text-xl font-semibold text-red-400 mb-3">Connection Error</h2>
                         <p class="text-slate-300 mb-6">${message}</p>
                         
@@ -181,18 +181,18 @@ class HarvesterDashboardApp {
             AppState.updateData(data);
             
             // Success feedback
-            refreshIcon.textContent = '[OK]';
+            refreshIcon.textContent = '✅';
             // Note: upgrade status will be updated by displayUpgradeInfo method
             
             setTimeout(() => {
-                refreshIcon.textContent = '[REFRESH]';
+                refreshIcon.textContent = '🔄';
                 refreshIcon.style.animation = '';
             }, 1000);
             
         } catch (error) {
             
             // Error feedback
-            refreshIcon.textContent = '[ERROR]';
+            refreshIcon.textContent = '❌';
             
             // Provide user-friendly error message
             let userMessage = 'Refresh failed';
@@ -207,7 +207,7 @@ class HarvesterDashboardApp {
             ViewManager.updateUpgradeStatus('error', userMessage);
             
             setTimeout(() => {
-                refreshIcon.textContent = '[REFRESH]';
+                refreshIcon.textContent = '🔄';
                 refreshIcon.style.animation = '';
             }, 2000);
             
@@ -245,22 +245,22 @@ class HarvesterDashboardApp {
         }
 
         let stateColor = 'text-slate-300';
-        let stateIcon = '[INFO]';
+        let stateIcon = 'ℹ️';
         
         switch (state.toLowerCase()) {
             case 'succeeded':
                 stateColor = 'text-green-400';
-                stateIcon = '[OK]';
+                stateIcon = '✅';
                 break;
             case 'failed':
                 stateColor = 'text-red-400';
-                stateIcon = '[FAIL]';
+                stateIcon = '❌';
                 break;
             case 'upgrading':
             case 'upgradingsystemservices':
             case 'upgradingnodes':
                 stateColor = 'text-yellow-400';
-                stateIcon = '[PROGRESS]';
+                stateIcon = '⚙️';
                 break;
         }
 
@@ -286,12 +286,12 @@ class HarvesterDashboardApp {
             
             // Order matters - show progression from success to stuck states
             const statusOrder = [
-                { key: 'Succeeded', icon: '[OK]', color: 'text-green-400', bgColor: 'bg-green-900/20 border-green-600/30' },
-                { key: 'Images preloaded', icon: '[READY]', color: 'text-blue-400', bgColor: 'bg-blue-900/20 border-blue-600/30' },
-                { key: 'Pre-draining', icon: '[PREP]', color: 'text-yellow-400', bgColor: 'bg-yellow-900/20 border-yellow-600/30' },
-                { key: 'Draining', icon: '[DRAIN]', color: 'text-orange-400', bgColor: 'bg-orange-900/20 border-orange-600/30' },
-                { key: 'Upgrading', icon: '[UPG]', color: 'text-purple-400', bgColor: 'bg-purple-900/20 border-purple-600/30' },
-                { key: 'Failed', icon: '[FAIL]', color: 'text-red-400', bgColor: 'bg-red-900/20 border-red-600/30' }
+                { key: 'Succeeded', icon: '✅', color: 'text-green-400', bgColor: 'bg-green-900/20 border-green-600/30' },
+                { key: 'Images preloaded', icon: '📦', color: 'text-blue-400', bgColor: 'bg-blue-900/20 border-blue-600/30' },
+                { key: 'Pre-draining', icon: '🔄', color: 'text-yellow-400', bgColor: 'bg-yellow-900/20 border-yellow-600/30' },
+                { key: 'Draining', icon: '⏳', color: 'text-orange-400', bgColor: 'bg-orange-900/20 border-orange-600/30' },
+                { key: 'Upgrading', icon: '⚙️', color: 'text-purple-400', bgColor: 'bg-purple-900/20 border-purple-600/30' },
+                { key: 'Failed', icon: '❌', color: 'text-red-400', bgColor: 'bg-red-900/20 border-red-600/30' }
             ];
             
             statusOrder.forEach(({ key, icon, color, bgColor }) => {
