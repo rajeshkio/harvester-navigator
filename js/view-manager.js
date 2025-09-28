@@ -237,16 +237,19 @@ const ViewManager = {
             warning: 'text-yellow-400'
         };
         const iconMap = { 
-            info: '[INFO]', 
-            error: '[ERROR]', 
-            success: '[SUCCESS]',
-            warning: '[WARNING]'
+            info: 'ℹ️', 
+            error: '❌', 
+            success: '✅',
+            warning: '⚠️'
         };
         
         const statusElement = document.getElementById('upgrade-status');
         if (statusElement) {
             statusElement.innerHTML = 
-                `<span class="${colorMap[type] || 'text-slate-300'}">${iconMap[type] || '[INFO]'} ${message}</span>`;
+                `<span class="${colorMap[type] || 'text-slate-300'} flex items-center gap-2">
+                    <span>${iconMap[type] || 'ℹ️'}</span>
+                    <span>${message}</span>
+                </span>`;
         }
     }
 };
