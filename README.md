@@ -103,6 +103,39 @@ chmod +x ./harvesterNavigator-darwin-arm64
 ./harvesterNavigator-darwin-arm64
 ```
 
+### Windows Usage Instructions
+
+**IMPORTANT:** Double-clicking the .exe file will NOT work because this is a command-line server application.
+
+You must run it from Command Prompt or PowerShell:
+
+**Option 1 - Command Prompt:**
+```cmd
+# Navigate to download folder
+cd Downloads
+
+# Run with default port 8080
+harvesterNavigator-windows-amd64.exe
+
+# Run with custom port
+harvesterNavigator-windows-amd64.exe -port 9090
+
+# Show version
+harvesterNavigator-windows-amd64.exe -version
+```
+
+**Option 2 - PowerShell:
+```cmd
+powershell# Navigate to download folder
+cd $env:USERPROFILE\Downloads
+
+# Run the server
+.\harvesterNavigator-windows-amd64.exe
+
+# Access dashboard (keep terminal open)
+Start-Process "http://localhost:8080"
+```
+
 ### Using with Harvester Support Bundle Simulator
 
 ```bash
