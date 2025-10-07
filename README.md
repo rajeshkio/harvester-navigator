@@ -124,7 +124,7 @@ harvesterNavigator-windows-amd64.exe -port 9090
 harvesterNavigator-windows-amd64.exe -version
 ```
 
-**Option 2 - PowerShell:
+**Option 2 - PowerShell:**
 ```cmd
 powershell# Navigate to download folder
 cd $env:USERPROFILE\Downloads
