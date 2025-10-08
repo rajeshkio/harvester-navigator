@@ -176,12 +176,14 @@ class UniversalSearch {
             
             return `
                 <div class="search-result-item p-3 hover:bg-slate-700/50 cursor-pointer border-b border-slate-600 last:border-b-0" 
-                     data-vm-name="${vm.name}">
+                     data-vm-name="${vm.name}"
+                     data-vm-namespace="${vm.namespace}">
                     <div class="flex justify-between items-start mb-2">
                         <h4 class="text-slate-200 font-medium truncate flex-1">${vm.name}</h4>
                         <span class="${statusColor} text-xs font-medium ml-2">${vm.printableStatus || 'Unknown'}</span>
                     </div>
                     <div class="text-xs text-slate-400 mb-2">
+                        <div>Namespace: ${vm.namespace || 'N/A'}</div>
                         <div>PVC: ${vm.claimNames || 'N/A'}</div>
                         <div>Volume: ${vm.volumeName ? vm.volumeName.substring(0, 40) + '...' : 'N/A'}</div>
                     </div>
@@ -199,17 +201,18 @@ class UniversalSearch {
         this.searchResults.querySelectorAll('.search-result-item').forEach(item => {
             item.addEventListener('click', () => {
                 const vmName = item.getAttribute('data-vm-name');
-                this.selectVM(vmName);
+                const vmNamespace = item.getAttribute('data-vm-namespace');
+                this.selectVM(vmName, vmNamespace);
             });
         });
     }
 
-    selectVM(vmName) {
+    selectVM(vmName, vmNamespace) {
         this.hideResults();
-        this.showStatus(`Opening details for ${vmName}...`, 'text-blue-400');
+        this.showStatus(`Opening details for ${vmNamespace}/${vmName}...`, 'text-blue-400');
         
         // Navigate to VM detail
-        ViewManager.showVMDetail(vmName);
+        ViewManager.showVMDetail(vmName, vmNamespace);
         
         // Clear search after a short delay
         setTimeout(() => {
@@ -222,7 +225,8 @@ class UniversalSearch {
         const firstResult = this.searchResults.querySelector('.search-result-item');
         if (firstResult) {
             const vmName = firstResult.getAttribute('data-vm-name');
-            this.selectVM(vmName);
+            const vmNamespace = firstResult.getAttribute('data-vm-namespace');
+            this.selectVM(vmName, vmNamespace);
         }
     }
 

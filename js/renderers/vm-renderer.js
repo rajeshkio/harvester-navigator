@@ -125,8 +125,8 @@ const VMRenderer = {
             </td>
         `;
         
-        // Add click handler for VM details
-        row.addEventListener('click', () => ViewManager.showVMDetail(vm.name));
+        // Add click handler for VM details (use both name and namespace for unique identification)
+        row.addEventListener('click', () => ViewManager.showVMDetail(vm.name, vm.namespace));
         
         return row;
     },

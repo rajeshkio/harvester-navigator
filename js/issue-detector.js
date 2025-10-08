@@ -56,30 +56,32 @@ const IssueDetector = {
             
             realErrors.forEach(error => {
                 issues.push(this.createIssue({
-                    id: `vm-error-${vm.name}-${error.type}`,
+                    id: `vm-error-${vm.namespace}-${vm.name}-${error.type}`,
                     title: `${error.type.toUpperCase()} Issue`,
                     severity: error.severity || 'warning',
                     category: 'VM Resource',
                     description: error.message,
-                    affectedResource: `VM: ${vm.name}`,
+                    affectedResource: `VM: ${vm.namespace}/${vm.name}`,
                     resourceType: error.type,
                     resourceName: error.resource,
-                    vmName: vm.name
+                    vmName: vm.name,
+                    vmNamespace: vm.namespace
                 }));
             });
         }
         
         if (vm.printableStatus === 'Pending' && vm.claimNames) {
             issues.push(this.createIssue({
-                id: `vm-pending-${vm.name}`,
+                id: `vm-pending-${vm.namespace}-${vm.name}`,
                 title: 'VM Stuck in Pending State',
                 severity: 'high',
                 category: 'Scheduling',
-                description: `VM ${vm.name} is stuck in Pending state, likely due to scheduling or storage issues.`,
-                affectedResource: `VM: ${vm.name}`,
+                description: `VM ${vm.namespace}/${vm.name} is stuck in Pending state, likely due to scheduling or storage issues.`,
+                affectedResource: `VM: ${vm.namespace}/${vm.name}`,
                 resourceType: 'vm-pending',
                 resourceName: vm.name,
-                vmName: vm.name
+                vmName: vm.name,
+                vmNamespace: vm.namespace
             }));
         }
         
@@ -87,15 +89,16 @@ const IssueDetector = {
             const faultedReplicas = vm.replicaInfo.filter(r => r.currentState === 'error' || !r.started);
             if (faultedReplicas.length > 0) {
                 issues.push(this.createIssue({
-                    id: `replica-issues-${vm.name}`,
+                    id: `replica-issues-${vm.namespace}-${vm.name}`,
                     title: 'Storage Replica Issues',
                     severity: faultedReplicas.length === vm.replicaInfo.length ? 'critical' : 'high',
                     category: 'Storage',
                     description: `${faultedReplicas.length} out of ${vm.replicaInfo.length} replicas are faulted for volume ${vm.volumeName}.`,
-                    affectedResource: `Volume: ${vm.volumeName}`,
+                    affectedResource: `Volume: ${vm.volumeName} (VM: ${vm.namespace}/${vm.name})`,
                     resourceType: 'replica-faulted',
                     resourceName: vm.volumeName,
-                    vmName: vm.name
+                    vmName: vm.name,
+                    vmNamespace: vm.namespace
                 }));
             }
         }
