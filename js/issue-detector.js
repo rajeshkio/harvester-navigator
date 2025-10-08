@@ -35,7 +35,7 @@ const IssueDetector = {
         const issues = [];
         
         if (data.vms) {
-            data.vms.forEach(vm => this.checkVMIssues(vm, issues));
+            data.vms.forEach(vm => this.checkVMIssues(vm, issues, data.upgradeInfo));
         }
         
         if (data.nodes) {
@@ -48,7 +48,7 @@ const IssueDetector = {
         return issues;
     },
     
-    checkVMIssues(vm, issues) {
+    checkVMIssues(vm, issues, upgradeInfo) {
         if (vm.errors && vm.errors.length > 0) {
             const realErrors = vm.errors.filter(error => 
                 error.severity !== 'info' && error.severity !== 'information'
@@ -102,6 +102,67 @@ const IssueDetector = {
                 }));
             }
         }
+        
+        // Check for stuck terminating VM
+        if (vm.printableStatus === 'Terminating' && 
+            (!vm.vmiInfo || vm.vmiInfo.length === 0) && 
+            (!vm.podInfo || vm.podInfo.length === 0)) {
+            
+            const hasFinalizers = vm.finalizers && vm.finalizers.length > 0;
+            const hasRemovedPVCs = vm.removedPVCs && vm.removedPVCs.length > 0;
+            
+            if (hasFinalizers) {
+                // Check if upgrade is in progress
+                const isUpgrading = upgradeInfo && 
+                    (upgradeInfo.state === 'Upgrading' || upgradeInfo.state === 'Running');
+                
+                // High severity if blocking upgrade, otherwise medium
+                const severity = isUpgrading ? 'high' : 'medium';
+                const upgradeNote = isUpgrading 
+                    ? ' This may block the cluster upgrade process.' 
+                    : '';
+                
+                issues.push(this.createIssue({
+                    id: `vm-stuck-terminating-${vm.namespace}-${vm.name}`,
+                    title: 'VM Stuck in Terminating State',
+                    severity: severity,
+                    category: 'VM Lifecycle',
+                    description: `VM ${vm.namespace}/${vm.name} is stuck terminating with no VMI or pods. ${hasRemovedPVCs ? 'PVCs were already removed but finalizers remain.' : 'Finalizers are preventing deletion.'} Blocking finalizers: ${vm.finalizers.join(', ')}${upgradeNote}`,
+                    affectedResource: `VM: ${vm.namespace}/${vm.name}`,
+                    resourceType: 'vm-stuck-terminating',
+                    resourceName: vm.name,
+                    vmName: vm.name,
+                    vmNamespace: vm.namespace,
+                    verificationSteps: [
+                        {
+                            id: 'check-vm-yaml',
+                            title: 'Get VM YAML to check volumes',
+                            description: 'Check which PVCs this VM references',
+                            command: `kubectl get vm ${vm.name} -n ${vm.namespace} -o yaml | grep -A 5 "volumes:"`
+                        },
+                        {
+                            id: 'verify-vmi-pods',
+                            title: 'Verify VMI and Pods are deleted',
+                            description: 'Confirm no active VMI or pods exist',
+                            command: `kubectl get vmi,pod -n ${vm.namespace} | grep ${vm.name}`
+                        },
+                        {
+                            id: 'check-pvcs',
+                            title: 'Verify PVCs from VM spec are deleted',
+                            description: 'Check if PVCs referenced by the VM still exist',
+                            command: `kubectl get pvc -n ${vm.namespace} | grep ${vm.claimNames || 'disk'}`
+                        },
+                        {
+                            id: 'remove-finalizer',
+                            title: 'Remove Finalizer (only if all resources gone)',
+                            description: 'Safe to remove only after confirming VMI, pods, and PVCs are deleted',
+                            command: `kubectl patch vm ${vm.name} -n ${vm.namespace} --type json -p '[{"op": "remove", "path": "/metadata/finalizers"}]'`
+                        }
+                    ]
+                }));
+            }
+        }
+        
         // Merge status and spec data for attachment tickets
         const attachmentTicketsData = this.mergeAttachmentTicketsData(vm);
 
@@ -687,8 +748,8 @@ const IssueDetector = {
         return {
             ...baseIssue,
             detectionTime: new Date().toISOString(),
-            verificationSteps: this.getVerificationSteps(baseIssue.resourceType, baseIssue.resourceName),
-            remediationSteps: this.getRemediationSteps(baseIssue.resourceType, baseIssue.resourceName)
+            verificationSteps: baseIssue.verificationSteps || this.getVerificationSteps(baseIssue.resourceType, baseIssue.resourceName),
+            remediationSteps: baseIssue.remediationSteps || this.getRemediationSteps(baseIssue.resourceType, baseIssue.resourceName)
         };
     },
     

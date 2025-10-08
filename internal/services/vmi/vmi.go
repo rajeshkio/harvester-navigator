@@ -203,7 +203,17 @@ func FetchPodNamesForVM(client *kubernetes.Clientset, namespace string, vmName s
 
 	vmPrefix := fmt.Sprintf("virt-launcher-%s-", vmName)
 	for _, pod := range pods.Items {
+		// Check if pod name matches exactly: virt-launcher-{vmName}-{suffix}
+		// The suffix should be exactly 5 random chars, not another VM name
 		if strings.HasPrefix(pod.Name, vmPrefix) {
+			// Extract the suffix after the prefix
+			suffix := strings.TrimPrefix(pod.Name, vmPrefix)
+
+			// Skip if suffix contains additional hyphens (indicates another VM name like "new-xxxxx")
+			if strings.Contains(suffix, "-") {
+				continue
+			}
+
 			nodeName := pod.Spec.NodeName
 			// Find the UID that corresponds to this node
 			for uid, uidNode := range nodeToUID {

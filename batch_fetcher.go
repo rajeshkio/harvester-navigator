@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -340,12 +341,32 @@ func (df *DataFetcher) processVMWithBatchedData(
 	paths := getDefaultResourcePaths(namespace)
 	vmiData, err := vmi.FetchVMIDetails(df.client, vmInfo.Name, paths.VMIPath, namespace, "virtualmachineinstances")
 	if err != nil {
-		vmInfo.Errors = append(vmInfo.Errors, models.VMError{
-			Type:     "vmi",
-			Resource: vmInfo.Name,
-			Message:  fmt.Sprintf("Could not fetch VMI details: %v", err),
-			Severity: "warning",
-		})
+		// Check if it's a "not found" error for terminating VMs
+		if strings.Contains(err.Error(), "could not find the requested resource") ||
+			strings.Contains(err.Error(), "not found") {
+			if vmInfo.PrintableStatus == "Terminating" {
+				vmInfo.Errors = append(vmInfo.Errors, models.VMError{
+					Type:     "vmi",
+					Resource: vmInfo.Name,
+					Message:  "VMI does not exist (VM is terminating)",
+					Severity: "info",
+				})
+			} else {
+				vmInfo.Errors = append(vmInfo.Errors, models.VMError{
+					Type:     "vmi",
+					Resource: vmInfo.Name,
+					Message:  "VMI does not exist (VM may not be running)",
+					Severity: "warning",
+				})
+			}
+		} else {
+			vmInfo.Errors = append(vmInfo.Errors, models.VMError{
+				Type:     "vmi",
+				Resource: vmInfo.Name,
+				Message:  fmt.Sprintf("Failed to fetch VMI: %v", err),
+				Severity: "warning",
+			})
+		}
 		// If VMI fetch fails, try VMIM directly
 		vmimDataList, err := vmim.FetchAllVMIMsForVMI(df.client, vmInfo.Name, paths.VMIMPath, namespace)
 		if err == nil && len(vmimDataList) > 0 {

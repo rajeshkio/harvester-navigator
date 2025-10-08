@@ -156,7 +156,23 @@ func ParseVMMetaData(vmData map[string]interface{}, vmInfo *models.VMInfo) error
 		return fmt.Errorf("metadata field missing")
 	}
 
+	// Extract finalizers
+	if finalizers, ok := metadata["finalizers"].([]interface{}); ok {
+		for _, f := range finalizers {
+			if finalizerStr, ok := f.(string); ok {
+				vmInfo.Finalizers = append(vmInfo.Finalizers, finalizerStr)
+			}
+		}
+	}
+
 	annotations, _ := metadata["annotations"].(map[string]interface{})
+
+	// Extract removed PVCs annotation
+	if removedPVCs, ok := annotations["harvesterhci.io/removedPersistentVolumeClaims"].(string); ok {
+		vmInfo.RemovedPVCs = removedPVCs
+	}
+
+	// Try to get PVC name from volumeClaimTemplates annotation first
 	if templateStr, ok := annotations["harvesterhci.io/volumeClaimTemplates"].(string); ok {
 		var templates []map[string]interface{}
 		if json.Unmarshal([]byte(templateStr), &templates) == nil && len(templates) > 0 {
@@ -168,6 +184,28 @@ func ParseVMMetaData(vmData map[string]interface{}, vmInfo *models.VMInfo) error
 
 			tmplSpec, _ := templates[0]["spec"].(map[string]interface{})
 			vmInfo.StorageClass, _ = tmplSpec["storageClassName"].(string)
+		}
+	}
+
+	// If no volumeClaimTemplates, try to extract first PVC from spec.template.spec.volumes
+	if vmInfo.ClaimNames == "" {
+		if spec, ok := vmData["spec"].(map[string]interface{}); ok {
+			if template, ok := spec["template"].(map[string]interface{}); ok {
+				if templateSpec, ok := template["spec"].(map[string]interface{}); ok {
+					if volumes, ok := templateSpec["volumes"].([]interface{}); ok {
+						for _, vol := range volumes {
+							if volMap, ok := vol.(map[string]interface{}); ok {
+								if pvc, ok := volMap["persistentVolumeClaim"].(map[string]interface{}); ok {
+									if claimName, ok := pvc["claimName"].(string); ok {
+										vmInfo.ClaimNames = claimName
+										break // Use first PVC found
+									}
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 

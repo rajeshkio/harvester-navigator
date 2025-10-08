@@ -755,6 +755,26 @@ const DetailRenderer = {
                         </div>
                     </div>
                 ` : ''}
+                
+                ${vmData.printableStatus === 'Terminating' && 
+                  (!vmData.vmiInfo || vmData.vmiInfo.length === 0) && 
+                  (!vmData.podInfo || vmData.podInfo.length === 0) ? `
+                    <div class="p-6 border-b border-slate-700">
+                        <div class="p-4 bg-yellow-900/40 border border-yellow-600/50 rounded-lg">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="text-yellow-400 text-xl">⚠️</span>
+                                <span class="text-yellow-300 font-semibold text-lg">VM Stuck in Terminating State</span>
+                            </div>
+                            <div class="text-yellow-200 mb-3">
+                                This VM has no active VMI or pods but is stuck terminating. This usually indicates finalizers blocking deletion.
+                            </div>
+                            <button onclick="ViewManager.showAllIssuesView()" 
+                                    class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded text-sm transition-colors">
+                                View Issue Details & Resolution Steps →
+                            </button>
+                        </div>
+                    </div>
+                ` : ''}
 
                 <div class="p-6">
                     <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -762,6 +782,7 @@ const DetailRenderer = {
                         <!-- Left Column: Compute & Migration -->
                         <div class="space-y-6">
                             ${this.renderComputeResources(vmData)}
+                            ${this.renderVMIDetails(vmData)}
                             ${this.renderPodDetails(vmData, splitBrainInfo)}
                             ${this.renderVMErrors(vmData.errors || [])}
                             ${this.renderVolumeAttachment(vmData.attachmentTicketsRaw)}
@@ -1470,6 +1491,52 @@ const DetailRenderer = {
                     
                     <span class="text-slate-400">Node:</span>
                     <span class="text-slate-200 font-mono">${nodeName}</span>
+                </div>
+            </div>
+        `;
+    },
+
+    renderVMIDetails(vmData) {
+        const vmiInfo = vmData.vmiInfo && vmData.vmiInfo.length > 0 ? vmData.vmiInfo[0] : null;
+        
+        if (!vmiInfo) {
+            return `
+                <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                    <div class="flex items-center gap-2 mb-4">
+                        <span class="text-lg">🖥️</span>
+                        <h2 class="text-lg font-medium text-white">VMI Information</h2>
+                    </div>
+                    <div class="text-center py-4 text-slate-400">No VMI information available</div>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-lg">🖥️</span>
+                    <h2 class="text-lg font-medium text-white">VMI Information</h2>
+                </div>
+                
+                <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
+                    <span class="text-slate-400">VMI Name:</span>
+                    <span class="text-white font-mono">${vmiInfo.name || vmData.name}</span>
+                    
+                    <span class="text-slate-400">Phase:</span>
+                    <span class="px-2 py-1 rounded text-xs ${vmiInfo.phase === 'Running' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}">${vmiInfo.phase || 'Unknown'}</span>
+                    
+                    <span class="text-slate-400">Node:</span>
+                    <span class="text-slate-200 font-mono">${vmiInfo.nodeName || 'N/A'}</span>
+                    
+                    ${vmiInfo.guestOSInfo && vmiInfo.guestOSInfo.prettyName ? `
+                        <span class="text-slate-400">Guest OS:</span>
+                        <span class="text-slate-200">${vmiInfo.guestOSInfo.prettyName}</span>
+                    ` : ''}
+                    
+                    ${vmiInfo.interfaces && vmiInfo.interfaces.length > 0 ? `
+                        <span class="text-slate-400">IP Address:</span>
+                        <span class="text-slate-200 font-mono">${vmiInfo.interfaces.find(i => i.ipAddress)?.ipAddress || 'N/A'}</span>
+                    ` : ''}
                 </div>
             </div>
         `;

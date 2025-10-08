@@ -132,6 +132,8 @@ type VMInfo struct {
 	PrintableStatus            string        `json:"printableStatus"`
 	VMStatusReason             string        `json:"vmStatusReason"`
 	MissingResource            string        `json:"missingResource"`
+	Finalizers                 []string      `json:"finalizers,omitempty"`
+	RemovedPVCs                string        `json:"removedPVCs,omitempty"`
 	Errors                     []VMError     `json:"errors,omitempty"`
 }
 
