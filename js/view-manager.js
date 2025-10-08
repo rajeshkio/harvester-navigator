@@ -28,8 +28,11 @@ const ViewManager = {
         this.currentView = 'node-detail';
     },
     
-    showVMDetail(vmName) {
-        const vmData = AppState.data.vms.find(vm => vm.name === vmName);
+    showVMDetail(vmName, vmNamespace) {
+        // Match VM by both name AND namespace to handle duplicate names across namespaces
+        const vmData = AppState.data.vms.find(vm => 
+            vm.name === vmName && vm.namespace === vmNamespace
+        );
         if (!vmData) return;
         
         const detailHTML = DetailRenderer.renderVMDetail(vmData);
