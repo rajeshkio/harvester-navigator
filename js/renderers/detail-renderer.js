@@ -128,7 +128,7 @@ const DetailRenderer = {
                         <div class="space-y-2">
                             ${healthSummary.warnings.map(warning => `
                                 <div class="flex items-start gap-2 p-2 bg-yellow-900/20 border border-yellow-600/30 rounded">
-                                    <span class="text-yellow-400 mt-0.5">•</span>
+                                    <span class="text-yellow-400 mt-0.5"></span>
                                     <div class="flex-1">
                                         <div class="text-yellow-300 text-sm">${warning}</div>
                                     </div>
@@ -169,9 +169,13 @@ const DetailRenderer = {
             }
             // Storage health checks
             if (nodeData && nodeData.longhornInfo && nodeData.longhornInfo.disks && Array.isArray(nodeData.longhornInfo.disks)) {
-                const unschedulableDisks = nodeData.longhornInfo.disks.filter(d => d && !d.isSchedulable).length;
-                if (unschedulableDisks > 0) {
-                    warnings.push(`${unschedulableDisks} disk${unschedulableDisks > 1 ? 's' : ''} not schedulable`);
+                const unschedulableDisksList = nodeData.longhornInfo.disks.filter(d => d && !d.isSchedulable);
+                if (unschedulableDisksList.length > 0) {
+                    const diskListHtml = unschedulableDisksList.map(d => {
+                        const fullDiskId = d.path.includes('/defaultdisk') ? 'defaultdisk' : d.path.split('/').pop();
+                        return `<div class="ml-4 text-yellow-200">• ${fullDiskId}</div>`;
+                    }).join('');
+                    warnings.push(`${unschedulableDisksList.length} disk${unschedulableDisksList.length > 1 ? 's' : ''} not schedulable:<br/>${diskListHtml}`);
                 }
             }
             // PDB health checks
@@ -384,8 +388,9 @@ const DetailRenderer = {
             <div class="border border-slate-600 rounded p-3" data-disk-name="${diskName}">
                 <div class="flex items-center justify-between mb-3">
                     <div class="flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full ${disk.isSchedulable ? 'bg-green-400' : 'bg-gray-400'}"></span>
+                        <span class="w-2 h-2 rounded-full ${disk.isSchedulable ? 'bg-green-400' : 'bg-red-400'}"></span>
                         <span class="text-white font-medium">${diskName}</span>
+                        ${!disk.isSchedulable ? '<span class="ml-2 text-xs px-2 py-0.5 bg-red-700/80 text-red-200 rounded">NOT SCHEDULABLE</span>' : ''}
                         <span class="text-xs text-slate-400">${replicaCount} replicas</span>
                     </div>
                     <span class="text-sm text-slate-300">${this.formatBytes(totalBytes)}</span>

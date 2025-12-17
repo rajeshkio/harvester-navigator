@@ -44,7 +44,12 @@ const IssueDetector = {
         if (data.healthChecks && data.healthChecks.results) {
             this.processHealthCheckResults(data.healthChecks.results, issues);
         }
-        
+        if (data.nodes) {
+            data.nodes.forEach(node => {
+                this.checkNodeIssues(node, issues);
+                this.checkNodeDiskIssues(node, issues); 
+            });
+        }
         return issues;
     },
     
@@ -321,6 +326,47 @@ const IssueDetector = {
             });
         }
     },
+
+    checkNodeDiskIssues(node, issues) {
+        if (!node.longhornInfo || !node.longhornInfo.disks) return;
+        
+        const nodeName = node.longhornInfo.name || node.name || 'unknown';
+        const unschedulableDisks = node.longhornInfo.disks.filter(d => d && !d.isSchedulable);
+        
+        if (unschedulableDisks.length > 0) {
+            unschedulableDisks.forEach(disk => {
+                const diskDisplayName = this.getDiskDisplayName(disk.path);
+                issues.push(this.createIssue({
+                    id: `disk-not-schedulable-${nodeName}-${diskDisplayName}`,
+                    title: 'Disk Not Schedulable',
+                    severity: 'warning',
+                    category: 'Storage Health',
+                    description: `Disk ${diskDisplayName} on node ${nodeName} is not schedulable. This reduces storage capacity and may affect VM scheduling.`,
+                    affectedResource: `Node: ${nodeName}, Disk: ${diskDisplayName}`,
+                    resourceType: 'disk-not-schedulable',
+                    resourceName: diskDisplayName,
+                    nodeName: nodeName,
+                    diskPath: disk.path
+                }));
+            });
+        }
+    },
+
+    getDiskDisplayName(diskPath) {
+        if (!diskPath) return 'Unknown';
+        if (diskPath.includes('/defaultdisk')) {
+            return 'defaultdisk';
+        } else if (diskPath.includes('/extra-disks/')) {
+            const parts = diskPath.split('/');
+            const diskId = parts[parts.length - 1];
+            if (diskId.length > 16) {
+                return `${diskId.substring(0, 8)}...${diskId.substring(diskId.length - 8)}`;
+            }
+            return diskId;
+        }
+        return diskPath.split('/').pop() || 'Unknown';
+    },
+
     processHealthCheckResults(healthChecks, issues) {
     healthChecks.forEach(check => {
         if (check.status === 'failed' || check.status === 'warning') {
