@@ -96,3 +96,12 @@ temp/
 *.zip
 *.tar.gz
 *.rar
+
+# Node modules (only needed for building CSS)
+node_modules/
+
+# NPM lock files
+package-lock.json
+
+# Keep the built CSS file (it's needed for the app)
+!styles/tailwind.css
