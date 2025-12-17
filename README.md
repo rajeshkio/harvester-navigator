@@ -291,7 +291,6 @@ Error messages include:
 ## 🔄 Development & Contributing
 
 ### Setting up Development Environment
-
 ```bash
 # Clone and enter directory
 git clone https://github.com/rajeshkio/harvester-navigator.git
@@ -300,12 +299,44 @@ cd harvester-navigator
 # Install dependencies
 go mod tidy
 
+# Install CSS build tools
+npm install
+
+# Build CSS (required for offline support)
+npm run build:css
+
 # Run in development mode
 go run main.go
 
 # Build for production
 go build -o harvester-troubleshoot
 ```
+
+### CSS Development
+```bash
+# Rebuild CSS after changing HTML/JS classes
+npm run build:css
+
+# Auto-rebuild CSS during active development
+npm run watch:css
+```
+
+### Project Structure
+
+- `js/` - Frontend JavaScript modules
+- `styles/` - CSS files
+  - `main.css` - Custom styles
+  - `tailwind.css` - Built Tailwind CSS (generated, do not edit)
+- `index.html` - Main application UI
+- `tailwind.config.js` - Tailwind configuration
+- `input.css` - CSS source for Tailwind build
+
+### Notes
+
+- The application uses **local Tailwind CSS** for offline support
+- CSS is embedded in the Go binary via `//go:embed`
+- Run `npm run build:css` after adding new Tailwind classes
+- `node_modules/` is gitignored (only needed for building)
 
 ### Contributing Guidelines
 

@@ -1,0 +1,12 @@
+{
+  "name": "harvester-navigator",
+  "version": "1.0.0",
+  "description": "Web-based troubleshooting dashboard for Harvester Kubernetes clusters",
+  "scripts": {
+    "build:css": "tailwindcss -i ./input.css -o ./styles/tailwind.css --minify",
+    "watch:css": "tailwindcss -i ./input.css -o ./styles/tailwind.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.1"
+  }
+}
