@@ -17,7 +17,7 @@ type GeminiAnalyzer struct {
 
 func NewGeminiAnalyzer(ctx context.Context, apiKey string) (*GeminiAnalyzer, error) {
 	if apiKey == "" {
-		return nil, fmt.Errorf("Gemini API key is required")
+		return nil, fmt.Errorf("gemini API key is required")
 	}
 
 	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
@@ -47,7 +47,7 @@ Return JSON with these exact fields:
 }`
 	resp, err := g.model.GenerateContent(ctx, genai.Text(fullPrompt))
 	if err != nil {
-		return nil, fmt.Errorf("Gemini API call failed: %w", err)
+		return nil, fmt.Errorf("gemini API call failed: %w", err)
 	}
 
 	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {

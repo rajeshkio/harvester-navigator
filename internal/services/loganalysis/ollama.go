@@ -93,24 +93,24 @@ RULES:
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Ollama API call failed: %w", err)
+		return nil, fmt.Errorf("ollama API call failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Ollama API error: %s - %s", resp.Status, string(body))
+		return nil, fmt.Errorf("ollama API error: %s - %s", resp.Status, string(body))
 	}
 
 	var ollamaResp OllamaResponse
 	if err := json.NewDecoder(resp.Body).Decode(&ollamaResp); err != nil {
-		return nil, fmt.Errorf("failed to decode Ollama response: %w", err)
+		return nil, fmt.Errorf("failed to decode ollama response: %w", err)
 	}
 
 	// Debug: Log the raw response
-	log.Printf("===== OLLAMA RAW RESPONSE =====")
-	log.Printf("%s", ollamaResp.Response)
-	log.Printf("===== END OLLAMA RESPONSE =====")
+	//	log.Printf("===== OLLAMA RAW RESPONSE =====")
+	//	log.Printf("%s", ollamaResp.Response)
+	//	log.Printf("===== END OLLAMA RESPONSE =====")
 
 	// Extract JSON from response (might be wrapped in markdown or have text around it)
 	responseText := ollamaResp.Response

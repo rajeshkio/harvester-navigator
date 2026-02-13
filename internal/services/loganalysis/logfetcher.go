@@ -24,7 +24,7 @@ func FetchPodLogs(ctx context.Context, clientset *kubernetes.Clientset, namespac
 		return "", fmt.Errorf("failed to get logs for pod %s: %w", podName, err)
 	}
 
-	defer podLogs.Close()
+	defer func() { _ = podLogs.Close() }()
 
 	buf := new(io.Reader)
 	*buf = podLogs

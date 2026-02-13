@@ -27,12 +27,6 @@ var staticFiles embed.FS
 
 var version = "dev"
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
 func determineKubeconfigPath() (string, string, error) {
 	if kubeconfigEnv := os.Getenv("KUBECONFIG"); kubeconfigEnv != "" {
 		separator := ":"
@@ -211,7 +205,7 @@ func handleAnalyzeLogs(clientset *kubernetes.Clientset) http.HandlerFunc {
 				http.Error(w, fmt.Sprintf("Failed to create Gemini analyzer: %v", err), http.StatusInternalServerError)
 				return
 			}
-			defer geminiAnalyzer.Close()
+			defer func() { _ = geminiAnalyzer.Close() }()
 			analyzer = geminiAnalyzer
 		case "ollama":
 			ollamaAnalyzer, err := loganalysis.NewOllamaAnalyzer("http://localhost:11434", "mixtral:8x7b")
