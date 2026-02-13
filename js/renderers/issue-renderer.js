@@ -532,6 +532,11 @@ const IssueRenderer = {
 
     // Generic issue detail renderer for non-migration issues
     renderGenericIssueDetail(issue) {
+        // Find VM data for this issue
+        const vm = AppState.data?.vms?.find(v => 
+            v.name === issue.vmName && v.namespace === issue.vmNamespace
+        );
+
         return `
             <div class="space-y-6">
                 <!-- Issue Summary Card -->
@@ -546,6 +551,36 @@ const IssueRenderer = {
                     <div class="p-3 bg-slate-700/50 rounded">
                         <div class="text-sm text-slate-300">${issue.description}</div>
                     </div>
+                </div>
+
+                <!-- Debug: Volume Status Data -->
+                <div class="bg-blue-900/30 border border-blue-600 rounded-lg p-4">
+                    <h4 class="text-base font-medium text-blue-200 mb-3">🔍 Debug: Volume Status Data</h4>
+                    <div class="space-y-1 text-sm font-mono text-slate-300">
+                        <div>Issue VM Name: <span class="text-yellow-400">${issue.vmName || 'N/A'}</span></div>
+                        <div>Issue Namespace: <span class="text-yellow-400">${issue.vmNamespace || 'N/A'}</span></div>
+                        <div>Issue Resource Name: <span class="text-yellow-400">${issue.resourceName || 'N/A'}</span></div>
+                        <div>VM Found: <span class="text-yellow-400">${vm ? 'YES' : 'NO - VM OBJECT NOT FOUND'}</span></div>
+                        <div>VM Name (if found): <span class="text-yellow-400">${vm?.name || 'N/A'}</span></div>
+                        <div>VM Namespace (if found): <span class="text-yellow-400">${vm?.namespace || 'N/A'}</span></div>
+                        <div>Volume Name: <span class="text-yellow-400">${vm?.volumeName || 'NOT FOUND'}</span></div>
+                        <div>Robustness: <span class="text-yellow-400">${vm?.volumeRobustness || 'NOT FOUND'}</span></div>
+                        <div>State: <span class="text-yellow-400">${vm?.volumeState || 'NOT FOUND'}</span></div>
+                        <div>Replica Count: <span class="text-yellow-400">${vm?.replicaInfo?.length || 0}</span></div>
+                        <div>Faulted Replicas: <span class="text-yellow-400">${vm?.replicaInfo?.filter(r => r.currentState === 'error' || !r.started).length || 0}</span></div>
+                    </div>
+                </div>
+
+                <!-- TEST: Log Analysis Button -->
+                <div class="bg-slate-800/60 border border-slate-600 rounded-lg p-4">
+                    <h4 class="text-lg font-medium text-white mb-4">AI Log Analysis (Test)</h4>
+                    <button 
+                        id="test-log-analysis-btn-${issue.id}" 
+                        class="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors text-sm"
+                        onclick="IssueRenderer.testLogAnalysis('${issue.id}', '${issue.resourceType}', '${issue.vmName || ''}')">
+                        Test Log Analysis
+                    </button>
+                    <div id="test-log-result-${issue.id}" class="mt-3 text-sm text-slate-300"></div>
                 </div>
 
                 <!-- Verification Steps -->
@@ -575,18 +610,67 @@ const IssueRenderer = {
     },
 
     // Main render method that chooses the appropriate renderer
+    testLogAnalysis(issueId, issueType, vmName) {
+        const issue = AppState.issues.find(i => i.id === issueId);
+        if (!issue) {
+            console.error('Issue not found:', issueId);
+            return;
+        }
+        
+        const vm = AppState.data?.vms?.find(v => 
+            v.name === issue.vmName && v.namespace === issue.vmNamespace
+        );
+        
+        const resultDiv = document.getElementById(`test-log-result-${issueId}`);
+        resultDiv.innerHTML = '<div class="text-yellow-300">Calling API...</div>';
+        
+        const requestBody = {
+            issue_id: issue.id,
+            issue_type: issue.resourceType,
+            vm_name: issue.vmName || '',
+            namespace: issue.vmNamespace || '',
+            volume_name: vm?.volumeName || '',
+            volume_robustness: vm?.volumeRobustness || '',
+            volume_state: vm?.volumeState || '',
+            replica_count: vm?.replicaInfo?.length || 0,
+            faulted_count: vm?.replicaInfo?.filter(r => r.currentState === 'error' || !r.started).length || 0,
+            source_node: issue.sourceNode || '',
+            target_node: issue.targetNode || '',
+            time_window: '1h',
+            provider: 'ollama'
+        };
+        
+        fetch('/api/analyze-logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        })
+        .then(res => {
+            if (!res.ok) {
+                return res.text().then(text => { throw new Error(text); });
+            }
+            return res.json();
+        })
+        .then(data => {
+            resultDiv.innerHTML = `
+                <div class="bg-slate-700/50 rounded p-3">
+                    <div class="font-medium text-green-300 mb-2">✓ Analysis Complete</div>
+                    <div><strong>Provider:</strong> ${data.provider}</div>
+                    <div><strong>Root Cause:</strong> ${data.root_cause}</div>
+                    <div><strong>Component:</strong> ${data.failing_component}</div>
+                    <div><strong>Action:</strong> ${data.recommended_action}</div>
+                </div>
+            `;
+        })
+        .catch(err => {
+            resultDiv.innerHTML = `<div class="text-red-300">Error: ${err.message}</div>`;
+        });
+    },
     renderIssueDetail(issue) {
-        // Use specific renderer for migration issues
-        if (issue.resourceType === 'attachment-tickets-stuck-migration' && issue.attachmentDetails?.migrationStory) {
+        // Decide which renderer to use based on issue type
+        if (issue.resourceType === 'volume-attachment-conflict' && issue.attachmentDetails?.migrationStory) {
             return this.renderMigrationIssueDetail(issue);
         }
-        // Use existing PDB renderer
-        else if (issue.resourceType === 'pdb' && issue.pdbDetails) {
-            return this.renderPDBIssueDetail(issue);
-        }
-        // Use generic renderer for everything else
-        else {
-            return this.renderGenericIssueDetail(issue);
-        }
-    }
+        return this.renderGenericIssueDetail(issue);
+    },
 };

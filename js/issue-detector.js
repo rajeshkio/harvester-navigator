@@ -106,6 +106,66 @@ const IssueDetector = {
                     vmNamespace: vm.namespace
                 }));
             }
+            
+            // Check for orphaned replicas pointing to non-existent engine (Longhorn bug 11479)
+            if (vm.engineInfo && vm.engineInfo.length > 0) {
+                const existingEngineNames = new Set(vm.engineInfo.map(e => e.name));
+                const orphanedReplicas = vm.replicaInfo.filter(r => 
+                    r.engineName && !existingEngineNames.has(r.engineName)
+                );
+                
+                if (orphanedReplicas.length > 0) {
+                    const orphanedEngineNames = [...new Set(orphanedReplicas.map(r => r.engineName))];
+                    
+                    issues.push(this.createIssue({
+                        id: `orphaned-replicas-${vm.namespace}-${vm.name}`,
+                        title: 'Orphaned Replicas - Engine Mismatch',
+                        severity: 'critical',
+                        category: 'Storage',
+                        description: `${orphanedReplicas.length} replicas point to deleted engine(s): ${orphanedEngineNames.join(', ')}. This prevents VM startup. Likely caused by incomplete stuck migration cleanup (Longhorn bug 11479).`,
+                        affectedResource: `Volume: ${vm.volumeName} (VM: ${vm.namespace}/${vm.name})`,
+                        resourceType: 'orphaned-replicas',
+                        resourceName: vm.volumeName,
+                        vmName: vm.name,
+                        vmNamespace: vm.namespace,
+                        attachmentDetails: {
+                            orphanedReplicas: orphanedReplicas.map(r => r.name),
+                            missingEngines: orphanedEngineNames,
+                            existingEngines: Array.from(existingEngineNames)
+                        },
+                        verificationSteps: [
+                            {
+                                id: 'check-volume-state',
+                                title: 'Check Volume Status',
+                                description: 'Verify volume is detached and showing robustness=unknown',
+                                command: `kubectl get volumes.longhorn.io ${vm.volumeName} -n longhorn-system -o jsonpath='{.status.state} {.status.robustness}'`,
+                                expectedOutput: 'detached unknown'
+                            },
+                            {
+                                id: 'list-existing-engines',
+                                title: 'List Existing Engines',
+                                description: 'Find the actual engine that exists for this volume',
+                                command: `kubectl get engines.longhorn.io -n longhorn-system -l longhornvolume=${vm.volumeName} -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.currentReplicaAddressMap}{"\\n"}{end}'`,
+                                expectedOutput: `Shows engine name (like ${vm.volumeName}-e-0) with empty or populated replica map`
+                            },
+                            {
+                                id: 'check-replica-engine-refs',
+                                title: 'Check Replica Engine References',
+                                description: 'See which engine names replicas are pointing to',
+                                command: `kubectl get replicas.longhorn.io -n longhorn-system -l longhornvolume=${vm.volumeName} -o jsonpath='{range .items[*]}{.metadata.name}{" -> "}{.spec.engineName}{" ("}{.status.currentState}{")\\n"}{end}'`,
+                                expectedOutput: `Shows replicas pointing to missing engine (${orphanedEngineNames[0]})`
+                            },
+                            {
+                                id: 'check-vm-pod-error',
+                                title: 'Check VM Pod Error Message',
+                                description: 'See the actual attachment failure error',
+                                command: `kubectl describe pod -n ${vm.namespace} ${vm.podName || 'virt-launcher-' + vm.name} | grep -A 5 "FailedAttachVolume"`,
+                                expectedOutput: 'Shows "no healthy or scheduled replica for starting"'
+                            }
+                        ]
+                    }));
+                }
+            }
         }
         
         // Check for stuck terminating VM
@@ -1496,13 +1556,55 @@ const IssueDetector = {
                     warning: 'Ensure VM is not needed before deletion'
                 }
             ],
-            'replica-faulted': [
+            'orphaned-replicas': [
                 {
-                    id: 'salvage-replicas',
-                    title: 'Attempt Replica Salvage',
-                    command: '# Use Longhorn UI to salvage failed replicas',
-                    description: 'Try to recover data from faulted replicas using Longhorn UI',
-                    warning: 'This may result in data loss'
+                    id: 'identify-correct-engine',
+                    title: 'Identify the Correct Engine Name',
+                    description: 'From verification step 2, copy the actual engine name that exists (e.g., pvc-xxx-e-0)',
+                    command: `# The correct engine name is shown in verification step 2 output`,
+                    warning: 'Make note of this engine name - you will use it in the next steps'
+                },
+                {
+                    id: 'patch-replica-1',
+                    title: 'Update First Orphaned Replica',
+                    description: 'Patch the first replica to point to the correct engine',
+                    command: `kubectl patch replica <REPLICA_NAME_1> -n longhorn-system --type merge -p '{"spec":{"engineName":"<CORRECT_ENGINE_NAME>"}}'`,
+                    warning: 'Replace <REPLICA_NAME_1> with actual replica name from verification, and <CORRECT_ENGINE_NAME> with engine from step 1'
+                },
+                {
+                    id: 'patch-replica-2',
+                    title: 'Update Second Orphaned Replica',
+                    description: 'Patch the second replica to point to the correct engine',
+                    command: `kubectl patch replica <REPLICA_NAME_2> -n longhorn-system --type merge -p '{"spec":{"engineName":"<CORRECT_ENGINE_NAME>"}}'`,
+                    warning: 'Replace <REPLICA_NAME_2> with actual replica name from verification'
+                },
+                {
+                    id: 'patch-replica-3',
+                    title: 'Update Third Orphaned Replica',
+                    description: 'Patch the third replica if it exists',
+                    command: `kubectl patch replica <REPLICA_NAME_3> -n longhorn-system --type merge -p '{"spec":{"engineName":"<CORRECT_ENGINE_NAME>"}}'`,
+                    warning: 'Only run if you have 3 replicas. Skip if only 2 replicas were orphaned.'
+                },
+                {
+                    id: 'verify-engine-recognizes-replicas',
+                    title: 'Verify Engine Now Has Replicas',
+                    description: 'Check that the engine now shows replicas in its address map',
+                    command: `kubectl get engine <CORRECT_ENGINE_NAME> -n longhorn-system -o jsonpath='{.status.currentReplicaAddressMap}' | jq .`,
+                    expectedOutput: 'Should show 2-3 replica entries with IP addresses (not empty map {})'
+                },
+                {
+                    id: 'verify-vm-startup',
+                    title: 'Verify VM Can Now Start',
+                    description: 'Check if VM successfully transitions from Scheduling to Running',
+                    command: `kubectl get vm ${resourceName.split('-').slice(0, -2).join('-')} -o jsonpath='{.status.printableStatus}'`,
+                    expectedOutput: 'Should show "Running" or progress from "Scheduling" to "Starting"'
+                },
+                {
+                    id: 'check-pod-events',
+                    title: 'Confirm No More Attachment Errors',
+                    description: 'Verify pod no longer shows FailedAttachVolume errors',
+                    command: `kubectl get events --field-selector involvedObject.name=virt-launcher-* -n ${resourceName.split('-').slice(0, -2).join('-')} | grep -i attach`,
+                    expectedOutput: 'Should show "AttachVolume.Attach succeeded" instead of errors'
                 }
             ],
             'node-not-ready': [

@@ -120,6 +120,8 @@ type VMInfo struct {
 	StorageClass               string        `json:"storageClass"`
 	ClaimNames                 string        `json:"claimNames"`
 	VolumeName                 string        `json:"volumeName"`
+	VolumeRobustness           string        `json:"volumeRobustness,omitempty"`
+	VolumeState                string        `json:"volumeState,omitempty"`
 	ReplicaInfo                []ReplicaInfo `json:"replicaInfo"`
 	EngineInfo                 []EngineInfo  `json:"engineInfo"`
 	PodInfo                    []PodInfo     `json:"podInfo"`
@@ -400,4 +402,86 @@ type HealthCheckResult struct {
 	PodErrors []PodError `json:"podErrors,omitempty"`
 	Timestamp time.Time  `json:"timestamp"`
 	Duration  string     `json:"duration,omitempty"`
+}
+
+type LogAnalysisRequest struct {
+	IssueID          string `json:"issue_id"`
+	IssueType        string `json:"issue_type"`
+	VMName           string `json:"vm_name"`
+	Namespace        string `json:"namespace"`
+	VolumeName       string `json:"volume_name,omitempty"`
+	VolumeRobustness string `json:"volume_robustness,omitempty"`
+	VolumeState      string `json:"volume_state,omitempty"`
+	ReplicaCount     int    `json:"replica_count,omitempty"`
+	FaultedCount     int    `json:"faulted_count,omitempty"`
+	SourceNode       string `json:"source_nade"`
+	TargetNode       string `json:"target_node"`
+	TimeWindow       string `json:"time_window"`
+	Provider         string `json:"provider"`
+	
+	// Multi-layered troubleshooting data
+	NodeDiskStatus    []NodeDiskInfo      `json:"node_disk_status,omitempty"`
+	ReplicaDetails    []ReplicaDetail     `json:"replica_details,omitempty"`
+	PodDistribution   []PodLocation       `json:"pod_distribution,omitempty"`
+	AttachmentState   *AttachmentState    `json:"attachment_state,omitempty"`
+	MigrationState    *MigrationState     `json:"migration_state,omitempty"`
+}
+
+// NodeDiskInfo - Disk pressure and capacity info per node
+type NodeDiskInfo struct {
+	NodeName          string `json:"node_name"`
+	HasDiskPressure   bool   `json:"has_disk_pressure"`
+	StorageScheduled  string `json:"storage_scheduled"`
+	StorageMaximum    string `json:"storage_maximum"`
+	StorageAvailable  string `json:"storage_available"`
+	DiskPath          string `json:"disk_path,omitempty"`
+}
+
+// ReplicaDetail - Per-replica state and location
+type ReplicaDetail struct {
+	Name         string `json:"name"`
+	NodeName     string `json:"node_name"`
+	State        string `json:"state"`
+	Mode         string `json:"mode,omitempty"`
+	FailedAt     string `json:"failed_at,omitempty"`
+	Started      bool   `json:"started"`
+	DiskPath     string `json:"disk_path,omitempty"`
+}
+
+// PodLocation - Pod location and state for split-brain detection
+type PodLocation struct {
+	PodName   string `json:"pod_name"`
+	NodeName  string `json:"node_name"`
+	Phase     string `json:"phase"`
+	CreatedAt string `json:"created_at,omitempty"`
+}
+
+// AttachmentState - Volume attachment across CSI and Longhorn layers
+type AttachmentState struct {
+	CurrentNodeID     string   `json:"current_node_id"`
+	DesiredNodeID     string   `json:"desired_node_id,omitempty"`
+	CSIAttachments    []string `json:"csi_attachments"`
+	LonghornAttached  bool     `json:"longhorn_attached"`
+	HasConflict       bool     `json:"has_conflict"`
+}
+
+// MigrationState - Migration status and history
+type MigrationState struct {
+	CurrentMigrationNodeID string `json:"current_migration_node_id,omitempty"`
+	IsDangling            bool   `json:"is_dangling"`
+	MigrationStarted      string `json:"migration_started,omitempty"`
+	LastMigrationAttempt  string `json:"last_migration_attempt,omitempty"`
+}
+
+
+type LogAnalysisResult struct {
+	RootCause         string   `json:"root_cause"`
+	ErrorLines        []string `json:"error_lines"`
+	FailingComponent  string   `json:"failing_component"`
+	RecommendedAction string   `json:"recommended_action"`
+	Confidence        string   `json:"confidence"`
+
+	Provider      string  `json:"provider"`
+	TokensUsed    int     `json:"tokens_used"`
+	EstimatedCost float64 `json:"estimated_cost"`
 }

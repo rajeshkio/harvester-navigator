@@ -112,6 +112,15 @@ func (vs *VolumeService) BatchFetchVolumeDetails(pvcRequests []batch.PVCRequest)
 			if volumeDetails.IsLonghornCSI && volumeDetails.VolumeHandle != "" {
 				if backendDetails := vs.getLonghornVolumeDetails(volumeDetails.VolumeHandle); backendDetails != nil {
 					volumeDetails.BackendDetails = backendDetails
+
+					if status, ok := backendDetails["status"].(map[string]interface{}); ok {
+						if robustness, ok := status["robustness"].(string); ok {
+							volumeDetails.Robustness = robustness
+						}
+						if state, ok := status["state"].(string); ok {
+							volumeDetails.State = state
+						}
+					}
 				}
 			}
 

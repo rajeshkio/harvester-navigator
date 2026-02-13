@@ -14,7 +14,8 @@ import (
 	"time"
 
 	kubeclient "github.com/rk280392/harvesterNavigator/internal/client"
-	models "github.com/rk280392/harvesterNavigator/internal/models"
+	types "github.com/rk280392/harvesterNavigator/internal/models"
+	"github.com/rk280392/harvesterNavigator/internal/services/loganalysis"
 	"github.com/rk280392/harvesterNavigator/internal/services/volume"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -26,6 +27,12 @@ var staticFiles embed.FS
 
 var version = "dev"
 
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
 func determineKubeconfigPath() (string, string, error) {
 	if kubeconfigEnv := os.Getenv("KUBECONFIG"); kubeconfigEnv != "" {
 		separator := ":"
@@ -125,8 +132,8 @@ func logStorageBackends(clientset *kubernetes.Clientset) {
 	log.Println("=====================================")
 }
 
-func getDefaultResourcePaths(namespace string) models.ResourcePaths {
-	return models.ResourcePaths{
+func getDefaultResourcePaths(namespace string) types.ResourcePaths {
+	return types.ResourcePaths{
 		VMPath:           "apis/kubevirt.io/v1",
 		PVCPath:          "/api/v1",
 		LHVAPath:         "/apis/longhorn.io/v1beta2",
@@ -170,6 +177,86 @@ func handleData(clientset *kubernetes.Clientset, config *rest.Config) http.Handl
 		log.Printf("Data sent in %v", time.Since(start))
 	}
 }
+
+func handleAnalyzeLogs(clientset *kubernetes.Clientset) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req types.LogAnalysisRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request", http.StatusBadRequest)
+			return
+		}
+
+		// Default to gemini if not specified
+		if req.Provider == "" {
+			req.Provider = "gemini"
+		}
+
+		// Create the appropriate analyzer
+		var analyzer loganalysis.LogAnalyzer
+
+		switch req.Provider {
+		case "gemini":
+			apiKey := os.Getenv("GEMINI_API_KEY")
+			if apiKey == "" {
+				http.Error(w, "GEMINI_API_KEY environment variable not set", http.StatusInternalServerError)
+				return
+			}
+			geminiAnalyzer, err := loganalysis.NewGeminiAnalyzer(r.Context(), apiKey)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Failed to create Gemini analyzer: %v", err), http.StatusInternalServerError)
+				return
+			}
+			defer geminiAnalyzer.Close()
+			analyzer = geminiAnalyzer
+		case "ollama":
+			ollamaAnalyzer, err := loganalysis.NewOllamaAnalyzer("http://localhost:11434", "mixtral:8x7b")
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Failed to create Ollama analyzer: %v", err), http.StatusInternalServerError)
+				return
+			}
+			analyzer = ollamaAnalyzer
+		case "stub":
+			analyzer = loganalysis.NewStubAnalyzer()
+		default:
+			http.Error(w, "Invalid provider. Use 'gemini' or 'stub'", http.StatusBadRequest)
+			return
+		}
+
+		logs, err := loganalysis.CollectLogsForIssue(r.Context(), clientset, req)
+		if err != nil {
+			log.Printf("Warning: Could not collect logs: %v", err)
+			// Continue without logs
+			logs = fmt.Sprintf("(Log collection failed: %v)", err)
+		} else {
+			log.Printf("Collected %d characters of logs", len(logs))
+		}
+
+		// Build a simple prompt (we'll improve this later)
+		prompt := loganalysis.BuildAnalysisPrompt(req)
+		fullPrompt := fmt.Sprintf("%s\n\nRELEVANT LOGS:\n%s", prompt, logs)
+		// Call the analyzer
+
+		log.Println("===== PROMPT BEING SENT TO AI =====")
+		log.Println(fullPrompt)
+		log.Println("===== END PROMPT =====")
+		result, err := analyzer.Analyze(r.Context(), fullPrompt)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(result); err != nil {
+			log.Printf("JSON encoding error: %v", err)
+		}
+	}
+}
+
 func main() {
 	port := flag.String("port", "8080", "Port to run the server on")
 	showVersion := flag.Bool("version", false, "Show version and exit")
@@ -229,6 +316,7 @@ func main() {
 		// Let other paths fall through to the file server
 		http.NotFound(w, r)
 	})
+	http.HandleFunc("/api/analyze-logs", handleAnalyzeLogs(clientset))
 
 	// Serve JS files
 	jsFS, _ := fs.Sub(staticFiles, "js")

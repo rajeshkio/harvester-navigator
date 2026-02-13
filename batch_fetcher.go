@@ -312,6 +312,8 @@ func (df *DataFetcher) processVMWithBatchedData(
 		vmInfo.VolumeName = volDetails.VolumeHandle
 		vmInfo.PVCStatus = models.PVCStatus(volDetails.Status)
 		vmInfo.StorageClass = volDetails.StorageClass
+		vmInfo.VolumeRobustness = volDetails.Robustness
+		vmInfo.VolumeState = volDetails.State
 		if vmInfo.VolumeName != "" {
 			paths := getDefaultResourcePaths(namespace)
 			lhvaData, err := lhva.FetchLHVAData(df.client, vmInfo.VolumeName, paths.LHVAPath, "longhorn-system", "volumeattachments")
