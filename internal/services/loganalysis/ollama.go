@@ -139,17 +139,17 @@ RULES:
 	responseText = strings.ReplaceAll(responseText, `\_`, "_")
 	responseText = strings.ReplaceAll(responseText, `\-`, "-")
 	responseText = strings.ReplaceAll(responseText, `\.`, ".")
-	
+
 	// Also fix if they appear in the raw response before extraction
 	responseText = strings.ReplaceAll(responseText, `root\_cause`, `root_cause`)
 	responseText = strings.ReplaceAll(responseText, `error\_lines`, `error_lines`)
 	responseText = strings.ReplaceAll(responseText, `failing\_component`, `failing_component`)
 	responseText = strings.ReplaceAll(responseText, `recommended\_action`, `recommended_action`)
-	
+
 	log.Printf("===== SANITIZED JSON =====")
 	log.Printf("%s", responseText)
 	log.Printf("===== END SANITIZED =====")
-	
+
 	// Parse the extracted JSON
 	var result types.LogAnalysisResult
 	if err := json.Unmarshal([]byte(responseText), &result); err != nil {

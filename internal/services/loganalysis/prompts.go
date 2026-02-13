@@ -54,7 +54,7 @@ func BuildAnalysisPrompt(req types.LogAnalysisRequest) string {
 		}
 		parts = append(parts, "")
 	}
-	
+
 	// Add node disk status for DiskPressure detection
 	if len(req.NodeDiskStatus) > 0 {
 		parts = append(parts, "NODE DISK STATUS:")
@@ -68,7 +68,7 @@ func BuildAnalysisPrompt(req types.LogAnalysisRequest) string {
 		}
 		parts = append(parts, "")
 	}
-	
+
 	// Add replica details for location and failure analysis
 	if len(req.ReplicaDetails) > 0 {
 		parts = append(parts, "REPLICA DETAILS:")
@@ -82,7 +82,7 @@ func BuildAnalysisPrompt(req types.LogAnalysisRequest) string {
 		}
 		parts = append(parts, "")
 	}
-	
+
 	// Add pod distribution for split-brain detection
 	if len(req.PodDistribution) > 0 {
 		parts = append(parts, "POD DISTRIBUTION:")
@@ -92,7 +92,7 @@ func BuildAnalysisPrompt(req types.LogAnalysisRequest) string {
 		}
 		parts = append(parts, "")
 	}
-	
+
 	// Add attachment state for CSI layer analysis
 	if req.AttachmentState != nil {
 		parts = append(parts, "ATTACHMENT STATE:")
@@ -106,7 +106,7 @@ func BuildAnalysisPrompt(req types.LogAnalysisRequest) string {
 		}
 		parts = append(parts, "")
 	}
-	
+
 	// Add migration state for dangling migration detection
 	if req.MigrationState != nil && req.MigrationState.CurrentMigrationNodeID != "" {
 		parts = append(parts, "MIGRATION STATE:")
