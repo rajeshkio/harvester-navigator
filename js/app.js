@@ -19,7 +19,8 @@ class HarvesterDashboardApp {
             
             // Check if the response is ok
             if (!response.ok) {
-                throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                const body = await response.text();
+                throw new Error(`Server error: ${response.status} ${body.trim()}`);
             }
             
             // Check if response is JSON
@@ -42,7 +43,7 @@ class HarvesterDashboardApp {
             if (error.name === 'TypeError' && error.message.includes('fetch')) {
                 userMessage = 'Server is not responding - please check if the backend is running';
             } else if (error.message.includes('500')) {
-                userMessage = 'Server error - please check backend logs';      
+                userMessage = 'Cluster is unreachable';
             } else if (error.message.includes('404')) {
                 userMessage = 'Data endpoint not found - check server configuration';  
             } else if (error.message.includes('JSON')) {
@@ -67,9 +68,9 @@ class HarvesterDashboardApp {
                         <p class="text-slate-300 mb-6">${message}</p>
                         
                         <div class="space-y-2 text-sm text-slate-400 mb-6">
-                            <div>• Check if the Harvester Navigator backend is running</div>
-                            <div>• Verify the server is accessible on port 8080</div>
-                            <div>• Check network connectivity</div>
+                            <div>• Ensure the Harvester cluster is running, or the support bundle simulator is running via harvester-support-bundle-kit</div>
+                            <div>• Ensure kubeconfig is present at ~/.sim/admin.kubeconfig</div>
+                            <div>• Or set the KUBECONFIG environment variable to the correct path</div>
                         </div>
                         
                         <button id="retry-connection" 
