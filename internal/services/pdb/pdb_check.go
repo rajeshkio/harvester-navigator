@@ -33,7 +33,7 @@ func NewHealthChecker(client *kubernetes.Clientset, dynamicClient dynamic.Interf
 
 // CheckPDBHealth performs comprehensive PDB health check for a specific node
 func (hc *HealthChecker) CheckPDBHealth(nodeName string) (*models.PDBHealthStatus, error) {
-	log.Printf("Checking PDB health for node: %s", nodeName)
+	//log.Printf("Checking PDB health for node: %s", nodeName)
 
 	status := &models.PDBHealthStatus{
 		NodeName:    nodeName,
@@ -72,7 +72,7 @@ func (hc *HealthChecker) CheckPDBHealth(nodeName string) (*models.PDBHealthStatu
 		status.Severity = hc.calculateSeverity(status.Issues)
 	}
 
-	log.Printf("PDB health check complete for %s: %d issues found", nodeName, status.IssueCount)
+	//log.Printf("PDB health check complete for %s: %d issues found", nodeName, status.IssueCount)
 	return status, nil
 }
 

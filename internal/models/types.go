@@ -4,10 +4,10 @@ import "time"
 
 // FullClusterData is the top-level struct that holds all data sent to the frontend.
 type FullClusterData struct {
-	VMs           []VMInfo                       `json:"vms"`
-	Nodes         []NodeWithMetrics              `json:"nodes"`
-	UpgradeInfo   *UpgradeInfo                   `json:"upgradeInfo,omitempty"`
-	HealthChecks  *HealthCheckSummary            `json:"healthChecks,omitempty"`
+	VMs           []VMInfo                     `json:"vms"`
+	Nodes         []NodeWithMetrics            `json:"nodes"`
+	UpgradeInfo   *UpgradeInfo                 `json:"upgradeInfo,omitempty"`
+	HealthChecks  *HealthCheckSummary          `json:"healthChecks,omitempty"`
 	NodeCPULabels map[string]map[string]string `json:"nodeCPULabels,omitempty"`
 }
 
@@ -210,9 +210,9 @@ type ReplicaInfo struct {
 	Port              string             `json:"port"`
 	IP                string             `json:"ip"`
 	// Disk health — populated from the Longhorn Node object during batch fetch
-	DiskSchedulable  bool   `json:"diskSchedulable"`
-	DiskPressure     bool   `json:"diskPressure"`
-	DiskPressureMsg  string `json:"diskPressureMsg"`
+	DiskSchedulable bool   `json:"diskSchedulable"`
+	DiskPressure    bool   `json:"diskPressure"`
+	DiskPressureMsg string `json:"diskPressureMsg"`
 }
 
 // EngineInfo contains information about a storage engine

@@ -485,11 +485,11 @@ func parseVMIMDetailed(vmimData map[string]interface{}, client *kubernetes.Clien
 					// Try target pod first, then fallback to source pod (as requirements are inherited)
 					// Try virt-launcher pod name pattern if targetPod is not set
 					podName := vmimInfo.TargetPod
-					
+
 					// First try: Target Pod
 					var nodeSelector map[string]string
 					var err error
-					
+
 					if podName != "" {
 						nodeSelector, err = fetchPodNodeSelector(client, podName, vmimInfo.Namespace)
 						// Ignore error, try next method
@@ -497,7 +497,7 @@ func parseVMIMDetailed(vmimData map[string]interface{}, client *kubernetes.Clien
 							nodeSelector = nil
 						}
 					}
-					
+
 					// Second try: Virt-launcher pattern (likely target)
 					if nodeSelector == nil && vmimInfo.VMIName != "" {
 						podName = "virt-launcher-" + vmimInfo.VMIName
@@ -507,7 +507,7 @@ func parseVMIMDetailed(vmimData map[string]interface{}, client *kubernetes.Clien
 							nodeSelector = nil
 						}
 					}
-					
+
 					// Third try: Source Pod (definitive fallback)
 					// The source pod contains the nodeSelector that is currently enforced
 					// and will be copied to the target pod.
