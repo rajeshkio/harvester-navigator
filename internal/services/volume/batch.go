@@ -121,6 +121,11 @@ func (vs *VolumeService) BatchFetchVolumeDetails(pvcRequests []batch.PVCRequest)
 							volumeDetails.State = state
 						}
 					}
+					if spec, ok := backendDetails["spec"].(map[string]interface{}); ok {
+						if n, ok := spec["numberOfReplicas"].(float64); ok {
+							volumeDetails.NumberOfReplicas = int(n)
+						}
+					}
 				}
 			}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	models "github.com/rk280392/harvesterNavigator/internal/models"
 	"k8s.io/client-go/kubernetes"
@@ -106,12 +107,21 @@ func ParseLonghornNodeData(nodes []interface{}) ([]models.NodeInfo, error) {
 		if diskStatus, ok := status["diskStatus"].(map[string]interface{}); ok {
 			for _, d := range diskStatus {
 				if disk, ok := d.(map[string]interface{}); ok {
+					// The map key is the disk name; the actual UUID is inside the object
+					diskUUID := getString(disk, "diskUUID")
 					isSchedulable := false
+					pressureReason := ""
+					pressureMessage := ""
 					if diskConditions, ok := disk["conditions"].([]interface{}); ok {
 						for _, dc := range diskConditions {
 							if diskCond, ok := dc.(map[string]interface{}); ok {
-								if getString(diskCond, "type") == "Schedulable" && getString(diskCond, "status") == "True" {
-									isSchedulable = true
+								if getString(diskCond, "type") == "Schedulable" {
+									if getString(diskCond, "status") == "True" {
+										isSchedulable = true
+									} else {
+										pressureReason = strings.TrimSpace(getString(diskCond, "reason"))
+										pressureMessage = strings.TrimSpace(getString(diskCond, "message"))
+									}
 									break
 								}
 							}
@@ -128,9 +138,12 @@ func ParseLonghornNodeData(nodes []interface{}) ([]models.NodeInfo, error) {
 					}
 
 					disks = append(disks, models.DiskInfo{
+						UUID:              diskUUID,
 						Name:              getString(disk, "diskName"),
 						Path:              getString(disk, "diskPath"),
 						IsSchedulable:     isSchedulable,
+						PressureReason:    pressureReason,
+						PressureMessage:   pressureMessage,
 						StorageAvailable:  formatBytes(getFloat64(disk, "storageAvailable")),
 						StorageMaximum:    formatBytes(getFloat64(disk, "storageMaximum")),
 						StorageScheduled:  formatBytes(getFloat64(disk, "storageScheduled")),

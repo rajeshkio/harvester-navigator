@@ -105,3 +105,4 @@ package-lock.json
 
 # Keep the built CSS file (it's needed for the app)
 !styles/tailwind.css
+deep-dive-document/

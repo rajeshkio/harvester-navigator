@@ -22,19 +22,20 @@ type StorageBackendInfo struct {
 
 // VolumeDetails contains comprehensive volume information
 type VolumeDetails struct {
-	PVName         string                 `json:"pvName"`
-	PVCName        string                 `json:"pvcName"`
-	Namespace      string                 `json:"namespace"`
-	StorageClass   string                 `json:"storageClass"`
-	CSIDriver      string                 `json:"csiDriver"`
-	VolumeHandle   string                 `json:"volumeHandle"`
-	Capacity       string                 `json:"capacity"`
-	AccessModes    []string               `json:"accessModes"`
-	Status         string                 `json:"status"`
-	IsLonghornCSI  bool                   `json:"isLonghornCSI"`
-	Robustness     string                 `json:"robustness,omitempty"`
-	State          string                 `json:"state,omitempty"`
-	BackendDetails map[string]interface{} `json:"backendDetails,omitempty"`
+	PVName           string                 `json:"pvName"`
+	PVCName          string                 `json:"pvcName"`
+	Namespace        string                 `json:"namespace"`
+	StorageClass     string                 `json:"storageClass"`
+	CSIDriver        string                 `json:"csiDriver"`
+	VolumeHandle     string                 `json:"volumeHandle"`
+	Capacity         string                 `json:"capacity"`
+	AccessModes      []string               `json:"accessModes"`
+	Status           string                 `json:"status"`
+	IsLonghornCSI    bool                   `json:"isLonghornCSI"`
+	Robustness       string                 `json:"robustness,omitempty"`
+	State            string                 `json:"state,omitempty"`
+	NumberOfReplicas int                    `json:"numberOfReplicas,omitempty"`
+	BackendDetails   map[string]interface{} `json:"backendDetails,omitempty"`
 }
 
 // DiscoverStorageBackends finds all available storage backends in the cluster

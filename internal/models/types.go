@@ -4,10 +4,10 @@ import "time"
 
 // FullClusterData is the top-level struct that holds all data sent to the frontend.
 type FullClusterData struct {
-	VMs           []VMInfo                       `json:"vms"`
-	Nodes         []NodeWithMetrics              `json:"nodes"`
-	UpgradeInfo   *UpgradeInfo                   `json:"upgradeInfo,omitempty"`
-	HealthChecks  *HealthCheckSummary            `json:"healthChecks,omitempty"`
+	VMs           []VMInfo                     `json:"vms"`
+	Nodes         []NodeWithMetrics            `json:"nodes"`
+	UpgradeInfo   *UpgradeInfo                 `json:"upgradeInfo,omitempty"`
+	HealthChecks  *HealthCheckSummary          `json:"healthChecks,omitempty"`
 	NodeCPULabels map[string]map[string]string `json:"nodeCPULabels,omitempty"`
 }
 
@@ -46,9 +46,12 @@ type NodeCondition struct {
 	Reason             string `json:"reason,omitempty"`
 }
 type DiskInfo struct {
+	UUID              string           `json:"uuid"`
 	Name              string           `json:"name"`
 	Path              string           `json:"path"`
 	IsSchedulable     bool             `json:"isSchedulable"`
+	PressureReason    string           `json:"pressureReason,omitempty"`
+	PressureMessage   string           `json:"pressureMessage,omitempty"`
 	StorageAvailable  string           `json:"storageAvailable"`
 	StorageMaximum    string           `json:"storageMaximum"`
 	StorageScheduled  string           `json:"storageScheduled"`
@@ -125,6 +128,7 @@ type VMInfo struct {
 	VolumeName                 string        `json:"volumeName"`
 	VolumeRobustness           string        `json:"volumeRobustness,omitempty"`
 	VolumeState                string        `json:"volumeState,omitempty"`
+	VolumeNumberOfReplicas     int           `json:"volumeNumberOfReplicas,omitempty"`
 	ReplicaInfo                []ReplicaInfo `json:"replicaInfo"`
 	EngineInfo                 []EngineInfo  `json:"engineInfo"`
 	PodInfo                    []PodInfo     `json:"podInfo"`
@@ -187,21 +191,28 @@ type ReplicaCondition struct {
 
 // ReplicaInfo contains information about a storage replica
 type ReplicaInfo struct {
-	Name            string             `json:"name"`
-	NodeID          string             `json:"nodeId"`
-	Active          bool               `json:"active"`
-	EngineName      string             `json:"engineName"`
-	CurrentState    string             `json:"currentState"`
-	Started         bool               `json:"started"`
-	DataEngine      string             `json:"dataEngine"`
-	DiskID          string             `json:"diskId"`
-	InstanceManager string             `json:"instanceManager"`
-	Image           string             `json:"image"`
-	OwnerRefName    string             `json:"ownerRefName"`
-	Conditions      []ReplicaCondition `json:"conditions"`
-	StorageIP       string             `json:"storageIP"`
-	Port            string             `json:"port"`
-	IP              string             `json:"ip"`
+	Name              string             `json:"name"`
+	NodeID            string             `json:"nodeId"`
+	Active            bool               `json:"active"`
+	EngineName        string             `json:"engineName"`
+	CurrentState      string             `json:"currentState"`
+	DesireState       string             `json:"desireState"`
+	Started           bool               `json:"started"`
+	DataEngine        string             `json:"dataEngine"`
+	DiskID            string             `json:"diskId"`
+	DiskPath          string             `json:"diskPath"`
+	RebuildRetryCount int                `json:"rebuildRetryCount"`
+	InstanceManager   string             `json:"instanceManager"`
+	Image             string             `json:"image"`
+	OwnerRefName      string             `json:"ownerRefName"`
+	Conditions        []ReplicaCondition `json:"conditions"`
+	StorageIP         string             `json:"storageIP"`
+	Port              string             `json:"port"`
+	IP                string             `json:"ip"`
+	// Disk health — populated from the Longhorn Node object during batch fetch
+	DiskSchedulable bool   `json:"diskSchedulable"`
+	DiskPressure    bool   `json:"diskPressure"`
+	DiskPressureMsg string `json:"diskPressureMsg"`
 }
 
 // EngineInfo contains information about a storage engine
