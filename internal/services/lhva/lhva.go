@@ -13,10 +13,7 @@ import (
 // Returns the LHVA data as a map and any error encountered.
 func FetchLHVAData(client *kubernetes.Clientset, name, absPath, namespace, resource string) (map[string]interface{}, error) {
 	lhvaRaw, err := client.RESTClient().Get().
-		AbsPath(absPath).
-		Namespace(namespace).
-		Name(name).
-		Resource(resource).
+		AbsPath(fmt.Sprintf("%s/namespaces/%s/%s/%s", absPath, namespace, resource, name)).
 		Do(context.Background()).Raw()
 
 	if err != nil {

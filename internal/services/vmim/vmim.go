@@ -125,6 +125,151 @@ func isVMIMForVMI(vmimData map[string]interface{}, vmiName string) bool {
 	return false
 }
 
+// fetchPodNodeSelector fetches the nodeSelector from a pod's spec
+func fetchPodNodeSelector(client *kubernetes.Clientset, podName, namespace string) (map[string]string, error) {
+	if client == nil || podName == "" || namespace == "" {
+		return nil, fmt.Errorf("invalid parameters: client, podName, or namespace is empty")
+	}
+
+	podRaw, err := client.RESTClient().Get().
+		AbsPath("/api/v1").
+		Namespace(namespace).
+		Name(podName).
+		Resource("pods").
+		Do(context.Background()).Raw()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch pod: %w", err)
+	}
+
+	var podData map[string]interface{}
+	if err := json.Unmarshal(podRaw, &podData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal pod data: %w", err)
+	}
+
+	// Extract spec.nodeSelector
+	if specRaw, ok := podData["spec"].(map[string]interface{}); ok {
+		if nodeSelectorRaw, ok := specRaw["nodeSelector"].(map[string]interface{}); ok {
+			nodeSelector := make(map[string]string)
+			for key, value := range nodeSelectorRaw {
+				if strValue, ok := value.(string); ok {
+					nodeSelector[key] = strValue
+				}
+			}
+			return nodeSelector, nil
+		}
+	}
+
+	return nil, nil // No nodeSelector found
+}
+
+// fetchSchedulingEvents fetches FailedScheduling events for a VMI
+func fetchSchedulingEvents(client *kubernetes.Clientset, vmiName, namespace string) ([]types.SchedulingEvent, error) {
+	if client == nil || vmiName == "" || namespace == "" {
+		return nil, fmt.Errorf("invalid parameters")
+	}
+
+	// Fetch all events in the namespace
+	eventsRaw, err := client.RESTClient().Get().
+		AbsPath("/api/v1").
+		Namespace(namespace).
+		Resource("events").
+		Do(context.Background()).Raw()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch events: %w", err)
+	}
+
+	var eventsList map[string]interface{}
+	if err := json.Unmarshal(eventsRaw, &eventsList); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal events: %w", err)
+	}
+
+	itemsRaw, ok := eventsList["items"]
+	if !ok {
+		return nil, nil
+	}
+
+	items, ok := itemsRaw.([]interface{})
+	if !ok {
+		return nil, nil
+	}
+
+	var schedulingEvents []types.SchedulingEvent
+	for _, item := range items {
+		eventMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Check if this event is related to our VMI
+		if involvedObjectRaw, ok := eventMap["involvedObject"].(map[string]interface{}); ok {
+			if nameRaw, ok := involvedObjectRaw["name"]; ok {
+				if name, ok := nameRaw.(string); ok {
+					// Match virt-launcher-{vmiName} or the vmi name itself
+					if !strings.Contains(name, vmiName) {
+						continue
+					}
+				}
+			}
+		}
+
+		// Extract reason and filter for FailedScheduling
+		reasonRaw, ok := eventMap["reason"]
+		if !ok {
+			continue
+		}
+		reason, ok := reasonRaw.(string)
+		if !ok || reason != "FailedScheduling" {
+			continue
+		}
+
+		// Extract event details
+		var schedulingEvent types.SchedulingEvent
+		schedulingEvent.Reason = reason
+
+		if messageRaw, ok := eventMap["message"].(string); ok {
+			schedulingEvent.Message = messageRaw
+		}
+
+		if countRaw, ok := eventMap["count"].(float64); ok {
+			schedulingEvent.Count = int32(countRaw)
+		}
+
+		if lastTimestampRaw, ok := eventMap["lastTimestamp"].(string); ok {
+			schedulingEvent.LastTimestamp = lastTimestampRaw
+		}
+
+		schedulingEvents = append(schedulingEvents, schedulingEvent)
+	}
+
+	return schedulingEvents, nil
+}
+
+// hasNodeAffinityError checks if an event message contains node affinity/selector errors
+func hasNodeAffinityError(message string) bool {
+	if message == "" {
+		return false
+	}
+
+	// Look for common patterns in node affinity errors
+	patterns := []string{
+		"didn't match Pod's node affinity",
+		"didn't match node selector",
+		"node(s) didn't match Pod's node affinity/selector",
+		"didn't match pod affinity",
+	}
+
+	messageLower := strings.ToLower(message)
+	for _, pattern := range patterns {
+		if strings.Contains(messageLower, strings.ToLower(pattern)) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // parseVMIMDetailed processes a single VMIM object with full detail extraction
 func parseVMIMDetailed(vmimData map[string]interface{}, client *kubernetes.Clientset) (types.VMIMInfo, error) {
 	var vmimInfo types.VMIMInfo
@@ -312,6 +457,77 @@ func parseVMIMDetailed(vmimData map[string]interface{}, client *kubernetes.Clien
 				podExists, podStatus := validateTargetPod(client, vmimInfo.TargetPod, vmimInfo.Namespace)
 				vmimInfo.TargetPodExists = podExists
 				vmimInfo.TargetPodStatus = podStatus
+			} else if vmimInfo.Phase == "Pending" || vmimInfo.Phase == "Scheduling" {
+				// For migrations stuck in Pending/Scheduling without a target pod,
+				// the target pod is likely Unschedulable
+				vmimInfo.TargetPodExists = false
+				vmimInfo.TargetPodStatus = "Unschedulable"
+			}
+
+			// Collect scheduling verification data for stuck migrations
+			if vmimInfo.Phase == "Pending" || vmimInfo.Phase == "Failed" {
+				if vmimInfo.VMIName != "" && vmimInfo.Namespace != "" && client != nil {
+					// Fetch scheduling events
+					if events, err := fetchSchedulingEvents(client, vmimInfo.VMIName, vmimInfo.Namespace); err == nil && len(events) > 0 {
+						vmimInfo.SchedulingEvents = events
+
+						// Check if any event has node affinity errors
+						for _, event := range events {
+							if hasNodeAffinityError(event.Message) {
+								vmimInfo.HasSchedulingError = true
+								vmimInfo.SchedulingErrorReason = "NodeAffinityError"
+								break
+							}
+						}
+					}
+
+					// If we have a target pod name, fetch its nodeSelector to identify required labels
+					// Try target pod first, then fallback to source pod (as requirements are inherited)
+					// Try virt-launcher pod name pattern if targetPod is not set
+					podName := vmimInfo.TargetPod
+					
+					// First try: Target Pod
+					var nodeSelector map[string]string
+					var err error
+					
+					if podName != "" {
+						nodeSelector, err = fetchPodNodeSelector(client, podName, vmimInfo.Namespace)
+						// Ignore error, try next method
+						if err != nil {
+							nodeSelector = nil
+						}
+					}
+					
+					// Second try: Virt-launcher pattern (likely target)
+					if nodeSelector == nil && vmimInfo.VMIName != "" {
+						podName = "virt-launcher-" + vmimInfo.VMIName
+						nodeSelector, err = fetchPodNodeSelector(client, podName, vmimInfo.Namespace)
+						// Ignore error, try next method
+						if err != nil {
+							nodeSelector = nil
+						}
+					}
+					
+					// Third try: Source Pod (definitive fallback)
+					// The source pod contains the nodeSelector that is currently enforced
+					// and will be copied to the target pod.
+					if nodeSelector == nil && vmimInfo.SourcePod != "" {
+						nodeSelector, err = fetchPodNodeSelector(client, vmimInfo.SourcePod, vmimInfo.Namespace)
+						// Final error check not needed as we just check if nodeSelector != nil
+						if err != nil {
+							nodeSelector = nil
+						}
+					}
+
+					if nodeSelector != nil {
+						// Extract CPU feature labels (cpu-feature.node.kubevirt.io/*)
+						for key := range nodeSelector {
+							if strings.HasPrefix(key, "cpu-feature.node.kubevirt.io/") {
+								vmimInfo.RequiredNodeLabels = append(vmimInfo.RequiredNodeLabels, key)
+							}
+						}
+					}
+				}
 			}
 		}
 	}

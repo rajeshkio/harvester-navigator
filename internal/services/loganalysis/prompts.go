@@ -125,10 +125,14 @@ func BuildAnalysisPrompt(req types.LogAnalysisRequest) string {
 
 	// What we want from the analysis
 	parts = append(parts, "TASK:")
-	parts = append(parts, "Based on the issue type and context, provide:")
-	parts = append(parts, "1. Most likely root cause")
-	parts = append(parts, "2. Which Harvester/KubeVirt component is likely failing")
-	parts = append(parts, "3. Recommended next steps for troubleshooting")
+	parts = append(parts, "Analyze the above and respond with ONLY valid JSON, no markdown, no explanation:")
+	parts = append(parts, `{`)
+	parts = append(parts, `  "root_cause": "one sentence describing the root cause",`)
+	parts = append(parts, `  "error_lines": [],`)
+	parts = append(parts, `  "failing_component": "specific component name",`)
+	parts = append(parts, `  "recommended_action": "one sentence next step",`)
+	parts = append(parts, `  "confidence": "high|medium|low"`)
+	parts = append(parts, `}`)
 
 	return strings.Join(parts, "\n")
 }

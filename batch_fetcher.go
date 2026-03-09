@@ -97,6 +97,24 @@ func (df *DataFetcher) fetchFullClusterData() (models.FullClusterData, error) {
 
 	nodeWg.Wait()
 
+	// Cross-reference stuck Pre-draining nodes with VM migration data
+	if allData.UpgradeInfo != nil && len(allData.UpgradeInfo.StuckPreDrainNodes) > 0 {
+		stuckCount := 0
+		for _, vmInfo := range allData.VMs {
+			for _, m := range vmInfo.VMIMInfo {
+				if m.Phase == "Pending" && m.TargetPodStatus == "Unschedulable" {
+					stuckCount++
+					break
+				}
+			}
+		}
+		allData.UpgradeInfo.StuckPreDrainVMCount = stuckCount
+		if stuckCount > 0 {
+			log.Printf("Upgrade blocked: %d VMs with unschedulable migrations on %d stuck Pre-draining nodes",
+				stuckCount, len(allData.UpgradeInfo.StuckPreDrainNodes))
+		}
+	}
+
 	elapsed := time.Since(start)
 	log.Printf("Cluster data fetch completed in %v", elapsed)
 	return allData, nil
@@ -175,6 +193,16 @@ func (df *DataFetcher) fetchNodeData(allData *models.FullClusterData) error {
 
 		allData.Nodes = mergedNodes
 		log.Printf("Successfully merged node data for %d nodes.", len(mergedNodes))
+	}
+
+	// Fetch CPU feature labels from nodes
+	log.Println("Fetching CPU feature labels from nodes...")
+	cpuLabels, err := node.FetchNodeCPULabels(df.client)
+	if err != nil {
+		log.Printf("Warning: Could not fetch CPU feature labels: %v", err)
+	} else {
+		allData.NodeCPULabels = cpuLabels
+		log.Printf("Successfully fetched CPU labels for %d nodes", len(cpuLabels))
 	}
 
 	return nil

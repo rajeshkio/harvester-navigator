@@ -100,9 +100,19 @@ func parseUpgradeInfo(upgrade map[string]interface{}) (*models.UpgradeInfo, erro
 
 	// Extract status information
 	if status, ok := upgrade["status"].(map[string]interface{}); ok {
+		// Debug: Print available status fields
+		fmt.Printf("[DEBUG] Upgrade status fields: ")
+		for key := range status {
+			fmt.Printf("%s, ", key)
+		}
+		fmt.Println()
+		
 		// Get previous version
 		if previousVersion, ok := status["previousVersion"].(string); ok {
 			upgradeInfo.PreviousVersion = previousVersion
+			fmt.Printf("[DEBUG] Found previousVersion: %s\n", previousVersion)
+		} else {
+			fmt.Println("[DEBUG] previousVersion not found in status")
 		}
 
 		// Get node statuses
@@ -160,6 +170,19 @@ func parseUpgradeInfo(upgrade map[string]interface{}) (*models.UpgradeInfo, erro
 	// Default state if none found
 	if upgradeInfo.State == "" {
 		upgradeInfo.State = "Unknown"
+	}
+
+	// Identify nodes stuck in Pre-draining state
+	if upgradeInfo.State != "Succeeded" && len(upgradeInfo.NodeStatuses) > 0 {
+		upgradeDuration := time.Since(upgradeInfo.UpgradeTime)
+		// Only flag if upgrade has been running for more than 30 minutes
+		if upgradeDuration > 30*time.Minute {
+			for nodeName, state := range upgradeInfo.NodeStatuses {
+				if state == "Pre-draining" {
+					upgradeInfo.StuckPreDrainNodes = append(upgradeInfo.StuckPreDrainNodes, nodeName)
+				}
+			}
+		}
 	}
 
 	return upgradeInfo, nil

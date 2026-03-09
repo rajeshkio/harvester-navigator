@@ -4,18 +4,21 @@ import "time"
 
 // FullClusterData is the top-level struct that holds all data sent to the frontend.
 type FullClusterData struct {
-	VMs          []VMInfo            `json:"vms"`
-	Nodes        []NodeWithMetrics   `json:"nodes"`
-	UpgradeInfo  *UpgradeInfo        `json:"upgradeInfo,omitempty"`
-	HealthChecks *HealthCheckSummary `json:"healthChecks,omitempty"`
+	VMs           []VMInfo                       `json:"vms"`
+	Nodes         []NodeWithMetrics              `json:"nodes"`
+	UpgradeInfo   *UpgradeInfo                   `json:"upgradeInfo,omitempty"`
+	HealthChecks  *HealthCheckSummary            `json:"healthChecks,omitempty"`
+	NodeCPULabels map[string]map[string]string `json:"nodeCPULabels,omitempty"`
 }
 
 type UpgradeInfo struct {
-	Version         string            `json:"version"`
-	PreviousVersion string            `json:"previousVersion"`
-	UpgradeTime     time.Time         `json:"upgradeTime"`
-	State           string            `json:"state"`
-	NodeStatuses    map[string]string `json:"nodeStatuses,omitempty"`
+	Version              string            `json:"version"`
+	PreviousVersion      string            `json:"previousVersion"`
+	UpgradeTime          time.Time         `json:"upgradeTime"`
+	State                string            `json:"state"`
+	NodeStatuses         map[string]string `json:"nodeStatuses,omitempty"`
+	StuckPreDrainNodes   []string          `json:"stuckPreDrainNodes,omitempty"`
+	StuckPreDrainVMCount int               `json:"stuckPreDrainVMCount,omitempty"`
 }
 
 // ResourcePaths defines the API paths and namespaces for various Kubernetes resources.
@@ -288,6 +291,20 @@ type VMIMInfo struct {
 	TargetPodExists           bool                    `json:"targetPodExists"`
 	TargetPodStatus           string                  `json:"targetPodStatus,omitempty"`
 	MigrationMode             string                  `json:"migrationMode,omitempty"`
+	// Scheduling verification fields
+	SchedulingEvents      []SchedulingEvent `json:"schedulingEvents,omitempty"`
+	HasSchedulingError    bool              `json:"hasSchedulingError"`
+	SchedulingErrorReason string            `json:"schedulingErrorReason,omitempty"`
+	RequiredNodeLabels    []string          `json:"requiredNodeLabels,omitempty"`
+	NodesWithoutLabel     []string          `json:"nodesWithoutLabel,omitempty"`
+}
+
+// SchedulingEvent represents a pod scheduling event
+type SchedulingEvent struct {
+	Reason        string `json:"reason"`
+	Message       string `json:"message"`
+	Count         int32  `json:"count"`
+	LastTimestamp string `json:"lastTimestamp"`
 }
 
 // PhaseTransition represents a phase transition in migration

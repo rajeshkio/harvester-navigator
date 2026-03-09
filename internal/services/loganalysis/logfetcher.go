@@ -38,10 +38,19 @@ func FetchPodLogs(ctx context.Context, clientset *kubernetes.Clientset, namespac
 	var relevantLines []string
 
 	for _, line := range lines {
-		lowerline := strings.ToLower(line)
-		if strings.Contains(lowerline, "error") ||
-			strings.Contains(lowerline, "warn") ||
-			strings.Contains(lowerline, "fail") || strings.Contains(lowerline, "fatal") {
+		lowerLine := strings.ToLower(line)
+		if strings.Contains(lowerLine, "error") ||
+			strings.Contains(lowerLine, "warn") ||
+			strings.Contains(lowerLine, "fail") ||
+			strings.Contains(lowerLine, "fatal") ||
+			strings.Contains(lowerLine, "level=error") ||
+			strings.Contains(lowerLine, "level=warn") ||
+			strings.Contains(lowerLine, "degraded") ||
+			strings.Contains(lowerLine, "faulted") ||
+			strings.Contains(lowerLine, "replica") ||
+			strings.Contains(lowerLine, "robustness") ||
+			strings.Contains(lowerLine, "not schedulable") ||
+			strings.Contains(lowerLine, "no healthy") {
 			relevantLines = append(relevantLines, line)
 		}
 	}
@@ -62,28 +71,66 @@ func CollectLogsForIssue(ctx context.Context, clientset *kubernetes.Clientset, r
 
 	switch req.IssueType {
 	case "replica-faulted":
+		// 1. Longhorn manager pods — contain volume/replica state-change events
+		//    e.g. "volume robustness changed to degraded", "replica X is in error state"
+		managerPods, err := clientset.CoreV1().Pods("longhorn-system").List(ctx, metav1.ListOptions{
+			LabelSelector: "app=longhorn-manager",
+		})
+		if err != nil {
+			logParts = append(logParts, fmt.Sprintf("(failed to list longhorn-manager pods: %v)", err))
+		} else {
+			limit := 2
+			if len(managerPods.Items) < limit {
+				limit = len(managerPods.Items)
+			}
+			for i := 0; i < limit; i++ {
+				podName := managerPods.Items[i].Name
+				logs, err := FetchPodLogs(ctx, clientset, "longhorn-system", podName, "longhorn-manager", 500)
+				if err != nil {
+					logParts = append(logParts, fmt.Sprintf("(failed to get logs from longhorn-manager %s: %v)", podName, err))
+				} else {
+					logParts = append(logParts, fmt.Sprintf("=== Longhorn Manager: %s ===", podName))
+					logParts = append(logParts, logs)
+				}
+			}
+		}
 
-		pods, err := clientset.CoreV1().Pods("longhorn-system").List(ctx, metav1.ListOptions{
+		// 2. Instance-manager pods — contain engine/replica process errors
+		imPods, err := clientset.CoreV1().Pods("longhorn-system").List(ctx, metav1.ListOptions{
 			LabelSelector: "longhorn.io/component=instance-manager",
 		})
 		if err != nil {
-			return "", fmt.Errorf("failed to list instance-manager pods: %w", err)
+			logParts = append(logParts, fmt.Sprintf("(failed to list instance-manager pods: %v)", err))
+		} else {
+			limit := 2
+			if len(imPods.Items) < limit {
+				limit = len(imPods.Items)
+			}
+			for i := 0; i < limit; i++ {
+				podName := imPods.Items[i].Name
+				logs, err := FetchPodLogs(ctx, clientset, "longhorn-system", podName, "instance-manager", 200)
+				if err != nil {
+					logParts = append(logParts, fmt.Sprintf("(failed to get logs from instance-manager %s: %v)", podName, err))
+				} else {
+					logParts = append(logParts, fmt.Sprintf("=== Instance Manager: %s ===", podName))
+					logParts = append(logParts, logs)
+				}
+			}
 		}
-		if len(pods.Items) == 0 {
-			return "", fmt.Errorf("no instance-manager pods found")
-		}
-		limit := 2
-		if len(pods.Items) < limit {
-			limit = len(pods.Items)
-		}
-		for i := 0; i < limit; i++ {
-			podName := pods.Items[i].Name
-			logs, err := FetchPodLogs(ctx, clientset, "longhorn-system", podName, "instance-manager", 300)
-			if err != nil {
-				logParts = append(logParts, fmt.Sprintf("Failed to get logs from %s: %v", podName, err))
-			} else {
-				logParts = append(logParts, fmt.Sprintf("=== Instance Manager: %s (last 300 lines) ===", podName))
-				logParts = append(logParts, logs)
+
+		// 3. Volume-specific replica pods (if volume name provided)
+		if req.VolumeName != "" {
+			replicaPods, err := clientset.CoreV1().Pods("longhorn-system").List(ctx, metav1.ListOptions{
+				LabelSelector: fmt.Sprintf("longhornvolume=%s", req.VolumeName),
+			})
+			if err == nil && len(replicaPods.Items) > 0 {
+				for _, pod := range replicaPods.Items {
+					logs, err := FetchPodLogs(ctx, clientset, "longhorn-system", pod.Name, "", 200)
+					if err == nil {
+						logParts = append(logParts, fmt.Sprintf("=== Replica pod for volume %s: %s ===", req.VolumeName, pod.Name))
+						logParts = append(logParts, logs)
+					}
+				}
 			}
 		}
 

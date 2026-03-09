@@ -332,3 +332,59 @@ func FetchRunningPodCounts(client *kubernetes.Clientset) (map[string]int, error)
 
 	return podCounts, nil
 }
+
+// FetchNodeCPULabels fetches CPU feature labels from all nodes
+// Returns a map of nodeName -> map of CPU label keys to values
+func FetchNodeCPULabels(client *kubernetes.Clientset) (map[string]map[string]string, error) {
+	if client == nil {
+		return nil, fmt.Errorf("client is nil")
+	}
+
+	// Fetch all nodes
+	nodes, err := FetchAllKubernetesNodes(client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch nodes: %w", err)
+	}
+
+	result := make(map[string]map[string]string)
+
+	for _, nodeItem := range nodes {
+		nodeMap, ok := nodeItem.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		metadata, ok := nodeMap["metadata"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		nodeName := getString(metadata, "name")
+		if nodeName == "" {
+			continue
+		}
+
+		// Extract CPU feature labels
+		labels, ok := metadata["labels"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		cpuLabels := make(map[string]string)
+		for key, value := range labels {
+			// Filter for CPU feature labels
+			if strings.HasPrefix(key, "cpu-feature.node.kubevirt.io/") {
+				if strValue, ok := value.(string); ok {
+					cpuLabels[key] = strValue
+				}
+			}
+		}
+
+		// Only add to result if node has CPU labels
+		if len(cpuLabels) > 0 {
+			result[nodeName] = cpuLabels
+		}
+	}
+
+	return result, nil
+}
