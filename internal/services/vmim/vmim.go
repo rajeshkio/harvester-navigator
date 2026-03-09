@@ -519,12 +519,9 @@ func parseVMIMDetailed(vmimData map[string]interface{}, client *kubernetes.Clien
 						}
 					}
 
-					if nodeSelector != nil {
-						// Extract CPU feature labels (cpu-feature.node.kubevirt.io/*)
-						for key := range nodeSelector {
-							if strings.HasPrefix(key, "cpu-feature.node.kubevirt.io/") {
-								vmimInfo.RequiredNodeLabels = append(vmimInfo.RequiredNodeLabels, key)
-							}
+					for key := range nodeSelector {
+						if strings.HasPrefix(key, "cpu-feature.node.kubevirt.io/") {
+							vmimInfo.RequiredNodeLabels = append(vmimInfo.RequiredNodeLabels, key)
 						}
 					}
 				}

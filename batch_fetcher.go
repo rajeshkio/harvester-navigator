@@ -101,7 +101,7 @@ func (df *DataFetcher) fetchFullClusterData() (models.FullClusterData, error) {
 	diskHealthByNode := make(map[string]map[string]models.DiskInfo)
 	for _, n := range allData.Nodes {
 		diskMap := make(map[string]models.DiskInfo)
-		for _, d := range n.NodeInfo.Disks {
+		for _, d := range n.Disks {
 			if d.UUID != "" {
 				diskMap[d.UUID] = d
 			}
