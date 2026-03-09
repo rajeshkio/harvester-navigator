@@ -632,10 +632,10 @@ const IssueRenderer = {
                 }
             }
 
-            const diskPressureDetail = hasDiskPressure && r.diskPressureMsg ? `
-                <div class="mt-2 ml-4 p-2 bg-red-900/30 border border-red-700/50 rounded text-xs text-red-200 font-mono whitespace-pre-wrap break-all">
-                    ${r.diskPressureMsg}
-                </div>` : '';
+            const rawMsg = r.diskPressureMsg || '';
+            const trimmedMsg = rawMsg.trim();
+            const diskPressureDetail = hasDiskPressure && trimmedMsg ? `
+                <div class="mt-2 ml-4 p-2 bg-red-900/30 border border-red-700/50 rounded text-xs text-red-200 font-mono whitespace-pre-wrap break-all">${trimmedMsg}</div>` : '';
 
             return `
                 <div class="border border-slate-600 rounded-lg p-3 ${isHealthy ? '' : 'border-red-700/50 bg-red-900/10'}">

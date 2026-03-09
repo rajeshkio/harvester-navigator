@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	models "github.com/rk280392/harvesterNavigator/internal/models"
 	"k8s.io/client-go/kubernetes"
@@ -118,8 +119,8 @@ func ParseLonghornNodeData(nodes []interface{}) ([]models.NodeInfo, error) {
 									if getString(diskCond, "status") == "True" {
 										isSchedulable = true
 									} else {
-										pressureReason = getString(diskCond, "reason")
-										pressureMessage = getString(diskCond, "message")
+										pressureReason = strings.TrimSpace(getString(diskCond, "reason"))
+										pressureMessage = strings.TrimSpace(getString(diskCond, "message"))
 									}
 									break
 								}

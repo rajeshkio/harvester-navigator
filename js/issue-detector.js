@@ -102,7 +102,7 @@ const IssueDetector = {
                         id: `replica-spec-${i}`,
                         title: `Check Replica State: ${r.name.slice(-8)}`,
                         description: `Shows desireState vs currentState, rebuildRetryCount, lastFailedAt, and lastHealthyAt. This tells you how long the replica has been broken and how many restart attempts have been made.`,
-                        command: `kubectl get replica.longhorn.io ${r.name} -n longhorn-system -o jsonpath='node={.spec.nodeID} disk={.spec.diskID}{\"\\n\"}desire={.spec.desireState} current={.status.currentState} retries={.spec.rebuildRetryCount}{\"\\n\"}lastFailed={.spec.lastFailedAt} lastHealthy={.spec.lastHealthyAt}'`
+                        command: `kubectl get replica.longhorn.io ${r.name} -n longhorn-system -o go-template=$'node: {{.spec.nodeID}}\\ndisk: {{.spec.diskID}}\\ndesireState: {{.spec.desireState}}\\ncurrentState: {{.status.currentState}}\\nrebuildRetries: {{.spec.rebuildRetryCount}}\\nlastFailed: {{if .spec.lastFailedAt}}{{.spec.lastFailedAt}}{{else}}-{{end}}\\nlastHealthy: {{if .spec.lastHealthyAt}}{{.spec.lastHealthyAt}}{{else}}-{{end}}'`
                     });
                 });
 
@@ -116,8 +116,8 @@ const IssueDetector = {
                         title: `Check Disk Schedulability on ${nodeId}`,
                         description: `Checks if the disk is marked Schedulable=False (DiskPressure). If storageScheduled exceeds storageMaximum, Longhorn cannot start new replica processes on this disk.`,
                         command: diskKey
-                            ? `kubectl get node.longhorn.io ${nodeId} -n longhorn-system -o jsonpath='{.status.diskStatus.${diskKey}}'`
-                            : `kubectl get node.longhorn.io ${nodeId} -n longhorn-system -o jsonpath='{.status.diskStatus}'`
+                            ? `kubectl get node.longhorn.io ${nodeId} -n longhorn-system -o jsonpath='{.status.diskStatus.${diskKey}}' | python3 -c "import sys,json; d=json.load(sys.stdin); s=d.get('conditions',[{}]); c=next((x for x in s if x.get('type')=='Schedulable'),{}); print('schedulable:', c.get('status')); print('reason:', c.get('reason','-')); print('message:', c.get('message','-')); print('available:', round(d.get('storageAvailable',0)/1e9,1), 'GB'); print('scheduled:', round(d.get('storageScheduled',0)/1e9,1), 'GB'); print('maximum:', round(d.get('storageMaximum',0)/1e9,1), 'GB')"`
+                            : `kubectl get node.longhorn.io ${nodeId} -n longhorn-system -o jsonpath='{.status.diskStatus}' | python3 -c "import sys,json; d=json.load(sys.stdin); [print(k, 'schedulable:', next((x.get('status') for x in v.get('conditions',[]) if x.get('type')=='Schedulable'),'-')) for k,v in d.items()]"`
                     });
                 });
 
@@ -127,7 +127,7 @@ const IssueDetector = {
                         id: `node-conditions-${i}`,
                         title: `Check Longhorn Node Conditions: ${nodeId}`,
                         description: `Checks Ready, Schedulable, MountPropagation, and KernelModules conditions. A node that is NotReady or missing kernel modules will prevent all replica processes from starting.`,
-                        command: `kubectl get node.longhorn.io ${nodeId} -n longhorn-system -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.message}{"\\n"}{end}'`
+                        command: `kubectl get node.longhorn.io ${nodeId} -n longhorn-system -o jsonpath='{.status.conditions}' | python3 -c "import sys,json; [print(c['type']+': '+c['status']+((' ('+c['message']+')') if c.get('message') else '')) for c in json.load(sys.stdin)]"`
                     });
                 });
 
@@ -147,7 +147,7 @@ const IssueDetector = {
                         id: `controller-logs-${i}`,
                         title: `Check Controller Logs for ${r.name.slice(-8)}`,
                         description: `Filters longhorn-manager logs for this replica. Look for: "concurrent limit" (rebuild throttle), "cannot attach" (migration conflict), "failed to get" (connection refused), or "WaitForBackingImage". This is the most direct evidence of why Longhorn is refusing to start the replica.`,
-                        command: `kubectl logs -n longhorn-system -l app=longhorn-manager --since=1h 2>/dev/null | grep "${r.name}" | grep -iv "Creating instance\\|reason: 'Start'" | tail -20`
+                        command: `kubectl logs -n longhorn-system -l app=longhorn-manager --since=1h 2>/dev/null | grep "${r.name}" | grep -iv "Creating instance\\|reason: 'Start'" | uniq`
                     });
                 });
 
