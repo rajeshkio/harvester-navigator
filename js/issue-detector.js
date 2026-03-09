@@ -35,7 +35,7 @@ const IssueDetector = {
         const issues = [];
         
         if (data.vms) {
-            data.vms.forEach(vm => this.checkVMIssues(vm, issues, data.upgradeInfo));
+            data.vms.forEach(vm => this.checkVMIssues(vm, issues, data.upgradeInfo, data.nodeCPULabels));
         }
         
         if (data.nodes) {
@@ -53,7 +53,7 @@ const IssueDetector = {
         return issues;
     },
     
-    checkVMIssues(vm, issues, upgradeInfo) {
+    checkVMIssues(vm, issues, upgradeInfo, nodeCPULabels) {
         if (vm.errors && vm.errors.length > 0) {
             const realErrors = vm.errors.filter(error => 
                 error.severity !== 'info' && error.severity !== 'information'
@@ -91,8 +91,66 @@ const IssueDetector = {
         }
         
         if (vm.replicaInfo && vm.replicaInfo.length > 0) {
-            const faultedReplicas = vm.replicaInfo.filter(r => r.currentState === 'error' || !r.started);
+            const faultedReplicas = vm.replicaInfo.filter(r => r.currentState !== 'running' || !r.started);
             if (faultedReplicas.length > 0) {
+                // Universal diagnostic steps — run in order for any replica failure
+                const replicaSteps = [];
+
+                // Step 1: replica spec — desire vs current state, retry count, when it last worked
+                faultedReplicas.forEach((r, i) => {
+                    replicaSteps.push({
+                        id: `replica-spec-${i}`,
+                        title: `Check Replica State: ${r.name.slice(-8)}`,
+                        description: `Shows desireState vs currentState, rebuildRetryCount, lastFailedAt, and lastHealthyAt. This tells you how long the replica has been broken and how many restart attempts have been made.`,
+                        command: `kubectl get replica.longhorn.io ${r.name} -n longhorn-system -o jsonpath='node={.spec.nodeID} disk={.spec.diskID}{\"\\n\"}desire={.spec.desireState} current={.status.currentState} retries={.spec.rebuildRetryCount}{\"\\n\"}lastFailed={.spec.lastFailedAt} lastHealthy={.spec.lastHealthyAt}'`
+                    });
+                });
+
+                // Step 2: disk health on each affected node — schedulability, pressure, available vs scheduled
+                const affectedNodes = [...new Set(faultedReplicas.map(r => r.nodeId).filter(Boolean))];
+                affectedNodes.forEach((nodeId, i) => {
+                    const nodeReplicas = faultedReplicas.filter(r => r.nodeId === nodeId);
+                    const diskKey = nodeReplicas[0]?.diskPath?.split('/').pop() || nodeReplicas[0]?.diskId || '';
+                    replicaSteps.push({
+                        id: `disk-health-${i}`,
+                        title: `Check Disk Schedulability on ${nodeId}`,
+                        description: `Checks if the disk is marked Schedulable=False (DiskPressure). If storageScheduled exceeds storageMaximum, Longhorn cannot start new replica processes on this disk.`,
+                        command: diskKey
+                            ? `kubectl get node.longhorn.io ${nodeId} -n longhorn-system -o jsonpath='{.status.diskStatus.${diskKey}}'`
+                            : `kubectl get node.longhorn.io ${nodeId} -n longhorn-system -o jsonpath='{.status.diskStatus}'`
+                    });
+                });
+
+                // Step 3: node conditions — is the Longhorn node itself Ready?
+                affectedNodes.forEach((nodeId, i) => {
+                    replicaSteps.push({
+                        id: `node-conditions-${i}`,
+                        title: `Check Longhorn Node Conditions: ${nodeId}`,
+                        description: `Checks Ready, Schedulable, MountPropagation, and KernelModules conditions. A node that is NotReady or missing kernel modules will prevent all replica processes from starting.`,
+                        command: `kubectl get node.longhorn.io ${nodeId} -n longhorn-system -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.message}{"\\n"}{end}'`
+                    });
+                });
+
+                // Step 4: instance manager — is it running and does it have this replica's process?
+                affectedNodes.forEach((nodeId, i) => {
+                    replicaSteps.push({
+                        id: `instance-manager-${i}`,
+                        title: `Check Instance Manager on ${nodeId}`,
+                        description: `The instance manager is the process that actually runs replica instances. If it is not Running, or if it has no instances, the replica process cannot start regardless of disk or node health.`,
+                        command: `kubectl get instancemanager -n longhorn-system -l longhorn.io/node=${nodeId} -o custom-columns='NAME:.metadata.name,STATE:.status.currentState,TYPE:.spec.type'`
+                    });
+                });
+
+                // Step 5: controller logs — what is Longhorn's reason for not starting this replica?
+                faultedReplicas.forEach((r, i) => {
+                    replicaSteps.push({
+                        id: `controller-logs-${i}`,
+                        title: `Check Controller Logs for ${r.name.slice(-8)}`,
+                        description: `Filters longhorn-manager logs for this replica. Look for: "concurrent limit" (rebuild throttle), "cannot attach" (migration conflict), "failed to get" (connection refused), or "WaitForBackingImage". This is the most direct evidence of why Longhorn is refusing to start the replica.`,
+                        command: `kubectl logs -n longhorn-system -l app=longhorn-manager --since=1h 2>/dev/null | grep "${r.name}" | grep -iv "Creating instance\\|reason: 'Start'" | tail -20`
+                    });
+                });
+
                 issues.push(this.createIssue({
                     id: `replica-issues-${vm.namespace}-${vm.name}`,
                     title: 'Storage Replica Issues',
@@ -103,7 +161,8 @@ const IssueDetector = {
                     resourceType: 'replica-faulted',
                     resourceName: vm.volumeName,
                     vmName: vm.name,
-                    vmNamespace: vm.namespace
+                    vmNamespace: vm.namespace,
+                    verificationSteps: replicaSteps
                 }));
             }
             
@@ -329,8 +388,178 @@ const IssueDetector = {
                 }
             });
         }
+
+        // Check for upgrade-blocked migrations (ipred-ctrl CPU feature mismatch)
+        this.checkUpgradeBlockedMigration(vm, issues, upgradeInfo, nodeCPULabels);
     },
-    
+
+    checkUpgradeBlockedMigration(vm, issues, upgradeInfo, nodeCPULabels) {
+        console.log(`[Upgrade Check] VM ${vm.namespace}/${vm.name}: upgradeInfo=`, upgradeInfo ? `state=${upgradeInfo.state}` : 'null');
+        
+        if (!upgradeInfo || upgradeInfo.state === 'Succeeded') return;
+
+        // FACT CHECK: Check for split-brain CPU labels across the cluster
+        nodeCPULabels = nodeCPULabels || {};
+        const allNodes = Object.keys(nodeCPULabels);
+        const nodesWithIpred = allNodes.filter(nodeName => {
+            const labels = nodeCPULabels[nodeName] || {};
+            return labels['cpu-feature.node.kubevirt.io/ipred-ctrl'] === 'true';
+        });
+        const hasSplitBrainLabels = nodesWithIpred.length > 0 && nodesWithIpred.length < allNodes.length;
+
+        // Filter for stuck migrations (Pending or Failed)
+        const allStuckMigrations = vm.vmimInfo?.filter(m => m.phase === 'Pending' || m.phase === 'Failed') || [];
+        if (allStuckMigrations.length === 0) return;
+
+        // Sort by creation timestamp (newest first) and take only the latest one
+        // Note: startTimestamp is a string, so we can compare lexicographically or parse dates
+        const latestStuckMigration = allStuckMigrations.sort((a, b) => {
+            const timeA = a.startTimestamp || a.creationTimestamp || "";
+            const timeB = b.startTimestamp || b.creationTimestamp || "";
+            return timeB.localeCompare(timeA); // Descending order
+        })[0];
+
+        // Process ONLY the latest stuck migration
+        const m = latestStuckMigration;
+        
+        // Check if it has events and affinity error
+        const hasEvents = m.schedulingEvents && m.schedulingEvents.length > 0;
+        const isAffinityError = m.hasSchedulingError && m.schedulingErrorReason === 'NodeAffinityError';
+        
+        // Step 1 & 2 & 3: Check Events
+        if (!hasEvents) {
+                // CASE: Pending without events
+                issues.push(this.createIssue({
+                    id: `migration-stuck-no-events-${m.name}`,
+                    title: 'VM Migration Stuck - No Events',
+                    severity: 'warning',
+                    category: 'Migration',
+                    description: `Migration ${m.name} is in ${m.phase} phase but no scheduling events were found. This requires manual investigation.`,
+                    affectedResource: `VM: ${vm.namespace}/${vm.name}`,
+                    resourceType: 'migration-stuck',
+                    resourceName: vm.name,
+                    vmName: vm.name,
+                    verificationSteps: [{
+                        id: 'manual-check',
+                        title: 'Manual Verification',
+                        description: 'Check the migration object manually',
+                        command: `kubectl describe vmim -n ${vm.namespace} ${m.name}`,
+                        expectedOutput: 'Look for status conditions or recent events'
+                    }]
+                }));
+                return;
+            }
+
+            // Step 4: Check if Affinity Based
+            if (!isAffinityError) {
+                // CASE: Events present, but NOT affinity (e.g. Insufficient CPU/Memory)
+                const eventMsg = m.schedulingEvents[0]?.message || "Unknown scheduling error";
+                issues.push(this.createIssue({
+                    id: `migration-scheduling-failed-${m.name}`,
+                    title: 'VM Migration Scheduling Failed',
+                    severity: 'warning',
+                    category: 'Migration',
+                    description: `Migration ${m.name} failed to schedule. Reason: ${eventMsg}`,
+                    affectedResource: `VM: ${vm.namespace}/${vm.name}`,
+                    resourceType: 'migration-scheduling-failed',
+                    resourceName: vm.name,
+                    vmName: vm.name,
+                    verificationSteps: [{
+                        id: 'check-events',
+                        title: 'Check Scheduling Events',
+                        description: 'Verify the scheduling error',
+                        command: `kubectl get events -n ${vm.namespace} --field-selector involvedObject.name=${m.vmiName}`,
+                        expectedOutput: eventMsg
+                    }]
+                }));
+                return;
+            }
+
+            // Step 5: Affinity Error - Check CPU Labels (Verification)
+            const hasPodSpecVerification = m.requiredNodeLabels && m.requiredNodeLabels.length > 0;
+            const isVerifiedCPUIssue = hasPodSpecVerification || hasSplitBrainLabels;
+
+            if (isVerifiedCPUIssue) {
+                // CASE: Verified CPU Label Mismatch
+                // Either we saw the label in the pod (Step 5a) OR we verified split-brain nodes (Step 5b)
+                const allCpuLabels = [...(m.requiredNodeLabels || [])];
+                
+                // Calculate missing nodes for precise remediation
+                const missingNodes = allNodes.filter(n => !nodesWithIpred.includes(n));
+                
+                issues.push(this.createIssue({
+                    id: `upgrade-blocked-cpu-mismatch-${m.name}`,
+                    title: 'VM Migration Blocked - CPU Label Mismatch',
+                    severity: 'critical',
+                    category: 'Upgrade',
+                    description: `Migration blocked by verified CPU label mismatch. ` +
+                        `Target pods require specific CPU feature labels (e.g. ipred-ctrl) which are missing on target nodes. ` +
+                        `Root cause: KubeVirt upgrade (${upgradeInfo.previousVersion} -> ${upgradeInfo.version}) label inconsistency.`,
+                    affectedResource: `VM: ${vm.namespace}/${vm.name}`,
+                    resourceType: 'upgrade-blocked-migration',
+                    resourceName: vm.name,
+                    vmName: vm.name,
+                    upgradeDetails: {
+                        version: upgradeInfo.version,
+                        state: upgradeInfo.state,
+                        requiredCPULabels: allCpuLabels
+                    },
+                    verificationSteps: [
+                        {
+                            id: 'check-node-labels',
+                            title: 'Verify Node Labels',
+                            description: 'Check which nodes have the CPU feature label',
+                            command: `kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\\t"}{.metadata.labels.cpu-feature\\.node\\.kubevirt\\.io/ipred-ctrl}{"\\n"}{end}'`,
+                            expectedOutput: missingNodes.length > 0
+                                ? `Nodes without label: ${missingNodes.join(', ')}`
+                                : 'Inconsistent values (some true, some empty)'
+                        }
+                    ],
+                    remediationSteps: [
+                        {
+                            id: 'annotate-skip-node',
+                            title: 'Annotate Nodes (Prevent Overwrite)',
+                            description: 'Annotate nodes to prevent the node-labeller from overwriting your manual changes.',
+                            commands: missingNodes.length > 0 
+                                ? missingNodes.map(n => `kubectl annotate node ${n} node-labeller.kubevirt.io/skip-node="true" --overwrite`)
+                                : ['kubectl annotate node <node-name> node-labeller.kubevirt.io/skip-node="true" --overwrite']
+                        },
+                        {
+                            id: 'add-missing-label',
+                            title: 'Add Missing CPU Label',
+                            description: 'Add the missing CPU feature label to the affected nodes.',
+                            commands: missingNodes.length > 0
+                                ? missingNodes.map(n => `kubectl label node ${n} cpu-feature.node.kubevirt.io/ipred-ctrl=true --overwrite`)
+                                : ['kubectl label node <node-name> cpu-feature.node.kubevirt.io/ipred-ctrl=true --overwrite'],
+                            warning: 'This is a temporary fix. Remember to remove these manual labels and annotations after the upgrade completes on all nodes.'
+                        }
+                    ]
+                }));
+            } else {
+                // CASE: Affinity Error, but NO Label Confirmation
+                issues.push(this.createIssue({
+                    id: `migration-affinity-error-${m.name}`,
+                    title: 'VM Migration Blocked - Node Affinity',
+                    severity: 'high',
+                    category: 'Migration',
+                    description: `Migration ${m.name} is failing due to node affinity/selector mismatch. ` + 
+                        `Actual error: "${m.schedulingEvents[0]?.message}". ` +
+                        `Could not verify specific CPU labels, but this is likely an upgrade constraint.`,
+                    affectedResource: `VM: ${vm.namespace}/${vm.name}`,
+                    resourceType: 'migration-affinity-mismatch',
+                    resourceName: vm.name,
+                    vmName: vm.name,
+                    verificationSteps: [{
+                        id: 'check-pod-spec',
+                        title: 'Check Pod Node Selector',
+                        description: 'Inspect the VMI or Pod for node selector requirements',
+                        command: `kubectl get vmi ${m.vmiName} -n ${vm.namespace} -o yaml | grep nodeSelector -A 5`,
+                        expectedOutput: 'List of required labels'
+                    }]
+                }));
+            }
+    },
+
     checkNodeIssues(node, issues) {
         // Handle the nested structure - extract node name and conditions
         const nodeName = node.longhornInfo ? node.longhornInfo.name : (node.name || 'unknown');

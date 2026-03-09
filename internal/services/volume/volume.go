@@ -32,9 +32,10 @@ type VolumeDetails struct {
 	AccessModes    []string               `json:"accessModes"`
 	Status         string                 `json:"status"`
 	IsLonghornCSI  bool                   `json:"isLonghornCSI"`
-	Robustness     string                 `json:"robustness,omitempty"`
-	State          string                 `json:"state,omitempty"`
-	BackendDetails map[string]interface{} `json:"backendDetails,omitempty"`
+	Robustness        string                 `json:"robustness,omitempty"`
+	State             string                 `json:"state,omitempty"`
+	NumberOfReplicas  int                    `json:"numberOfReplicas,omitempty"`
+	BackendDetails    map[string]interface{} `json:"backendDetails,omitempty"`
 }
 
 // DiscoverStorageBackends finds all available storage backends in the cluster

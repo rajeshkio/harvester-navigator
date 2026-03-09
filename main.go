@@ -16,6 +16,7 @@ import (
 	kubeclient "github.com/rk280392/harvesterNavigator/internal/client"
 	types "github.com/rk280392/harvesterNavigator/internal/models"
 	"github.com/rk280392/harvesterNavigator/internal/services/loganalysis"
+	"github.com/rk280392/harvesterNavigator/internal/services/patternengine"
 	"github.com/rk280392/harvesterNavigator/internal/services/volume"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -190,6 +191,22 @@ func handleAnalyzeLogs(clientset *kubernetes.Clientset) http.HandlerFunc {
 			req.Provider = "gemini"
 		}
 
+		// Collect logs upfront — needed by both pattern engine and LLM providers
+		logs, err := loganalysis.CollectLogsForIssue(r.Context(), clientset, req)
+		if err != nil {
+			log.Printf("Warning: Could not collect logs: %v", err)
+			logs = fmt.Sprintf("(Log collection failed: %v)", err)
+		} else {
+			log.Printf("Collected %d characters of logs for issue_type=%s vm=%s", len(logs), req.IssueType, req.VMName)
+			if len(logs) > 0 {
+				preview := logs
+				if len(preview) > 500 {
+					preview = preview[:500]
+				}
+				log.Printf("Log preview:\n%s", preview)
+			}
+		}
+
 		// Create the appropriate analyzer
 		var analyzer loganalysis.LogAnalyzer
 
@@ -214,21 +231,61 @@ func handleAnalyzeLogs(clientset *kubernetes.Clientset) http.HandlerFunc {
 				return
 			}
 			analyzer = ollamaAnalyzer
+		case "openwebui":
+			apiKey := os.Getenv("OPENWEBUI_API_KEY")
+			url := os.Getenv("OPENWEBUI_URL")
+			collectionID := os.Getenv("OPENWEBUI_COLLECTION_ID")
+			openwebuiAnalyzer, err := loganalysis.NewOpenwebuiAnalyzer(url, "qwen3:latest", apiKey, collectionID)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Failed to create OpenWebUI analyzer: %v", err), http.StatusInternalServerError)
+				return
+			}
+			analyzer = openwebuiAnalyzer
+		case "pattern-engine":
+			// Direct pattern-engine request — bypass the LLM entirely
+			pe := patternengine.NewAnalyzer()
+			peResult, peErr := pe.AnalyzeLogs(r.Context(), logs)
+			if peErr != nil {
+				http.Error(w, fmt.Sprintf("Pattern engine error: %v", peErr), http.StatusInternalServerError)
+				return
+			}
+			if peResult == nil {
+				peResult = &types.LogAnalysisResult{
+					Provider:          "pattern-engine",
+					RootCause:         "No known patterns matched in the collected logs",
+					RecommendedAction: "Review logs manually or try an LLM provider for deeper analysis",
+					Confidence:        "low",
+				}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			if encErr := json.NewEncoder(w).Encode(peResult); encErr != nil {
+				log.Printf("JSON encoding error: %v", encErr)
+			}
+			return
 		case "stub":
 			analyzer = loganalysis.NewStubAnalyzer()
 		default:
-			http.Error(w, "Invalid provider. Use 'gemini' or 'stub'", http.StatusBadRequest)
+			http.Error(w, "Invalid provider. Use 'gemini', 'ollama', 'openwebui', 'pattern-engine', or 'stub'", http.StatusBadRequest)
 			return
 		}
 
-		logs, err := loganalysis.CollectLogsForIssue(r.Context(), clientset, req)
-		if err != nil {
-			log.Printf("Warning: Could not collect logs: %v", err)
-			// Continue without logs
-			logs = fmt.Sprintf("(Log collection failed: %v)", err)
-		} else {
-			log.Printf("Collected %d characters of logs", len(logs))
+		// ── Pattern Engine: offline first-pass analysis ───────────────────────
+		// Run pattern engine before calling any LLM provider.
+		// If high/medium confidence match found, return immediately (zero API cost).
+		if req.Provider != "stub" && logs != "" {
+			pe := patternengine.NewAnalyzer()
+			peResult, peErr := pe.AnalyzeLogs(r.Context(), logs)
+			if peErr == nil && peResult != nil && (peResult.Confidence == "high" || peResult.Confidence == "medium") {
+				log.Printf("Pattern engine matched (confidence=%s, component=%s) — skipping LLM", peResult.Confidence, peResult.FailingComponent)
+				w.Header().Set("Content-Type", "application/json")
+				if encErr := json.NewEncoder(w).Encode(peResult); encErr != nil {
+					log.Printf("JSON encoding error: %v", encErr)
+				}
+				return
+			}
+			log.Printf("Pattern engine: no confident match — falling through to %s", req.Provider)
 		}
+		// ─────────────────────────────────────────────────────────────────────
 
 		// Build a simple prompt (we'll improve this later)
 		prompt := loganalysis.BuildAnalysisPrompt(req)
