@@ -106,7 +106,7 @@ func parseUpgradeInfo(upgrade map[string]interface{}) (*models.UpgradeInfo, erro
 			fmt.Printf("%s, ", key)
 		}
 		fmt.Println()
-		
+
 		// Get previous version
 		if previousVersion, ok := status["previousVersion"].(string); ok {
 			upgradeInfo.PreviousVersion = previousVersion
@@ -125,7 +125,7 @@ func parseUpgradeInfo(upgrade map[string]interface{}) (*models.UpgradeInfo, erro
 				}
 			}
 
-			fmt.Printf("Node Status is %v", nodeStatuses)
+			//fmt.Printf("Node Status is %v", nodeStatuses)
 
 		}
 	}

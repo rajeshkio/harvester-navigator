@@ -112,7 +112,12 @@ func ExtractReplicaInfoFromMap(replica map[string]interface{}) (types.ReplicaInf
 	info.EngineName, _ = spec["engineName"].(string)
 	info.DataEngine, _ = spec["dataEngine"].(string)
 	info.DiskID, _ = spec["diskID"].(string)
+	info.DiskPath, _ = spec["diskPath"].(string)
 	info.Image, _ = spec["image"].(string)
+	info.DesireState, _ = spec["desireState"].(string)
+	if v, ok := spec["rebuildRetryCount"].(float64); ok {
+		info.RebuildRetryCount = int(v)
+	}
 
 	// Extract status fields - make status optional since it might be missing
 	if status, ok := replica["status"].(map[string]interface{}); ok {

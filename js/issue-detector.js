@@ -91,8 +91,66 @@ const IssueDetector = {
         }
         
         if (vm.replicaInfo && vm.replicaInfo.length > 0) {
-            const faultedReplicas = vm.replicaInfo.filter(r => r.currentState === 'error' || !r.started);
+            const faultedReplicas = vm.replicaInfo.filter(r => r.currentState !== 'running' || !r.started);
             if (faultedReplicas.length > 0) {
+                // Universal diagnostic steps — run in order for any replica failure
+                const replicaSteps = [];
+
+                // Step 1: replica spec — desire vs current state, retry count, when it last worked
+                faultedReplicas.forEach((r, i) => {
+                    replicaSteps.push({
+                        id: `replica-spec-${i}`,
+                        title: `Check Replica State: ${r.name.slice(-8)}`,
+                        description: `Shows desireState vs currentState, rebuildRetryCount, lastFailedAt, and lastHealthyAt. This tells you how long the replica has been broken and how many restart attempts have been made.`,
+                        command: `kubectl get replica.longhorn.io ${r.name} -n longhorn-system -o go-template=$'node: {{.spec.nodeID}}\\ndisk: {{.spec.diskID}}\\ndesireState: {{.spec.desireState}}\\ncurrentState: {{.status.currentState}}\\nrebuildRetries: {{.spec.rebuildRetryCount}}\\nlastFailed: {{if .spec.lastFailedAt}}{{.spec.lastFailedAt}}{{else}}-{{end}}\\nlastHealthy: {{if .spec.lastHealthyAt}}{{.spec.lastHealthyAt}}{{else}}-{{end}}'`
+                    });
+                });
+
+                // Step 2: disk health on each affected node — schedulability, pressure, available vs scheduled
+                const affectedNodes = [...new Set(faultedReplicas.map(r => r.nodeId).filter(Boolean))];
+                affectedNodes.forEach((nodeId, i) => {
+                    const nodeReplicas = faultedReplicas.filter(r => r.nodeId === nodeId);
+                    const diskKey = nodeReplicas[0]?.diskPath?.split('/').pop() || nodeReplicas[0]?.diskId || '';
+                    replicaSteps.push({
+                        id: `disk-health-${i}`,
+                        title: `Check Disk Schedulability on ${nodeId}`,
+                        description: `Checks if the disk is marked Schedulable=False (DiskPressure). If storageScheduled exceeds storageMaximum, Longhorn cannot start new replica processes on this disk.`,
+                        command: diskKey
+                            ? `kubectl get node.longhorn.io ${nodeId} -n longhorn-system -o jsonpath='{.status.diskStatus.${diskKey}}' | python3 -c "import sys,json; d=json.load(sys.stdin); s=d.get('conditions',[{}]); c=next((x for x in s if x.get('type')=='Schedulable'),{}); print('schedulable:', c.get('status')); print('reason:', c.get('reason','-')); print('message:', c.get('message','-')); print('available:', round(d.get('storageAvailable',0)/1e9,1), 'GB'); print('scheduled:', round(d.get('storageScheduled',0)/1e9,1), 'GB'); print('maximum:', round(d.get('storageMaximum',0)/1e9,1), 'GB')"`
+                            : `kubectl get node.longhorn.io ${nodeId} -n longhorn-system -o jsonpath='{.status.diskStatus}' | python3 -c "import sys,json; d=json.load(sys.stdin); [print(k, 'schedulable:', next((x.get('status') for x in v.get('conditions',[]) if x.get('type')=='Schedulable'),'-')) for k,v in d.items()]"`
+                    });
+                });
+
+                // Step 3: node conditions — is the Longhorn node itself Ready?
+                affectedNodes.forEach((nodeId, i) => {
+                    replicaSteps.push({
+                        id: `node-conditions-${i}`,
+                        title: `Check Longhorn Node Conditions: ${nodeId}`,
+                        description: `Checks Ready, Schedulable, MountPropagation, and KernelModules conditions. A node that is NotReady or missing kernel modules will prevent all replica processes from starting.`,
+                        command: `kubectl get node.longhorn.io ${nodeId} -n longhorn-system -o jsonpath='{.status.conditions}' | python3 -c "import sys,json; [print(c['type']+': '+c['status']+((' ('+c['message']+')') if c.get('message') else '')) for c in json.load(sys.stdin)]"`
+                    });
+                });
+
+                // Step 4: instance manager — is it running and does it have this replica's process?
+                affectedNodes.forEach((nodeId, i) => {
+                    replicaSteps.push({
+                        id: `instance-manager-${i}`,
+                        title: `Check Instance Manager on ${nodeId}`,
+                        description: `The instance manager is the process that actually runs replica instances. If it is not Running, or if it has no instances, the replica process cannot start regardless of disk or node health.`,
+                        command: `kubectl get instancemanager -n longhorn-system -l longhorn.io/node=${nodeId} -o custom-columns='NAME:.metadata.name,STATE:.status.currentState,TYPE:.spec.type'`
+                    });
+                });
+
+                // Step 5: controller logs — what is Longhorn's reason for not starting this replica?
+                faultedReplicas.forEach((r, i) => {
+                    replicaSteps.push({
+                        id: `controller-logs-${i}`,
+                        title: `Check Controller Logs for ${r.name.slice(-8)}`,
+                        description: `Filters longhorn-manager logs for this replica. Look for: "concurrent limit" (rebuild throttle), "cannot attach" (migration conflict), "failed to get" (connection refused), or "WaitForBackingImage". This is the most direct evidence of why Longhorn is refusing to start the replica.`,
+                        command: `kubectl logs -n longhorn-system -l app=longhorn-manager --since=1h 2>/dev/null | grep "${r.name}" | grep -iv "Creating instance\\|reason: 'Start'" | uniq`
+                    });
+                });
+
                 issues.push(this.createIssue({
                     id: `replica-issues-${vm.namespace}-${vm.name}`,
                     title: 'Storage Replica Issues',
@@ -103,7 +161,8 @@ const IssueDetector = {
                     resourceType: 'replica-faulted',
                     resourceName: vm.volumeName,
                     vmName: vm.name,
-                    vmNamespace: vm.namespace
+                    vmNamespace: vm.namespace,
+                    verificationSteps: replicaSteps
                 }));
             }
             

@@ -13,9 +13,9 @@ import (
 
 // Analyzer is the main entry point for pattern-based log analysis
 type Analyzer struct {
-	registry  *PatternRegistry
-	hints     *HintGeneratorV2
-	workers   int
+	registry *PatternRegistry
+	hints    *HintGeneratorV2
+	workers  int
 }
 
 // NewAnalyzer creates an Analyzer with all built-in patterns loaded

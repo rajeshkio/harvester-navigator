@@ -97,6 +97,32 @@ func (df *DataFetcher) fetchFullClusterData() (models.FullClusterData, error) {
 
 	nodeWg.Wait()
 
+	// Build a lookup map: nodeName -> diskUUID -> DiskInfo for fast replica enrichment
+	diskHealthByNode := make(map[string]map[string]models.DiskInfo)
+	for _, n := range allData.Nodes {
+		diskMap := make(map[string]models.DiskInfo)
+		for _, d := range n.Disks {
+			if d.UUID != "" {
+				diskMap[d.UUID] = d
+			}
+		}
+		diskHealthByNode[n.NodeInfo.Name] = diskMap
+	}
+
+	// Enrich replica info with disk health (disk pressure, schedulability)
+	for i := range allData.VMs {
+		for j := range allData.VMs[i].ReplicaInfo {
+			r := &allData.VMs[i].ReplicaInfo[j]
+			if diskMap, ok := diskHealthByNode[r.NodeID]; ok {
+				if disk, ok := diskMap[r.DiskID]; ok {
+					r.DiskSchedulable = disk.IsSchedulable
+					r.DiskPressure = !disk.IsSchedulable && disk.PressureReason == "DiskPressure"
+					r.DiskPressureMsg = disk.PressureMessage
+				}
+			}
+		}
+	}
+
 	// Cross-reference stuck Pre-draining nodes with VM migration data
 	if allData.UpgradeInfo != nil && len(allData.UpgradeInfo.StuckPreDrainNodes) > 0 {
 		stuckCount := 0
@@ -342,6 +368,7 @@ func (df *DataFetcher) processVMWithBatchedData(
 		vmInfo.StorageClass = volDetails.StorageClass
 		vmInfo.VolumeRobustness = volDetails.Robustness
 		vmInfo.VolumeState = volDetails.State
+		vmInfo.VolumeNumberOfReplicas = volDetails.NumberOfReplicas
 		if vmInfo.VolumeName != "" {
 			paths := getDefaultResourcePaths(namespace)
 			lhvaData, err := lhva.FetchLHVAData(df.client, vmInfo.VolumeName, paths.LHVAPath, "longhorn-system", "volumeattachments")

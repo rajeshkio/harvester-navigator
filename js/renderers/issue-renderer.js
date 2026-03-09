@@ -532,14 +532,17 @@ const IssueRenderer = {
 
     // Generic issue detail renderer for non-migration issues
     renderGenericIssueDetail(issue) {
-        // Find VM data for this issue
-        const vm = AppState.data?.vms?.find(v => 
+        const vm = AppState.data?.vms?.find(v =>
             v.name === issue.vmName && v.namespace === issue.vmNamespace
         );
 
+        const replicaHealthCard = (issue.resourceType === 'replica-faulted' && vm)
+            ? this.renderReplicaHealthCard(vm, issue)
+            : '';
+
         return `
             <div class="space-y-6">
-                <!-- Issue Summary Card -->
+                <!-- Issue Summary -->
                 <div class="bg-slate-800/60 border border-slate-600 rounded-lg p-4">
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="text-lg font-medium text-white">${issue.title}</h3>
@@ -547,53 +550,12 @@ const IssueRenderer = {
                             ${issue.severity.toUpperCase()}
                         </span>
                     </div>
-                    
                     <div class="p-3 bg-slate-700/50 rounded">
                         <div class="text-sm text-slate-300">${issue.description}</div>
                     </div>
                 </div>
 
-                <!-- Debug: Volume Status Data -->
-                <div class="bg-blue-900/30 border border-blue-600 rounded-lg p-4">
-                    <h4 class="text-base font-medium text-blue-200 mb-3">🔍 Debug: Volume Status Data</h4>
-                    <div class="space-y-1 text-sm font-mono text-slate-300">
-                        <div>Issue VM Name: <span class="text-yellow-400">${issue.vmName || 'N/A'}</span></div>
-                        <div>Issue Namespace: <span class="text-yellow-400">${issue.vmNamespace || 'N/A'}</span></div>
-                        <div>Issue Resource Name: <span class="text-yellow-400">${issue.resourceName || 'N/A'}</span></div>
-                        <div>VM Found: <span class="text-yellow-400">${vm ? 'YES' : 'NO - VM OBJECT NOT FOUND'}</span></div>
-                        <div>VM Name (if found): <span class="text-yellow-400">${vm?.name || 'N/A'}</span></div>
-                        <div>VM Namespace (if found): <span class="text-yellow-400">${vm?.namespace || 'N/A'}</span></div>
-                        <div>Volume Name: <span class="text-yellow-400">${vm?.volumeName || 'NOT FOUND'}</span></div>
-                        <div>Robustness: <span class="text-yellow-400">${vm?.volumeRobustness || 'NOT FOUND'}</span></div>
-                        <div>State: <span class="text-yellow-400">${vm?.volumeState || 'NOT FOUND'}</span></div>
-                        <div>Replica Count: <span class="text-yellow-400">${vm?.replicaInfo?.length || 0}</span></div>
-                        <div>Faulted Replicas: <span class="text-yellow-400">${vm?.replicaInfo?.filter(r => r.currentState === 'error' || !r.started).length || 0}</span></div>
-                    </div>
-                </div>
-
-                <!-- TEST: Log Analysis Button -->
-                <div class="bg-slate-800/60 border border-slate-600 rounded-lg p-4">
-                    <h4 class="text-lg font-medium text-white mb-4">AI Log Analysis</h4>
-                    <div class="flex items-center gap-3 flex-wrap">
-                        <select 
-                            id="ai-provider-select-${issue.id}"
-                            class="bg-slate-700 text-white text-sm px-3 py-2 rounded-md border border-slate-500">
-                            <option value="pattern-engine" selected>Pattern Engine (offline, free)</option>
-                            <option value="openwebui">OpenWebUI (qwen3)</option>
-                            <option value="ollama">Ollama (local)</option>
-                            <option value="gemini">Gemini</option>
-                            <option value="stub">Stub (test)</option>
-                        </select>
-                        <button 
-                            id="test-log-analysis-btn-${issue.id}" 
-                            class="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors text-sm"
-                            onclick="IssueRenderer.testLogAnalysis('${issue.id}', '${issue.resourceType}', '${issue.vmName || ''}')">
-                            Analyze
-                        </button>
-                        <span class="text-xs text-slate-400">Pattern Engine runs offline with no API cost. Falls through to LLM if no pattern matches.</span>
-                    </div>
-                    <div id="test-log-result-${issue.id}" class="mt-3 text-sm text-slate-300"></div>
-                </div>
+                ${replicaHealthCard}
 
                 <!-- Verification Steps -->
                 <div class="bg-slate-800/60 border border-slate-600 rounded-lg p-4">
@@ -603,7 +565,6 @@ const IssueRenderer = {
                             <div class="border border-slate-600 rounded p-3">
                                 <h5 class="font-medium text-white">${index + 1}. ${step.title}</h5>
                                 <div class="text-sm text-slate-300 mb-3">${step.description}</div>
-                                
                                 <div class="bg-slate-900/60 rounded p-2 mb-2">
                                     <div class="flex justify-between items-center mb-1">
                                         <span class="text-xs text-slate-400">Command:</span>
@@ -616,6 +577,108 @@ const IssueRenderer = {
                             </div>
                         `).join('')}
                     </div>
+                </div>
+            </div>
+        `;
+    },
+
+    renderReplicaHealthCard(vm, issue) {
+        const replicas = vm.replicaInfo || [];
+        const volumeName = vm.volumeName || issue.resourceName || 'unknown';
+        const totalExpected = vm.volumeNumberOfReplicas || replicas.length;
+
+        const faulted = replicas.filter(r => r.currentState !== 'running' || !r.started);
+        const healthy = replicas.filter(r => r.currentState === 'running' && r.started);
+
+        // Root cause summary — disk pressure is the most actionable finding
+        const diskPressureReplicas = faulted.filter(r => r.diskPressure);
+        const maxRetriesReplicas  = faulted.filter(r => r.rebuildRetryCount >= 5);
+
+        const rootCauseBanner = diskPressureReplicas.length > 0 ? `
+            <div class="flex items-start gap-3 p-3 bg-red-900/40 border border-red-600 rounded-lg mb-4">
+                <span class="text-red-400 text-lg mt-0.5">⚠</span>
+                <div>
+                    <div class="text-sm font-semibold text-red-300">Root Cause: Disk Pressure</div>
+                    <div class="text-xs text-red-200 mt-1">
+                        ${diskPressureReplicas.length} replica${diskPressureReplicas.length > 1 ? 's are' : ' is'} on a disk marked
+                        <span class="font-mono bg-red-900/60 px-1 rounded">Schedulable: False</span>
+                        due to disk pressure. Longhorn cannot start the replica process.
+                        ${maxRetriesReplicas.length > 0 ? `Rebuild has been attempted and exhausted (${maxRetriesReplicas[0].rebuildRetryCount} retries).` : ''}
+                    </div>
+                </div>
+            </div>` : '';
+
+        const replicaRows = replicas.map(r => {
+            const isHealthy = r.currentState === 'running' && r.started;
+            const hasDiskPressure = r.diskPressure;
+            const retriesExhausted = r.rebuildRetryCount >= 5;
+
+            const stateColor = isHealthy ? 'text-green-400' : 'text-red-400';
+            const stateDot   = isHealthy ? 'bg-green-400' : 'bg-red-400';
+            const stateLabel = isHealthy ? 'running' : r.currentState || 'stopped';
+
+            // Reason column — most specific explanation available
+            let reason = '';
+            if (!isHealthy) {
+                if (hasDiskPressure) {
+                    reason = `<span class="text-red-300">Disk pressure</span>
+                              ${retriesExhausted ? '<span class="text-slate-400 ml-1">(retries exhausted)</span>' : ''}`;
+                } else if (retriesExhausted) {
+                    reason = `<span class="text-orange-300">Max retries reached (${r.rebuildRetryCount})</span>`;
+                } else if (r.desireState === 'running') {
+                    reason = `<span class="text-yellow-300">Desired running, not yet started</span>`;
+                } else {
+                    reason = `<span class="text-slate-400">Unknown</span>`;
+                }
+            }
+
+            const rawMsg = r.diskPressureMsg || '';
+            const trimmedMsg = rawMsg.trim();
+            const diskPressureDetail = hasDiskPressure && trimmedMsg ? `
+                <div class="mt-2 ml-4 p-2 bg-red-900/30 border border-red-700/50 rounded text-xs text-red-200 font-mono whitespace-pre-wrap break-all">${trimmedMsg}</div>` : '';
+
+            return `
+                <div class="border border-slate-600 rounded-lg p-3 ${isHealthy ? '' : 'border-red-700/50 bg-red-900/10'}">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="w-2 h-2 rounded-full ${stateDot} flex-shrink-0"></span>
+                        <span class="text-sm font-mono text-white truncate flex-1">${r.name}</span>
+                        <span class="text-xs px-2 py-0.5 rounded font-mono ${stateColor} bg-slate-800">${stateLabel}</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs ml-4">
+                        <div class="text-slate-400">Node</div>
+                        <div class="text-slate-200 font-mono">${r.nodeId || '—'}</div>
+                        <div class="text-slate-400">Disk</div>
+                        <div class="text-slate-200 font-mono truncate" title="${r.diskPath || r.diskId || '—'}">${r.diskPath || r.diskId || '—'}</div>
+                        <div class="text-slate-400">Disk schedulable</div>
+                        <div class="${r.diskSchedulable ? 'text-green-400' : 'text-red-400'}">${r.diskSchedulable ? 'Yes' : 'No'}</div>
+                        ${!isHealthy ? `<div class="text-slate-400">Rebuild retries</div>
+                        <div class="${retriesExhausted ? 'text-red-400' : 'text-slate-200'}">${r.rebuildRetryCount ?? '—'} / 5</div>
+                        <div class="text-slate-400">Reason</div>
+                        <div>${reason}</div>` : ''}
+                    </div>
+                    ${diskPressureDetail}
+                </div>`;
+        }).join('');
+
+        return `
+            <div class="bg-slate-800/60 border border-slate-600 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-4">
+                    <h4 class="text-base font-medium text-white">Replica Health</h4>
+                    <div class="flex gap-3 text-xs">
+                        <span class="text-green-400">${healthy.length} healthy</span>
+                        <span class="text-red-400">${faulted.length} faulted</span>
+                        <span class="text-slate-400">of ${totalExpected} expected</span>
+                    </div>
+                </div>
+
+                <div class="text-xs text-slate-400 font-mono mb-3 truncate" title="${volumeName}">
+                    Volume: ${volumeName}
+                </div>
+
+                ${rootCauseBanner}
+
+                <div class="space-y-3">
+                    ${replicaRows}
                 </div>
             </div>
         `;
